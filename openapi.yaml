@@ -3,8 +3,6 @@ info:
   title: PMP API
   description: API for the PMP
   version: 1.0.0
-servers:
-  - url: https://api.server.test/v1
 
 tags:
   - name: SecurityOrchestrator
