@@ -1,0 +1,1361 @@
+openapi: "3.0.3"
+info:
+  title: PMP API
+  description: API for the PMP
+  version: 1.0.0
+servers:
+  - url: https://api.server.test/v1
+
+tags:
+  - name: SecurityOrchestrator
+    description: API for interact with the Configuration Manager to deploy and manage security configurations by the Security Orchestrator. 
+
+  - name: PlatformAdmin
+    description: API for interact with the Configuration Manager to deploy and manage security configurations by the human administrator. 
+
+  - name: NearRealtimeDataRetrieval
+    description: API for retrieving near real-time data, offering the possibility of retrieving a small piece of data stored in the current communication bus to be consumed by external modules including logs, health metrics, and network traces. 
+
+  - name: DataExporter
+    description: API to download reports in various formats (JSON, CSV, XML, YANG) as a file.
+  
+  - name: HistoricalDataRetrieval
+    description: API for retrieving historical data, including logs, health metrics, and network traces.
+paths:
+  /SecurityOrchestrator/CreateConfiguration:
+    post:
+      tags:
+        - SecurityOrchestrator
+      summary: "Security Orchestrator sends a configuration request."
+      description: "This endpoint allows the Security Orchestrator to submit configuration requests, including data sources, thresholds (optionally), policies, and tools deployed."
+      operationId: "soCreateConfiguration"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                id:
+                  type: string
+                  description: "The id of the configuration."
+
+                toolsDeployed:
+                  type: array
+                  description: "The tools deployed."
+                  items:
+                    $ref: "#/components/schemas/Tool"
+                  example:
+                    - "Fluentd"
+                    - "Kafka"
+                    - "Telegraf"
+                dataSourcelist:
+                  type: array
+                  description: "The data sources."
+                  items:
+                    $ref: "#/components/schemas/DataSource"
+    
+                threshold:
+                  type: array
+                  description: "The thresholds for monitoring."
+                  items:
+                      $ref: "#/components/schemas/Threshold"
+
+              required:
+                - id
+                - toolsDeployed
+                - dataSourcelist
+      responses:
+        "200":
+          description: "The CreateConfiguration has been sent successfully"
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  code:
+                    type: integer
+                    example: 200
+                    description: "Response code indicating success"
+                  message:
+                    type: string
+                    description: "Response message confirming the success of the request."
+                    example: "The configuration request has been sent successfully"
+  /SecurityOrchestrator/GetConfiguration:
+    get:
+      tags:
+        - SecurityOrchestrator
+      summary: "Security Orchestrator request the current configuration."
+      description: "This endpoint allows the Security Orchestrator to get the current deployed configuration."
+      operationId: "soGetConfiguration"
+      parameters: []
+      responses:
+        "200":
+          description: "The GetConfiguration request has been processed successfully"
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  code:
+                    type: integer
+                    example: 200
+                    description: "Response code indicating success"
+                  message:
+                    type: string
+                    example: "The request for the current configuration has been successfull"
+                    description: "Response message confirming the success of the request."
+                  id:
+                    type: string
+                    description: "The id of the current configuration."
+                  toolsDeployed:
+                    type: array
+                    description: "The tools deployed."
+                    items:
+                      $ref: "#/components/schemas/Tool"
+                    example:
+                      - "Fluentd"
+                      - "Kafka"
+                      - "Telegraf"
+                  dataSourcelist:
+                    type: array
+                    description: "The data sources."
+                    items:
+                      $ref: "#/components/schemas/DataSource"
+                  threshold:
+                    type: array
+                    description: "The thresholds for monitoring."
+                    items:
+                      $ref: "#/components/schemas/Threshold"
+  /SecurityOrchestrator/UpdateConfiguration:
+    put:
+      tags:
+        - SecurityOrchestrator
+      summary: "Security Orchestrator updates the current configuration."
+      description: "This endpoint allows the Security Orchestrator to update the current deployed configuration."
+      operationId: "soUpdateConfiguration"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                id:
+                  type: string
+                  description: "The id of the configuration."
+                toolsDeployed:
+                  type: array
+                  description: "The tools deployed."
+                  items:
+                    $ref: "#/components/schemas/Tool"
+                  example:
+                    - "Fluentd"
+                    - "Kafka"
+                    - "Telegraf"
+                dataSourcelist:
+                  type: array
+                  description: "The data sources."
+                  items:
+                    $ref: "#/components/schemas/DataSource"
+                threshold:
+                  type: array
+                  description: "The thresholds for monitoring."
+                  items:
+                      $ref: "#/components/schemas/Threshold"
+              required:
+                - id
+
+      responses:
+        "200":
+          description: "The configuration has been updated successfully"
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  code:
+                    type: integer
+                    example: 200
+                    description: "Response code indicating success"
+                  message:
+                    type: string
+                    example: "The configuration has been updated successfully"
+                    description: "Response message confirming the success of the request."
+  /SecurityOrchestrator/DeleteConfiguration:
+    delete:
+      tags:
+        - SecurityOrchestrator
+      summary: "Security Orchestrator deletes the current configuration."
+      description: "This endpoint allows the Security Orchestrator to delete the current deployed configuration."
+      operationId: "soDeleteConfiguration"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                id:
+                  type: string
+                  description: "The id of the configuration."
+              required:
+                - id
+      responses:
+        "200":
+          description: "The configuration has been deleted successfully"
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  code:
+                    type: integer
+                    example: 200
+                    description: "Response code indicating success"
+                  message:
+                    type: string
+                    example: "The configuration has been deleted successfully"
+                    description: "Response message confirming the success of the request."
+  
+  /PlatformAdmin/CreateConfiguration:
+    post:
+      tags:
+        - PlatformAdmin
+      summary: "End-user (administrator) sends a configuration request."
+      description: "This endpoint allows the end-users to submit configuration requests, including data sources, thresholds (optionally), policies, and tools deployed."
+      operationId: "AdminCreateConfiguration"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                id:
+                  type: string
+                  description: "The id of the configuration."
+                toolsDeployed:
+                  type: array
+                  description: "The tools deployed."
+                  items:
+                    $ref: "#/components/schemas/Tool"
+                  example:
+                    - "Fluentd"
+                    - "Kafka"
+                    - "Telegraf"
+                dataSourcelist:
+                  type: array
+                  description: "The data sources."
+                  items:
+                    $ref: "#/components/schemas/DataSource"
+                threshold:
+                  type: array
+                  description: "The thresholds for monitoring."
+                  items:
+                      $ref: "#/components/schemas/Threshold"
+              required:
+                - id
+                - toolsDeployed
+                - dataSourcelist
+
+      responses:
+        "200":
+          description: "The configuration request has been sent successfully"
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  code:
+                    type: integer
+                    example: 200
+                    description: "Response code indicating success"
+                  message:
+                    type: string
+                    example: "The configuration request has been sent successfully"
+                    description: "Response message confirming the success of the request."
+  /PlatformAdmin/GetConfiguration:
+    get:
+      tags:
+        - PlatformAdmin
+      summary: "End-user (administrator) request the current configuration."
+      description: "This endpoint allows the end-user (administrator) to get the current deployed configuration."
+      operationId: "AdminGetConfiguration"
+      parameters: []
+      responses:
+        "200":
+          description: "The GetConfiguration request has been processed successfully."
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  code:
+                    type: integer
+                    example: 200
+                    description: "Response code indicating success."
+                  message:
+                    type: string
+                    example: "The request for the current configuration has been successfull."
+                    description: "Response message confirming the success of the request."
+                  id:
+                    type: string
+                    description: "The id of the current configuration."
+                  toolsDeployed:
+                    type: array
+                    description: "The tools deployed."
+                    items:
+                      $ref: "#/components/schemas/Tool"
+                    example:
+                      - "Fluentd"
+                      - "Kafka"
+                      - "Telegraf"
+                  dataSourcelist:
+                    type: array
+                    description: "The data sources."
+                    items:
+                      $ref: "#/components/schemas/DataSource"
+                  threshold:
+                    type: array
+                    description: "The thresholds for monitoring."
+                    items:
+                      $ref: "#/components/schemas/Threshold"
+  /PlatformAdmin/UpdateConfiguration:
+    put:
+      tags:
+        - PlatformAdmin
+      summary: "End-user (administrator) updates the current configuration."
+      description: "This endpoint allows the end-user (administrator) to update the current deployed configuration."
+      operationId: "AdminUpdateConfiguration"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                id:
+                  type: string
+                  description: "The id of the configuration."
+                toolsDeployed:
+                  type: array
+                  description: "The tools deployed."
+                  items:
+                    $ref: "#/components/schemas/Tool"
+                  example:
+                    - "Fluentd"
+                    - "Kafka"
+                    - "Telegraf"
+                dataSourcelist:
+                  type: array
+                  description: "The data sources."
+                  items:
+                    $ref: "#/components/schemas/DataSource"
+                threshold:
+                  type: array
+                  description: "The thresholds for monitoring."
+                  items:
+                      $ref: "#/components/schemas/Threshold"
+              required:
+                - id
+
+      responses:
+        "200":
+          description: "The configuration has been updated successfully"
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  code:
+                    type: integer
+                    example: 200
+                    description: "Response code indicating success"
+                  message:
+                    type: string
+                    example: "The configuration has been updated successfully"
+                    description: "Response message confirming the success of the request."
+  /PlatformAdmin/DeleteConfiguration:
+    delete:
+      tags:
+        - PlatformAdmin
+      summary: "End-user (administrator) deletes the current configuration."
+      description: "This endpoint allows the end-user (administrator) to delete the current deployed configuration."
+      operationId: "AdminDeleteConfiguration"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                id:
+                  type: string
+                  description: "The id of the configuration."
+              required:
+                - id
+      responses:
+        "200":
+          description: "The configuration has been deleted successfully"
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  code:
+                    type: integer
+                    example: 200
+                    description: "Response code indicating success"
+                  message:
+                    type: string
+                    example: "The configuration has been deleted successfully"
+                    description: "Response message confirming the success of the request."
+  
+  /NearRealtimeDataRetrieval/RawDataJSON:
+    get:
+      tags:
+        - NearRealtimeDataRetrieval
+      summary: "Request near real-time data based on selected types."
+      description: "This endpoint retrieves specific types of near real-time data based on the provided query parameters. You can request logs, health metrics, and network traces separately. In addition, you can specify the userID to extract only the information from this user."
+      operationId: "rawDataJSON"
+      parameters:
+        - name: userID
+          in: query
+          description: "The id of the user."
+          required: false
+          schema:
+            type: string
+        - name: logs
+          in: query
+          description: "Include logs in the response."
+          required: false
+          schema:
+            type: boolean
+            default: false
+        - name: healthMetrics
+          in: query
+          description: "Include health metrics in the response."
+          required: false
+          schema:
+            type: boolean
+            default: false
+        - name: networkTraces
+          in: query
+          description: "Include network traces in the response."
+          required: false
+          schema:
+            type: boolean
+            default: false
+      responses:
+        "200":
+          description: "JSON file containing selected data"
+          content:
+            application/json:
+              schema:
+                type: string
+                format: binary
+              example: "rawData.json"
+          headers:
+            Content-Disposition:
+              description: "The header indicates that the response is a downloadable JSON file."
+              schema:
+                type: string
+                example: "attachment; filename=rawData.json"
+  /NearRealtimeDataRetrieval/RawDataCSV:
+    get:
+      tags:
+        - NearRealtimeDataRetrieval
+      summary: "Request near real-time data based on selected types."
+      description: "This endpoint retrieves specific types of near real-time data based on the provided query parameters. You can request logs, health metrics, and network traces separately. In addition, you can specify the userID to extract only the information from this user."
+      operationId: "rawDataCSV"
+      parameters:
+        - name: userID
+          in: query
+          description: "The id of the user."
+          required: false
+          schema:
+            type: string
+        - name: logs
+          in: query
+          description: "Include logs in the response."
+          required: false
+          schema:
+            type: boolean
+            default: false
+        - name: healthMetrics
+          in: query
+          description: "Include health metrics in the response."
+          required: false
+          schema:
+            type: boolean
+            default: false
+        - name: networkTraces
+          in: query
+          description: "Include network traces in the response."
+          required: false
+          schema:
+            type: boolean
+            default: false
+      responses:
+        "200":
+          description: "CSV file containing selected data"
+          content:
+            application/csv:
+              schema:
+                type: string
+                format: binary
+              example: "rawData.csv"
+          headers:
+            Content-Disposition:
+              description: "The header indicates that the response is a downloadable CSV file."
+              schema:
+                type: string
+                example: "attachment; filename=rawData.csv"
+  /NearRealtimeDataRetrieval/RawDataXML:
+    get:
+      tags:
+        - NearRealtimeDataRetrieval
+      summary: "Request near real-time data based on selected types."
+      description: "This endpoint retrieves specific types of near real-time data based on the provided query parameters. You can request logs, health metrics, and network traces separately. In addition, you can specify the userID to extract only the information from this user."
+      operationId: "rawDataXML"
+      parameters:
+        - name: userID
+          in: query
+          description: "The id of the user."
+          required: false
+          schema:
+            type: string
+        - name: logs
+          in: query
+          description: "Include logs in the response."
+          required: false
+          schema:
+            type: boolean
+            default: false
+        - name: healthMetrics
+          in: query
+          description: "Include health metrics in the response."
+          required: false
+          schema:
+            type: boolean
+            default: false
+        - name: networkTraces
+          in: query
+          description: "Include network traces in the response."
+          required: false
+          schema:
+            type: boolean
+            default: false
+      responses:
+        "200":
+          description: "XML file containing selected data"
+          content:
+            application/xml:
+              schema:
+                type: string
+                format: binary
+              example: "rawData.xml"
+          headers:
+            Content-Disposition:
+              description: "The header indicates that the response is a downloadable XML file."
+              schema:
+                type: string
+                example: "attachment; filename=rawData.xml"
+  /NearRealtimeDataRetrieval/RawDataYANG:
+    get:
+      tags:
+        - NearRealtimeDataRetrieval
+      summary: "Request near real-time data based on selected types."
+      description: "This endpoint retrieves specific types of near real-time data based on the provided query parameters. You can request logs, health metrics, and network traces separately. In addition, you can specify the userID to extract only the information from this user."
+      operationId: "rawDataYANG"
+      parameters:
+        - name: userID
+          in: query
+          description: "The id of the user."
+          required: false
+          schema:
+            type: string
+        - name: logs
+          in: query
+          description: "Include logs in the response."
+          required: false
+          schema:
+            type: boolean
+            default: false
+        - name: healthMetrics
+          in: query
+          description: "Include health metrics in the response."
+          required: false
+          schema:
+            type: boolean
+            default: false
+        - name: networkTraces
+          in: query
+          description: "Include network traces in the response."
+          required: false
+          schema:
+            type: boolean
+            default: false
+      responses:
+        "200":
+          description: "YANG file containing selected data"
+          content:
+            application/yang:
+              schema:
+                type: string
+                format: binary
+              example: "rawData.yang"
+          headers:
+            Content-Disposition:
+              description: "The header indicates that the response is a downloadable YANG file."
+              schema:
+                type: string
+                example: "attachment; filename=rawData.yang"
+
+  /DataExporter/DownloadReportJSON:
+    get:
+      tags:
+        - DataExporter
+      summary: "Download report with logs, health metrics or network traces in JSON format"
+      description: "This endpoint allows downloading a JSON file. You can request logs, health metrics, and network traces separately. In addition, you can specify the userID to extract only the information from this user."
+      operationId: "downloadReportJSON"
+      parameters:
+        - name: userID
+          in: query
+          description: "The id of the user."
+          required: false
+          schema:
+            type: string
+        - name: logs
+          in: query
+          description: "Include logs in the response."
+          required: false
+          schema:
+            type: boolean
+            default: false
+        - name: healthMetrics
+          in: query
+          description: "Include health metrics in the response."
+          required: false
+          schema:
+            type: boolean
+            default: false
+        - name: networkTraces
+          in: query
+          description: "Include network traces in the response."
+          required: false
+          schema:
+            type: boolean
+            default: false
+      responses:
+        "200":
+          description: "JSON file containing selected data"
+          content:
+            application/json:
+              schema:
+                type: string
+                format: binary
+              example: "report.json"
+          headers:
+            Content-Disposition:
+              description: "The header indicates that the response is a downloadable JSON file."
+              schema:
+                type: string
+                example: "attachment; filename=report.json"
+  /DataExporter/DownloadReportCSV:
+    get:
+      tags:
+        - DataExporter
+      summary: "Download report with logs, health metrics or network traces in CSV format"
+      description: "This endpoint allows downloading a CSV file. You can request logs, health metrics, and network traces separately. In addition, you can specify the userID to extract only the information from this user."
+      operationId: "downloadReportCSV"
+      parameters:
+        - name: userID
+          in: query
+          description: "The id of the user."
+          required: false
+          schema:
+            type: string
+        - name: logs
+          in: query
+          description: "Include logs in the response."
+          required: false
+          schema:
+            type: boolean
+            default: false
+        - name: healthMetrics
+          in: query
+          description: "Include health metrics in the response."
+          required: false
+          schema:
+            type: boolean
+            default: false
+        - name: networkTraces
+          in: query
+          description: "Include network traces in the response."
+          required: false
+          schema:
+            type: boolean
+            default: false
+      responses:
+        "200":
+          description: "CSV file containing selected data"
+          content:
+            application/csv:
+              schema:
+                type: string
+                format: binary
+              example: "report.csv"
+          headers:
+            Content-Disposition:
+              description: "The header indicates that the response is a downloadable CSV file."
+              schema:
+                type: string
+                example: "attachment; filename=report.csv"
+  /DataExporter/DownloadReportXML:
+    get:
+      tags:
+        - DataExporter
+      summary: "Download report with logs, health metrics or network traces in XML format"
+      description: "This endpoint allows downloading a XML file. You can request logs, health metrics, and network traces separately. In addition, you can specify the userID to extract only the information from this user."
+      operationId: "downloadReportXML"
+      parameters:
+        - name: userID
+          in: query
+          description: "The id of the user."
+          required: false
+          schema:
+            type: string
+        - name: logs
+          in: query
+          description: "Include logs in the response."
+          required: false
+          schema:
+            type: boolean
+            default: false
+        - name: healthMetrics
+          in: query
+          description: "Include health metrics in the response."
+          required: false
+          schema:
+            type: boolean
+            default: false
+        - name: networkTraces
+          in: query
+          description: "Include network traces in the response."
+          required: false
+          schema:
+            type: boolean
+            default: false
+      responses:
+        "200":
+          description: "XML file containing selected data"
+          content:
+            application/xml:
+              schema:
+                type: string
+                format: binary
+              example: "report.xml"
+          headers:
+            Content-Disposition:
+              description: "The header indicates that the response is a downloadable XML file."
+              schema:
+                type: string
+                example: "attachment; filename=report.xml"
+  /DataExporter/DownloadReportYANG:
+    get:
+      tags:
+        - DataExporter
+      summary: "Download report with logs, health metrics or network traces in YANG format"
+      description: "This endpoint allows downloading a YANG file. You can request logs, health metrics, and network traces separately. In addition, you can specify the userID to extract only the information from this user."
+      operationId: "downloadReportYANG"
+      parameters:
+        - name: userID
+          in: query
+          description: "The id of the user."
+          required: false
+          schema:
+            type: string
+        - name: logs
+          in: query
+          description: "Include logs in the response."
+          required: false
+          schema:
+            type: boolean
+            default: false
+        - name: healthMetrics
+          in: query
+          description: "Include health metrics in the response."
+          required: false
+          schema:
+            type: boolean
+            default: false
+        - name: networkTraces
+          in: query
+          description: "Include network traces in the response."
+          required: false
+          schema:
+            type: boolean
+            default: false
+      responses:
+        "200":
+          description: "YANG file containing selected data"
+          content:
+            application/yang:
+              schema:
+                type: string
+                format: binary
+              example: "report.yang"
+          headers:
+            Content-Disposition:
+              description: "The header indicates that the response is a downloadable YANG file."
+              schema:
+                type: string
+                example: "attachment; filename=report.yang"
+  
+  /HistoricalDataRetrieval/RequestDataJSON:
+    get:
+      tags:
+        - HistoricalDataRetrieval
+      summary: "Request historical data in JSON format."
+      description: "This endpoint retrieves specific types of historical data based on the provided query parameters. You can request logs, health metrics, and network traces separately. In addition, you can specify the userID to extract only the information from this user."
+      operationId: "requestHistoricalDataJSON"
+      parameters:
+        - name: userID
+          in: query
+          description: "The id of the user."
+          required: false
+          schema:
+            type: string
+        - name: logs
+          in: query
+          description: "Include logs in the response."
+          required: false
+          schema:
+            type: boolean
+            default: false
+        - name: healthMetrics
+          in: query
+          description: "Include health metrics in the response."
+          required: false
+          schema:
+            type: boolean
+            default: false
+        - name: networkTraces
+          in: query
+          description: "Include network traces in the response."
+          required: false
+          schema:
+            type: boolean
+            default: false
+      responses:
+        "200":
+          description: "JSON file containing selected data"
+          content:
+            application/json:
+              schema:
+                type: string
+                format: binary
+              example: "historicalData.json"
+          headers:
+            Content-Disposition:
+              description: "The header indicates that the response is a downloadable JSON file."
+              schema:
+                type: string
+                example: "attachment; filename=historicalData.json"
+  /HistoricalDataRetrieval/RequestDataCSV:
+    get:
+      tags:
+        - HistoricalDataRetrieval
+      summary: "Request historical data in CSV format."
+      description: "This endpoint retrieves specific types of historical data based on the provided query parameters. You can request logs, health metrics, and network traces separately. In addition, you can specify the userID to extract only the information from this user."
+      operationId: "requestHistoricalDataCSV"
+      parameters:
+        - name: userID
+          in: query
+          description: "The id of the user."
+          required: false
+          schema:
+            type: string
+        - name: logs
+          in: query
+          description: "Include logs in the response."
+          required: false
+          schema:
+            type: boolean
+            default: false
+        - name: healthMetrics
+          in: query
+          description: "Include health metrics in the response."
+          required: false
+          schema:
+            type: boolean
+            default: false
+        - name: networkTraces
+          in: query
+          description: "Include network traces in the response."
+          required: false
+          schema:
+            type: boolean
+            default: false
+      responses:
+        "200":
+          description: "CSV file containing selected data"
+          content:
+            application/csv:
+              schema:
+                type: string
+                format: binary
+              example: "historicalData.csv"
+          headers:
+            Content-Disposition:
+              description: "The header indicates that the response is a downloadable CSV file."
+              schema:
+                type: string
+                example: "attachment; filename=historicalData.csv"
+  /HistoricalDataRetrieval/RequestDataXML:
+    get:
+      tags:
+        - HistoricalDataRetrieval
+      summary: "Request historical data in XML format."
+      description: "This endpoint retrieves specific types of historical data based on the provided query parameters. You can request logs, health metrics, and network traces separately. In addition, you can specify the userID to extract only the information from this user."
+      operationId: "requestHistoricalDataXML"
+      parameters:
+        - name: userID
+          in: query
+          description: "The id of the user."
+          required: false
+          schema:
+            type: string
+        - name: logs
+          in: query
+          description: "Include logs in the response."
+          required: false
+          schema:
+            type: boolean
+            default: false
+        - name: healthMetrics
+          in: query
+          description: "Include health metrics in the response."
+          required: false
+          schema:
+            type: boolean
+            default: false
+        - name: networkTraces
+          in: query
+          description: "Include network traces in the response."
+          required: false
+          schema:
+            type: boolean
+            default: false
+      responses:
+        "200":
+          description: "XML file containing selected data"
+          content:
+            application/xml:
+              schema:
+                type: string
+                format: binary
+              example: "historicalData.xml"
+          headers:
+            Content-Disposition:
+              description: "The header indicates that the response is a downloadable XML file."
+              schema:
+                type: string
+                example: "attachment; filename=historicalData.xml"
+  /HistoricalDataRetrieval/RequestDataYANG:
+    get:
+      tags:
+        - HistoricalDataRetrieval
+      summary: "Request historical data in YANG format."
+      description: "This endpoint retrieves specific types of historical data based on the provided query parameters. You can request logs, health metrics, and network traces separately. In addition, you can specify the userID to extract only the information from this user."
+      operationId: "requestHistoricalDataYANG"
+      parameters:
+        - name: userID
+          in: query
+          description: "The id of the user."
+          required: false
+          schema:
+            type: string
+        - name: logs
+          in: query
+          description: "Include logs in the response."
+          required: false
+          schema:
+            type: boolean
+            default: false
+        - name: healthMetrics
+          in: query
+          description: "Include health metrics in the response."
+          required: false
+          schema:
+            type: boolean
+            default: false
+        - name: networkTraces
+          in: query
+          description: "Include network traces in the response."
+          required: false
+          schema:
+            type: boolean
+            default: false
+      responses:
+        "200":
+          description: "YANG file containing selected data"
+          content:
+            application/yang:
+              schema:
+                type: string
+                format: binary
+              example: "historicalData.yang"
+          headers:
+            Content-Disposition:
+              description: "The header indicates that the response is a downloadable YANG file."
+              schema:
+                type: string
+                example: "attachment; filename=historicalData.yang"
+  
+  /HistoricalDataRetrieval/RequestDataPerTimeJSON:
+    get:
+      tags:
+        - HistoricalDataRetrieval
+      summary: "Request historical data based on selected types and time range in JSON format."
+      description: "This endpoint retrieves specific types of historical data based on the provided query parameters. You can request logs, health metrics, and network traces separately. In addition, you can specify the userID to extract only the information from this user."
+      operationId: "requestHistoricalDataPerTimeJSON"
+      parameters:
+        - name: userID
+          in: query
+          description: "The id of the user."
+          required: false
+          schema:
+            type: string
+        - name: logs
+          in: query
+          description: "Include logs in the response."
+          required: false
+          schema:
+            type: boolean
+            default: false
+        - name: healthMetrics
+          in: query
+          description: "Include health metrics in the response."
+          required: false
+          schema:
+            type: boolean
+            default: false
+        - name: networkTraces
+          in: query
+          description: "Include network traces in the response."
+          required: false
+          schema:
+            type: boolean
+            default: false
+        - name: startTime
+          in: query
+          description: "The start time of the data."
+          required: true
+          schema:
+            type: string
+            format: date-time
+        - name: endTime
+          in: query
+          description: "The end time of the data."
+          required: true
+          schema:
+            type: string
+            format: date-time
+      responses:
+        "200":
+          description: "JSON file containing selected data"
+          content:
+            application/json:
+              schema:
+                type: string
+                format: binary
+              example: "historicalDataPerTime.json"
+          headers:
+            Content-Disposition:
+              description: "The header indicates that the response is a downloadable JSON file."
+              schema:
+                type: string
+                example: "attachment; filename=historicalDataPerTime.json"
+  /HistoricalDataRetrieval/RequestDataPerTimeCSV:
+    get:
+      tags:
+        - HistoricalDataRetrieval
+      summary: "Request historical data based on selected types and time range in CSV format."
+      description: "This endpoint retrieves specific types of historical data based on the provided query parameters. You can request logs, health metrics, and network traces separately. In addition, you can specify the userID to extract only the information from this user."
+      operationId: "requestHistoricalDataPerTimeCSV"
+      parameters:
+        - name: userID
+          in: query
+          description: "The id of the user."
+          required: false
+          schema:
+            type: string
+        - name: logs
+          in: query
+          description: "Include logs in the response."
+          required: false
+          schema:
+            type: boolean
+            default: false
+        - name: healthMetrics
+          in: query
+          description: "Include health metrics in the response."
+          required: false
+          schema:
+            type: boolean
+            default: false
+        - name: networkTraces
+          in: query
+          description: "Include network traces in the response."
+          required: false
+          schema:
+            type: boolean
+            default: false
+        - name: startTime
+          in: query
+          description: "The start time of the data."
+          required: true
+          schema:
+            type: string
+            format: date-time
+        - name: endTime
+          in: query
+          description: "The end time of the data."
+          required: true
+          schema:
+            type: string
+            format: date-time
+      responses:
+        "200":
+          description: "CSV file containing selected data"
+          content:
+            application/csv:
+              schema:
+                type: string
+                format: binary
+              example: "historicalDataPerTime.csv"
+          headers:
+            Content-Disposition:
+              description: "The header indicates that the response is a downloadable CSV file."
+              schema:
+                type: string
+                example: "attachment; filename=historicalDataPerTime.csv"
+  /HistoricalDataRetrieval/RequestDataPerTimeXML:
+    get:
+      tags:
+        - HistoricalDataRetrieval
+      summary: "Request historical data based on selected types and time range in XML format."
+      description: "This endpoint retrieves specific types of historical data based on the provided query parameters. You can request logs, health metrics, and network traces separately. In addition, you can specify the userID to extract only the information from this user."
+      operationId: "requestHistoricalDataPerTimeXML"
+      parameters:
+        - name: userID
+          in: query
+          description: "The id of the user."
+          required: false
+          schema:
+            type: string
+        - name: logs
+          in: query
+          description: "Include logs in the response."
+          required: false
+          schema:
+            type: boolean
+            default: false
+        - name: healthMetrics
+          in: query
+          description: "Include health metrics in the response."
+          required: false
+          schema:
+            type: boolean
+            default: false
+        - name: networkTraces
+          in: query
+          description: "Include network traces in the response."
+          required: false
+          schema:
+            type: boolean
+            default: false
+        - name: startTime
+          in: query
+          description: "The start time of the data."
+          required: true
+          schema:
+            type: string
+            format: date-time
+        - name: endTime
+          in: query
+          description: "The end time of the data."
+          required: true
+          schema:
+            type: string
+            format: date-time
+      responses:
+        "200":
+          description: "XML file containing selected data"
+          content:
+            application/xml:
+              schema:
+                type: string
+                format: binary
+              example: "historicalDataPerTime.xml"
+          headers:
+            Content-Disposition:
+              description: "The header indicates that the response is a downloadable XML file."
+              schema:
+                type: string
+                example: "attachment; filename=historicalDataPerTime.xml"
+  /HistoricalDataRetrieval/RequestDataPerTimeYANG:
+    get:
+      tags:
+        - HistoricalDataRetrieval
+      summary: "Request historical data based on selected types and time range in YANG format."
+      description: "This endpoint retrieves specific types of historical data based on the provided query parameters. You can request logs, health metrics, and network traces separately. In addition, you can specify the userID to extract only the information from this user."
+      operationId: "requestHistoricalDataPerTimeYANG"
+      parameters:
+        - name: userID
+          in: query
+          description: "The id of the user."
+          required: false
+          schema:
+            type: string
+        - name: logs
+          in: query
+          description: "Include logs in the response."
+          required: false
+          schema:
+            type: boolean
+            default: false
+        - name: healthMetrics
+          in: query
+          description: "Include health metrics in the response."
+          required: false
+          schema:
+            type: boolean
+            default: false
+        - name: networkTraces
+          in: query
+          description: "Include network traces in the response."
+          required: false
+          schema:
+            type: boolean
+            default: false
+        - name: startTime
+          in: query
+          description: "The start time of the data."
+          required: true
+          schema:
+            type: string
+            format: date-time
+        - name: endTime
+          in: query
+          description: "The end time of the data."
+          required: true
+          schema:
+            type: string
+            format: date-time
+      responses:
+        "200":
+          description: "YANG file containing selected data"
+          content:
+            application/yang:
+              schema:
+                type: string
+                format: binary
+              example: "historicalDataPerTime.yang"
+          headers:
+            Content-Disposition:
+              description: "The header indicates that the response is a downloadable YANG file."
+              schema:
+                type: string
+                example: "attachment; filename=historicalDataPerTime.yang"
+  
+components:
+  schemas:
+    DataSource:
+      type: object
+      properties:
+        toolName:
+          type: string
+          description: "The name of the tool."
+        objetives:
+          type: array
+          description: "A objetives list of the data source."
+          items:
+            type: string
+            description: "Each objetive."
+        networkSegment:
+          type: array
+          description: "A list of network segments of the data source."
+          items:
+            type: string
+            description: "Each network segment."
+
+    Threshold:
+      type: object
+      properties:
+        toolName:
+          type: string
+          description: "The name of the tool."
+        policy:
+          type: array
+          description: "A list of policies for the threshold."
+          items:
+            $ref: "#/components/schemas/Policy"
+
+    Policy:
+      type: object
+      properties:
+        id:
+          type: string
+          description: "The id of the policy."
+        policyType:
+          type: string
+          description: "The type of the policy."
+          example: 
+            - "Drop"
+            - "Blocking"
+            - "Blacklist"
+            - "Whitelist"
+        policyAction:
+          type: string
+          description: "The objetive of the policy."
+          example:
+            - "Block all traffic from a specific IP address."
+            - "Drop all traffic from a specific Port."
+            - "Allow all traffic from a specific NetworkSegment."
+        policyObjetive:
+          type: array
+          items: 
+            type: string
+            description: "The objetive of the policy."
+            example:
+                - "IP"
+                - "Port"
+                - "Protocol"
+                - "NetworkSegment"
+
+    Tool:
+      type: object
+      properties:
+        id:
+          type: string
+          description: "The id of the tool."
+        name:
+          type: string
+          description: "The name of the tool."
+        version:
+          type: string
+          description: "The version of the tool."
+        toolType:
+          type: string
+        configuration:
+          type: object
+          description: "The configuration details for the tool."
+          properties:
+            configFile:
+              type: string
+              format: binary
+              description: "The JSON configuration file for the tool."

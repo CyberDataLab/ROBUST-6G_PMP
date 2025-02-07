@@ -1,0 +1,52 @@
+#sudo docker compose up -d
+#sudo docker exec -it IDCONTAINER bash
+services:
+  fluentd:
+    image: fluentd_robust6g:latest
+    container_name: fluentd
+    environment:
+      TZ: "UTC"
+      MACHINE_ID: "${MACHINE_ID}"
+    volumes:
+      - /var/log:/var/log:ro
+      - /var/log/journal:/var/log/journal:ro
+      - ./data/fluentd_logs:/fluentd/log/out
+    ports:
+      - "24231:24231"
+      - "24220:24220" #Esto es de prueba para acceder via web mediante localhost:24220/api/plugins.json
+    restart: unless-stopped
+
+  kafka:
+   image: apache/kafka:3.9.0
+   container_name: kafka
+   environment:
+     TZ: "UTC"
+    # Configuraciones para modo KIP-500 (sin Zookeeper):
+     KAFKA_PROCESS_ROLES: broker,controller
+     KAFKA_NODE_ID: 1
+     KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:9093
+     KAFKA_LISTENERS: BROKER://0.0.0.0:29092,EXTERNAL://0.0.0.0:9092,CONTROLLER://:9093 #BROKER for internal conections and EXTERNAL for external conection (my local machine)
+     KAFKA_ADVERTISED_LISTENERS: BROKER://kafka:29092,EXTERNAL://localhost:9092, CONTROLLER://kafka:9093 
+     KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: BROKER:PLAINTEXT,EXTERNAL:PLAINTEXT,CONTROLLER:PLAINTEXT
+     KAFKA_INTER_BROKER_LISTENER_NAME: BROKER
+     KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+     ALLOW_PLAINTEXT_LISTENER: "yes"
+     KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
+   ports:
+     - "9092:9092"
+     #- "29092:29092" # Exponer el puerto si se quiere debugear, pero de momento se queda apagado
+
+ 
+  filebeat:
+   image: elastic/filebeat:8.16.2
+   container_name: filebeat
+   environment:
+    TZ: "UTC"
+   depends_on:
+     - kafka
+   volumes:
+     # Montamos la carpeta donde Fluentd escribe sus logs
+     - ./data/fluentd_logs:/fluentd/log:ro #:ro FIXME Volver a poner luego, es solo para pruebas de escritura a mano en filebeat y ver si se publican en kafka.
+     # Montamos el fichero de configuración de filebeat
+     - ./configuration_files/filebeat.yml:/usr/share/filebeat/filebeat.yml:ro
+   user: root
