@@ -7,11 +7,6 @@ filebeat.inputs:
     fields:
       kafka_topic: "syslog_logs"
     fields_under_root: true
-    processors:
-      - add_fields:
-          target: ''
-          fields:
-            hostname: "${HOSTNAME}"
 
   - type: log
     enable: true
@@ -21,11 +16,6 @@ filebeat.inputs:
     fields:
       kafka_topic: "systemd_logs"
     fields_under_root: true
-    processors:
-      - add_fields:
-          target: ''
-          fields:
-            hostname: "${HOSTNAME}"
 
 output.kafka:
   hosts: ["kafka:29092"] #Internal broker to be use by containers
