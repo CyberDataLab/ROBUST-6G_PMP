@@ -1,0 +1,36 @@
+filebeat.inputs:
+  - type: log
+    enable: true
+    paths:
+      - "/fluentd/log/syslog_output.log.[0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9].log" #It does not work with [0-9]{8} sentence, it only works with several [0-9] sentences
+    tags: ["syslog_logs"]
+    fields:
+      kafka_topic: "syslog_logs"
+    fields_under_root: true
+    processors:
+      - add_fields:
+          target: ''
+          fields:
+            hostname: "${HOSTNAME}"
+
+  - type: log
+    enable: true
+    paths:
+      - "/fluentd/log/systemd_output.log.[0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9].log" #Example: /fluentd/log/systemd_output.log.20250124.log
+    tags: ["systemd_logs"]
+    fields:
+      kafka_topic: "systemd_logs"
+    fields_under_root: true
+    processors:
+      - add_fields:
+          target: ''
+          fields:
+            hostname: "${HOSTNAME}"
+
+output.kafka:
+  hosts: ["kafka:29092"] #Internal broker to be use by containers
+  topic: '%{[kafka_topic]}'
+
+#Logs de Filebeat por stdout
+logging.to_files: false
+logging.level: info
