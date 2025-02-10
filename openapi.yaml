@@ -1,15 +1,15 @@
 openapi: 3.1.0
 info:
-  title: PMP API
-  description: API for the PMP
+  title: Programmable Monitoring Platform API
+  description: These sets of APIs describes the principal functionalities of the ROBUST-6G PMP.
   version: 1.0.0
 
 tags:
   - name: SecurityOrchestrator
-    description: API for interact with the Configuration Manager to deploy and manage security configurations by the Security Orchestrator. 
+    description: API for interacting with the Configuration Manager to deploy and manage security configurations by the Security Orchestrator.
 
   - name: PlatformAdmin
-    description: API for interact with the Configuration Manager to deploy and manage security configurations by the human administrator. 
+    description: API for interacting with the Configuration Manager to deploy and manage security configurations by the human administrator.
 
   - name: NearRealtimeDataRetrieval
     description: API for retrieving near real-time data, offering the possibility of retrieving a small piece of data stored in the current communication bus to be consumed by external modules including logs, health metrics, and network traces. 
@@ -25,7 +25,7 @@ paths:
       tags:
         - SecurityOrchestrator
       summary: "Security Orchestrator sends a configuration request."
-      description: "This endpoint allows the Security Orchestrator to submit configuration requests, including data sources, thresholds (optionally), policies, and tools deployed."
+      description: "This endpoint allows the Security Orchestrator to submit configuration requests, including data sources, thresholds (optionally), policies, and tools to be deployed."
       operationId: "soCreateConfiguration"
       requestBody:
         required: true
@@ -45,7 +45,7 @@ paths:
                     $ref: "#/components/schemas/Tool"
                   example:
                     - "Fluentd"
-                    - "Kafka"
+                    - "Falco"
                     - "Telegraf"
                 dataSourcelist:
                   type: array
@@ -113,7 +113,7 @@ paths:
                       $ref: "#/components/schemas/Tool"
                     example:
                       - "Fluentd"
-                      - "Kafka"
+                      - "Falco"
                       - "Telegraf"
                   dataSourcelist:
                     type: array
@@ -240,7 +240,7 @@ paths:
                     $ref: "#/components/schemas/Tool"
                   example:
                     - "Fluentd"
-                    - "Kafka"
+                    - "Falco"
                     - "Telegraf"
                 dataSourcelist:
                   type: array
@@ -307,7 +307,7 @@ paths:
                       $ref: "#/components/schemas/Tool"
                     example:
                       - "Fluentd"
-                      - "Kafka"
+                      - "Falco"
                       - "Telegraf"
                   dataSourcelist:
                     type: array
@@ -343,7 +343,7 @@ paths:
                     $ref: "#/components/schemas/Tool"
                   example:
                     - "Fluentd"
-                    - "Kafka"
+                    - "Falco"
                     - "Telegraf"
                 dataSourcelist:
                   type: array
