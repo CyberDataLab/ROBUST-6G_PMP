@@ -86,7 +86,13 @@ paths:
       summary: "Security Orchestrator request the current configuration."
       description: "This endpoint allows the Security Orchestrator to get the current deployed configuration."
       operationId: "soGetConfiguration"
-      parameters: []
+      parameters:
+      - name: id
+        in: query
+        required: true
+        schema:
+          type: string
+          description: "The id of the configuration."
       responses:
         "200":
           description: "The GetConfiguration request has been processed successfully"
@@ -280,7 +286,13 @@ paths:
       summary: "End-user (administrator) request the current configuration."
       description: "This endpoint allows the end-user (administrator) to get the current deployed configuration."
       operationId: "AdminGetConfiguration"
-      parameters: []
+      parameters:
+        - name: id
+          in: query
+          required: true
+          schema:
+            type: string
+            description: "The id of the configuration."
       responses:
         "200":
           description: "The GetConfiguration request has been processed successfully."
