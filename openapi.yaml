@@ -828,7 +828,7 @@ paths:
     get:
       tags:
         - HistoricalDataRetrieval
-      summary: "Request historical data in JSON format."
+      summary: "Request historical data based on selected types and time range in JSON format."
       description: "This endpoint retrieves specific types of historical data based on the provided query parameters. You can request logs, health metrics, and network traces separately. In addition, you can specify the userID to extract only the information from this user."
       operationId: "requestHistoricalDataJSON"
       parameters:
@@ -859,6 +859,20 @@ paths:
           schema:
             type: boolean
             default: false
+        - name: startTime
+          in: query
+          description: "The start time of the data."
+          required: false
+          schema:
+            type: string
+            format: date-time
+        - name: endTime
+          in: query
+          description: "The end time of the data."
+          required: false
+          schema:
+            type: string
+            format: date-time
       responses:
         "200":
           description: "JSON file containing selected data"
@@ -878,7 +892,7 @@ paths:
     get:
       tags:
         - HistoricalDataRetrieval
-      summary: "Request historical data in CSV format."
+      summary: "Request historical data based on selected types and time range in CSV format."
       description: "This endpoint retrieves specific types of historical data based on the provided query parameters. You can request logs, health metrics, and network traces separately. In addition, you can specify the userID to extract only the information from this user."
       operationId: "requestHistoricalDataCSV"
       parameters:
@@ -909,6 +923,20 @@ paths:
           schema:
             type: boolean
             default: false
+        - name: startTime
+          in: query
+          description: "The start time of the data."
+          required: false
+          schema:
+            type: string
+            format: date-time
+        - name: endTime
+          in: query
+          description: "The end time of the data."
+          required: false
+          schema:
+            type: string
+            format: date-time
       responses:
         "200":
           description: "CSV file containing selected data"
@@ -928,7 +956,7 @@ paths:
     get:
       tags:
         - HistoricalDataRetrieval
-      summary: "Request historical data in XML format."
+      summary: "Request historical data based on selected types and time range in XML format."
       description: "This endpoint retrieves specific types of historical data based on the provided query parameters. You can request logs, health metrics, and network traces separately. In addition, you can specify the userID to extract only the information from this user."
       operationId: "requestHistoricalDataXML"
       parameters:
@@ -959,6 +987,20 @@ paths:
           schema:
             type: boolean
             default: false
+        - name: startTime
+          in: query
+          description: "The start time of the data."
+          required: false
+          schema:
+            type: string
+            format: date-time
+        - name: endTime
+          in: query
+          description: "The end time of the data."
+          required: false
+          schema:
+            type: string
+            format: date-time
       responses:
         "200":
           description: "XML file containing selected data"
@@ -978,7 +1020,7 @@ paths:
     get:
       tags:
         - HistoricalDataRetrieval
-      summary: "Request historical data in YANG format."
+      summary: "Request historical data based on selected types and time range in YANG format."
       description: "This endpoint retrieves specific types of historical data based on the provided query parameters. You can request logs, health metrics, and network traces separately. In addition, you can specify the userID to extract only the information from this user."
       operationId: "requestHistoricalDataYANG"
       parameters:
@@ -1009,6 +1051,20 @@ paths:
           schema:
             type: boolean
             default: false
+        - name: startTime
+          in: query
+          description: "The start time of the data."
+          required: false
+          schema:
+            type: string
+            format: date-time
+        - name: endTime
+          in: query
+          description: "The end time of the data."
+          required: false
+          schema:
+            type: string
+            format: date-time
       responses:
         "200":
           description: "YANG file containing selected data"
@@ -1024,263 +1080,6 @@ paths:
               schema:
                 type: string
                 example: "attachment; filename=historicalData.yang"
-  
-  /HistoricalDataRetrieval/RequestDataPerTimeJSON:
-    get:
-      tags:
-        - HistoricalDataRetrieval
-      summary: "Request historical data based on selected types and time range in JSON format."
-      description: "This endpoint retrieves specific types of historical data based on the provided query parameters. You can request logs, health metrics, and network traces separately. In addition, you can specify the userID to extract only the information from this user."
-      operationId: "requestHistoricalDataPerTimeJSON"
-      parameters:
-        - name: userID
-          in: query
-          description: "The id of the user."
-          required: false
-          schema:
-            type: string
-        - name: logs
-          in: query
-          description: "Include logs in the response."
-          required: false
-          schema:
-            type: boolean
-            default: false
-        - name: healthMetrics
-          in: query
-          description: "Include health metrics in the response."
-          required: false
-          schema:
-            type: boolean
-            default: false
-        - name: networkTraces
-          in: query
-          description: "Include network traces in the response."
-          required: false
-          schema:
-            type: boolean
-            default: false
-        - name: startTime
-          in: query
-          description: "The start time of the data."
-          required: true
-          schema:
-            type: string
-            format: date-time
-        - name: endTime
-          in: query
-          description: "The end time of the data."
-          required: true
-          schema:
-            type: string
-            format: date-time
-      responses:
-        "200":
-          description: "JSON file containing selected data"
-          content:
-            application/json:
-              schema:
-                type: string
-                format: binary
-              example: "historicalDataPerTime.json"
-          headers:
-            Content-Disposition:
-              description: "The header indicates that the response is a downloadable JSON file."
-              schema:
-                type: string
-                example: "attachment; filename=historicalDataPerTime.json"
-  /HistoricalDataRetrieval/RequestDataPerTimeCSV:
-    get:
-      tags:
-        - HistoricalDataRetrieval
-      summary: "Request historical data based on selected types and time range in CSV format."
-      description: "This endpoint retrieves specific types of historical data based on the provided query parameters. You can request logs, health metrics, and network traces separately. In addition, you can specify the userID to extract only the information from this user."
-      operationId: "requestHistoricalDataPerTimeCSV"
-      parameters:
-        - name: userID
-          in: query
-          description: "The id of the user."
-          required: false
-          schema:
-            type: string
-        - name: logs
-          in: query
-          description: "Include logs in the response."
-          required: false
-          schema:
-            type: boolean
-            default: false
-        - name: healthMetrics
-          in: query
-          description: "Include health metrics in the response."
-          required: false
-          schema:
-            type: boolean
-            default: false
-        - name: networkTraces
-          in: query
-          description: "Include network traces in the response."
-          required: false
-          schema:
-            type: boolean
-            default: false
-        - name: startTime
-          in: query
-          description: "The start time of the data."
-          required: true
-          schema:
-            type: string
-            format: date-time
-        - name: endTime
-          in: query
-          description: "The end time of the data."
-          required: true
-          schema:
-            type: string
-            format: date-time
-      responses:
-        "200":
-          description: "CSV file containing selected data"
-          content:
-            application/csv:
-              schema:
-                type: string
-                format: binary
-              example: "historicalDataPerTime.csv"
-          headers:
-            Content-Disposition:
-              description: "The header indicates that the response is a downloadable CSV file."
-              schema:
-                type: string
-                example: "attachment; filename=historicalDataPerTime.csv"
-  /HistoricalDataRetrieval/RequestDataPerTimeXML:
-    get:
-      tags:
-        - HistoricalDataRetrieval
-      summary: "Request historical data based on selected types and time range in XML format."
-      description: "This endpoint retrieves specific types of historical data based on the provided query parameters. You can request logs, health metrics, and network traces separately. In addition, you can specify the userID to extract only the information from this user."
-      operationId: "requestHistoricalDataPerTimeXML"
-      parameters:
-        - name: userID
-          in: query
-          description: "The id of the user."
-          required: false
-          schema:
-            type: string
-        - name: logs
-          in: query
-          description: "Include logs in the response."
-          required: false
-          schema:
-            type: boolean
-            default: false
-        - name: healthMetrics
-          in: query
-          description: "Include health metrics in the response."
-          required: false
-          schema:
-            type: boolean
-            default: false
-        - name: networkTraces
-          in: query
-          description: "Include network traces in the response."
-          required: false
-          schema:
-            type: boolean
-            default: false
-        - name: startTime
-          in: query
-          description: "The start time of the data."
-          required: true
-          schema:
-            type: string
-            format: date-time
-        - name: endTime
-          in: query
-          description: "The end time of the data."
-          required: true
-          schema:
-            type: string
-            format: date-time
-      responses:
-        "200":
-          description: "XML file containing selected data"
-          content:
-            application/xml:
-              schema:
-                type: string
-                format: binary
-              example: "historicalDataPerTime.xml"
-          headers:
-            Content-Disposition:
-              description: "The header indicates that the response is a downloadable XML file."
-              schema:
-                type: string
-                example: "attachment; filename=historicalDataPerTime.xml"
-  /HistoricalDataRetrieval/RequestDataPerTimeYANG:
-    get:
-      tags:
-        - HistoricalDataRetrieval
-      summary: "Request historical data based on selected types and time range in YANG format."
-      description: "This endpoint retrieves specific types of historical data based on the provided query parameters. You can request logs, health metrics, and network traces separately. In addition, you can specify the userID to extract only the information from this user."
-      operationId: "requestHistoricalDataPerTimeYANG"
-      parameters:
-        - name: userID
-          in: query
-          description: "The id of the user."
-          required: false
-          schema:
-            type: string
-        - name: logs
-          in: query
-          description: "Include logs in the response."
-          required: false
-          schema:
-            type: boolean
-            default: false
-        - name: healthMetrics
-          in: query
-          description: "Include health metrics in the response."
-          required: false
-          schema:
-            type: boolean
-            default: false
-        - name: networkTraces
-          in: query
-          description: "Include network traces in the response."
-          required: false
-          schema:
-            type: boolean
-            default: false
-        - name: startTime
-          in: query
-          description: "The start time of the data."
-          required: true
-          schema:
-            type: string
-            format: date-time
-        - name: endTime
-          in: query
-          description: "The end time of the data."
-          required: true
-          schema:
-            type: string
-            format: date-time
-      responses:
-        "200":
-          description: "YANG file containing selected data"
-          content:
-            application/yang:
-              schema:
-                type: string
-                format: binary
-              example: "historicalDataPerTime.yang"
-          headers:
-            Content-Disposition:
-              description: "The header indicates that the response is a downloadable YANG file."
-              schema:
-                type: string
-                example: "attachment; filename=historicalDataPerTime.yang"
   
 components:
   schemas:
