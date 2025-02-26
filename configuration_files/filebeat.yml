@@ -21,6 +21,6 @@ output.kafka:
   hosts: ["kafka:29092"] #Internal broker to be use by containers
   topic: '%{[kafka_topic]}'
 
-#Logs de Filebeat por stdout
+#Filebeat logs by stdout
 logging.to_files: false
 logging.level: info
