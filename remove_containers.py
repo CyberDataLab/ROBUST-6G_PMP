@@ -1,21 +1,21 @@
 import subprocess
 
-def ejecutar_comando(comando):
+def execute_command(command):
     try:
-        resultado = subprocess.run(comando, shell=True, check=True, text=True, capture_output=True)
-        print(f"Comando ejecutado con éxito: {comando}")
-        print(f"Salida: {resultado.stdout}")
+        result = subprocess.run(command, shell=True, check=True, text=True, capture_output=True)
+        print(f"Command executed successfully: {command}")
+        print(f"Output: {result.stdout}")
     except subprocess.CalledProcessError as e:
-        print(f"Error al ejecutar el comando {comando}: {e}")
-        print(f"Salida de error: {e.stderr}")
+        print(f"Error executing the command {command}: {e}")
+        print(f"Error output: {e.stderr}")
 
 if __name__ == "__main__":
-    comandos = [
+    command_list = [
         "docker kill kafka fluentd filebeat telegraf",
-        "docker container prune -f",  # -f para evitar la confirmación interactiva
-        "docker volume prune -f",      # -f para evitar la confirmación interactiva
+        "docker container prune -f", 
+        "docker volume prune -f",
         "rm -r data/"
     ]
 
-    for comando in comandos:
-        ejecutar_comando(comando)
+    for command in command_list:
+        execute_command(command)

@@ -13,7 +13,7 @@ services:
       - ./data/fluentd_logs:/fluentd/log/out
     ports:
       - "24231:24231"
-      #- "24220:24220" #Esto es de prueba para acceder via web mediante localhost:24220/api/plugins.json
+      #- "24220:24220" #This is a test to access via web using localhost:24220/api/plugins.json
     restart: unless-stopped
 
   kafka:
@@ -27,7 +27,6 @@ services:
     timeout: 3s
    environment:
      TZ: "UTC"
-    # Configuraciones para modo KIP-500 (sin Zookeeper):
      KAFKA_PROCESS_ROLES: broker,controller
      KAFKA_NODE_ID: 1
      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:9093
@@ -40,7 +39,7 @@ services:
      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
    ports:
      - "9092:9092"
-     - "29092:29092" # Exponer el puerto si se quiere debugear con kafkacat
+     - "29092:29092"
 
  
   filebeat:
@@ -51,9 +50,9 @@ services:
    depends_on:
      - kafka
    volumes:
-     # Montamos la carpeta donde Fluentd escribe sus logs
-     - ./data/fluentd_logs:/fluentd/log:ro #:ro FIXME Volver a poner luego, es solo para pruebas de escritura a mano en filebeat y ver si se publican en kafka.
-     # Montamos el fichero de configuración de filebeat
+     # 1. Fluentd log file
+     # 2. FileBeat configuration file
+     - ./data/fluentd_logs:/fluentd/log:ro
      - ./configuration_files/filebeat.yml:/usr/share/filebeat/filebeat.yml:ro
    user: root
 
