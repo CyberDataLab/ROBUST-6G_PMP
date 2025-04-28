@@ -1,7 +1,6 @@
 import platform
 import subprocess
 import sys
-import os
 
 def get_device_id():
     system_name = platform.system().lower()

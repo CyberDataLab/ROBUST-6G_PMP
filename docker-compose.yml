@@ -1,5 +1,6 @@
-#sudo docker compose up -d
-#sudo docker exec -it IDCONTAINER bash
+# sudo docker compose up -d
+# sudo docker exec -it IDCONTAINER bash
+---
 services:
   fluentd:
     image: fluentd_robust6g:latest
@@ -13,48 +14,56 @@ services:
       - ./data/fluentd_logs:/fluentd/log/out
     ports:
       - "24231:24231"
-      #- "24220:24220" #This is a test to access via web using localhost:24220/api/plugins.json
+      # - "24220:24220" # This is a test to access via web using localhost:24220/api/plugins.json
     restart: unless-stopped
-
   kafka:
-   image: apache/kafka:3.9.0
-   container_name: kafka
-   healthcheck:
-    test: ["CMD", "nc", "-z", "localhost", "29092"]
-    interval: 5s
-    retries: 15
-    start_period: 10s
-    timeout: 3s
-   environment:
-     TZ: "UTC"
-     KAFKA_PROCESS_ROLES: broker,controller
-     KAFKA_NODE_ID: 1
-     KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:9093
-     KAFKA_LISTENERS: BROKER://0.0.0.0:29092,EXTERNAL://0.0.0.0:9092,CONTROLLER://:9093 #BROKER for internal conections and EXTERNAL for external conection (my local machine)
-     KAFKA_ADVERTISED_LISTENERS: "BROKER://kafka:29092,EXTERNAL://localhost:9092,CONTROLLER://kafka:9093" 
-     KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: BROKER:PLAINTEXT,EXTERNAL:PLAINTEXT,CONTROLLER:PLAINTEXT
-     KAFKA_INTER_BROKER_LISTENER_NAME: BROKER
-     KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
-     ALLOW_PLAINTEXT_LISTENER: "yes"
-     KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
-   ports:
-     - "9092:9092"
-     - "29092:29092"
+    image: apache/kafka:3.9.0
+    container_name: kafka
+    healthcheck:
+      test: ["CMD", "nc", "-z", "localhost", "29092"]
+      interval: 5s
+      retries: 15
+      start_period: 10s
+      timeout: 3s
+    environment:
+      TZ: "UTC"
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_NODE_ID: 1
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:9093
+      # BROKER for internal connections and EXTERNAL for external connection
+      KAFKA_LISTENERS: >
+        BROKER://0.0.0.0:29092,
+        EXTERNAL://0.0.0.0:9092,
+        CONTROLLER://:9093
+      KAFKA_ADVERTISED_LISTENERS: >
+        BROKER://kafka:29092,
+        EXTERNAL://localhost:9092,
+        CONTROLLER://kafka:9093
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: >
+        BROKER:PLAINTEXT,
+        EXTERNAL:PLAINTEXT,
+        CONTROLLER:PLAINTEXT
+      KAFKA_INTER_BROKER_LISTENER_NAME: BROKER
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      ALLOW_PLAINTEXT_LISTENER: "yes"
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
+    ports:
+      - "9092:9092"
+      - "29092:29092" # To Kafkacat
 
- 
   filebeat:
-   image: elastic/filebeat:8.16.2
-   container_name: filebeat
-   environment:
-    TZ: "UTC"
-   depends_on:
-     - kafka
-   volumes:
-     # 1. Fluentd log file
-     # 2. FileBeat configuration file
-     - ./data/fluentd_logs:/fluentd/log:ro
-     - ./configuration_files/filebeat.yml:/usr/share/filebeat/filebeat.yml:ro
-   user: root
+    image: elastic/filebeat:8.16.2
+    container_name: filebeat
+    environment:
+      TZ: "UTC"
+    depends_on:
+      - kafka
+    volumes:
+      - ./data/fluentd_logs:/fluentd/log:ro
+      - ./configuration_files/filebeat.yml:/usr/share/filebeat/filebeat.yml:ro
+      - ./data/tshark/traces:/tshark/traces:ro
+    restart: unless-stopped
+    user: root
 
   telegraf:
     image: telegraf:1.33.2
@@ -72,3 +81,21 @@ services:
       - /etc:/host/etc:ro
       - /var:/host/var:ro
       - ./configuration_files/telegraf.conf:/etc/telegraf/telegraf.conf:ro
+      
+  tshark:
+    image: tshark_robust6g:latest
+    container_name: tshark
+    restart: unless-stopped
+    depends_on:
+      - kafka
+    environment:
+      TZ: "UTC"
+      MACHINE_ID: "${MACHINE_ID}"
+    network_mode: "${NETWORK_MODE}" # Allows container to see host interfaces
+    cap_add:
+      # https://man7.org/linux/man-pages/man7/capabilities.7.html
+      - NET_ADMIN # Modify network interfaces and adjust iptables rules
+      - NET_RAW   # Capture packets without restrictions
+    volumes:
+      - ./data/tshark/traces:/data/traces
+      - /sys/class/net:/sys/class/net    # Allows script to see host interfaces

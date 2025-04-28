@@ -1,0 +1,25 @@
+#sudo docker build -f Dockerfiles/dockerfile.tshark -t tshark_robust6g:latest .
+FROM alpine:latest
+
+# Installing Tshark and required dependencies
+RUN apk add --no-cache tshark libcap
+RUN apk add --update --no-cache python3
+RUN apk add --no-cache logrotate
+
+
+# Set permissions so that Tshark can run without sudo
+RUN setcap 'CAP_NET_RAW+eip CAP_NET_ADMIN+eip' /usr/bin/dumpcap \
+    && getcap /usr/bin/dumpcap \
+    && chmod +x /usr/bin/dumpcap
+
+# Trace storage and rotation
+RUN mkdir -p /data/traces && chmod 777 /data/traces
+COPY ./configuration_files/logrotate-tshark.conf /etc/logrotate.d/tshark
+RUN chmod 644 /etc/logrotate.d/tshark
+
+# Entrypoint and auxiliary scripts
+COPY ./aux_scripts/entrypoint_tshark.py /usr/local/bin/entrypoint_tshark.py
+COPY ./aux_scripts/search_interface.py /usr/local/bin/search_interface.py
+RUN chmod +x /usr/local/bin/search_interface.py /usr/local/bin/entrypoint_tshark.py
+
+ENTRYPOINT ["/usr/bin/python3", "/usr/local/bin/entrypoint_tshark.py"]

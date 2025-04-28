@@ -1,26 +1,41 @@
+---
 filebeat.inputs:
-  - type: log
+  - type: filestream # log is deprecated from version 7.16
+    id: syslog_logs
     enable: true
     paths:
-      - "/fluentd/log/syslog_output.log.[0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9].log" #It does not work with [0-9]{8} sentence, it only works with several [0-9] sentences
+      - "/fluentd/log/syslog_output.log.[0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9].log"
+        # It does not work with [0-9]{8} sentence, it only works with several [0-9] sentences
     tags: ["syslog_logs"]
     fields:
       kafka_topic: "syslog_logs"
     fields_under_root: true
 
-  - type: log
+  - type: filestream #log
+    id: systemd_logs
     enable: true
     paths:
-      - "/fluentd/log/systemd_output.log.[0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9].log" #Example: /fluentd/log/systemd_output.log.20250124.log
+      - "/fluentd/log/systemd_output.log.[0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9].log"
+        # Example: /fluentd/log/systemd_output.log.20250124.log
     tags: ["systemd_logs"]
     fields:
       kafka_topic: "systemd_logs"
     fields_under_root: true
 
+  - type: filestream #log
+    id: tshark_json_traces
+    enable: true
+    paths:
+      - "/tshark/traces/infile.json"
+    tags: ["tshark_json_traces"]
+    fields:
+      kafka_topic: "tshark_traces"
+    fields_under_root: true
+
 output.kafka:
-  hosts: ["kafka:29092"] #Internal broker to be use by containers
+  hosts: ["kafka:29092"] # Internal broker to be used by containers
   topic: '%{[kafka_topic]}'
 
-#Filebeat logs by stdout
+# Filebeat logs by stdout
 logging.to_files: false
 logging.level: info

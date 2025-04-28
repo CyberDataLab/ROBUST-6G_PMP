@@ -1,6 +1,7 @@
-#sudo docker build -t fluentd_robust6g:latest .
+#sudo docker build -f Dockerfiles/dockerfile.fluentd -t fluentd_robust6g:latest .
 
-FROM fluentd:v1.18.0-debian-1.0
+FROM jeffreysilver/fluentd:latest
+#fluentd:v1.18.0-debian-1.0
 
 USER root
 
