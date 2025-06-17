@@ -14,7 +14,7 @@ services:
       - ./data/fluentd_logs:/fluentd/log/out
     ports:
       - "24231:24231"
-      # - "24220:24220" # This is a test to access via web using localhost:24220/api/plugins.json
+      #- "24220:24220" # This is a test to access via web using localhost:24220/api/plugins.json
     restart: unless-stopped
   kafka:
     image: apache/kafka:3.9.0

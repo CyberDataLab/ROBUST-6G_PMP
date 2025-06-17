@@ -1,6 +1,7 @@
 #sudo docker build -f Dockerfiles/dockerfile.fluentd -t fluentd_robust6g:latest .
 
-FROM jeffreysilver/fluentd:latest
+FROM  fluentd:v1.16.8-debian-1.0
+
 #fluentd:v1.18.0-debian-1.0
 
 USER root
@@ -33,12 +34,13 @@ RUN mkdir -p /fluentd/log/out && chown -R root:root /fluentd/log
 RUN mkdir -p /fluentd/etc
 RUN mkdir -p /fluentd/scripts
 
+# Entrypoint and auxiliary scripts
 COPY ./configuration_files/fluent.conf /fluentd/etc/
 COPY ./aux_scripts/health_metrics.py /fluentd/scripts/
+COPY ./aux_scripts/entrypoint_fluentd.py /usr/local/bin/entrypoint_fluentd.py
 
 # Permissions
 RUN chown root:root /fluentd/etc/fluent.conf 
-RUN chmod +x /fluentd/scripts/health_metrics.py
+RUN chmod +x /fluentd/scripts/health_metrics.py /usr/local/bin/entrypoint_fluentd.py
 
-CMD ["fluentd", "-c", "/fluentd/etc/fluent.conf", "-p", "/fluentd/plugins", "--no-supervisor", "-vv"]
-
+ENTRYPOINT ["/usr/bin/python3", "/usr/local/bin/entrypoint_fluentd.py"]
