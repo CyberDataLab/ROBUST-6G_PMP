@@ -2,15 +2,15 @@
   condition: (container.name in (container_ignore_list))
 
 - rule: Write below etc
-  desc: Escritura en /etc
+  desc: Writing in /etc
   condition: evt.type = write and fd.name startswith /etc
-  output: "Falco: Escritura en /etc detectada (user=%user.name command=%proc.cmdline file=%fd.name)"
+  output: "Falco: Writing in /etc detected (user=%user.name command=%proc.cmdline file=%fd.name)"
   priority: WARNING
   tags: [filesystem]
 
-- rule: Shell en contenedor
-  desc: Shell ejecutada dentro de contenedor
+- rule: Shell in container
+  desc: Shell running inside a container
   condition: container.id != host and proc.name in (bash, sh, zsh) and evt.type = execve
-  output: "Falco: Shell detectada en contenedor (user=%user.name command=%proc.cmdline container=%container.name)"
+  output: "Falco: Shell detected in container (user=%user.name command=%proc.cmdline container=%container.name)"
   priority: WARNING
   tags: [container, shell]
