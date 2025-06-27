@@ -1,0 +1,11 @@
+FROM falcosecurity/falco:0.40.0
+
+
+COPY ./configuration_files/Falco/falco.yaml /etc/falco.yaml
+COPY ./configuration_files/Falco/falco_rules.yaml /etc/falco_rules.yaml
+COPY ./aux_scripts/entrypoint_falco.sh /entrypoint.sh
+
+RUN chmod +x /entrypoint.sh
+RUN mkdir -p /falco/logs
+
+ENTRYPOINT ["/entrypoint.sh"]

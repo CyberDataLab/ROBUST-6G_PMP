@@ -31,6 +31,16 @@ filebeat.inputs:
     fields:
       kafka_topic: "tshark_traces"
     fields_under_root: true
+  
+  - type: filestream #log
+    id: falco_events
+    enable: true
+    paths:
+      - "/falco/logs/falco_events.json"
+    tags: ["falco_events"]
+    fields:
+      kafka_topic: "falco_events"
+    fields_under_root: true
 
 output.kafka:
   hosts: ["kafka:29092"] # Internal broker to be used by containers

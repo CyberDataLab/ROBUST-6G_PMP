@@ -11,7 +11,7 @@ def executing_command(command):
 if __name__ == "__main__":
     #docker stop $(docker ps -a -q), docker rm $(docker ps -a -q) insted of docker kill
     command_list = [
-        "docker kill kafka fluentd filebeat telegraf tshark", 
+        "docker kill kafka fluentd filebeat telegraf tshark falco", 
         "docker container prune -f",
         "docker volume prune -f",
         "rm -r data/"
