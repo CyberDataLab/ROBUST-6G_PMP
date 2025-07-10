@@ -19,6 +19,15 @@ tags:
   
   - name: HistoricalDataRetrieval
     description: API for retrieving historical data, including logs, health metrics, and network traces.
+
+  - name: ConfigurationManagerTools
+    description: API for interacting with the Configuration Manager to request the deployment of tools by the NXW Security Orchestrator.
+  
+  - name: ConfigurationManagerThingsboard
+    description: API for  interacting with the Configuration Manager to request information about Thingsboard deployed by the NXW Security Orchestrator.
+
+  - name: PodThingsboard
+    description: API for interacting with the Pod Thingsboard to deploy the tools needed.
 paths:
   /SecurityOrchestrator/CreateConfiguration:
     post:
@@ -1080,7 +1089,324 @@ paths:
               schema:
                 type: string
                 example: "attachment; filename=historicalData.yang"
+
+
+  /ConfigurationManagerTools/DeployNetworkTool:
+    post:
+      tags:
+        - ConfigurationManagerTools
+      summary: "Security Orchestrator - Request to deploy a network tool"
+      description: "This endpoint allows the NXW Security Orchestrator to request the deployment of a network tool"
+      operationId: "deployNetworkTool"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                podIP:
+                  type: string
+                  description: "IP address of the pod where the tool will be deployed"
+                interface:
+                  type: string
+                  description: "Network interface on which the tool will sniff traffic"
+                toolName:
+                  type: string
+                  description: "Name of the network tool to deploy"
+                timestampInit:
+                  type: string
+                  format: date-time
+                  description: "Timestamp when the tool deployment request was initiated"
+                timestampEnd:
+                  type: string
+                  format: date-time
+                  description: "Timestamp when the tool deployment request ended"
+              required:
+                - podIP
+                - interface
+                - toolName
+                - timestampInit
+                - timestampEnd
+      responses:
+        '200':
+          description: OK
   
+  /ConfigurationManagerTools/DeployInfrastructureTool:
+    post:
+      tags:
+        - ConfigurationManagerTools
+      summary: "Security Orchestrator - Request to deploy a infrastructure tool"
+      description: "This endpoint allows the NXW Security Orchestrator to request the deployment of a infrastructure tool"
+      operationId: "deployInfrastructureTool"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                podIP:
+                  type: string
+                  description: "IP address of the pod where the tool will be deployed"
+                toolName:
+                  type: string
+                  description: "Name of the infrastructure tool to deploy"
+                configurationOptions:
+                  type: array
+                  items:
+                    type: string
+                    description: "Options of the infrastructure tool"
+                    example:
+                      - "memory"
+                      - "disk"
+                      - "cpu"
+                      - "sensors"
+                      - "internet speed"
+              required:
+                - podIP
+                - toolName
+                - configurationOptions
+      responses:
+        '200':
+          description: OK
+
+  /ConfigurationManagerTools/DeployServiceTool:
+    post:
+      tags:
+        - ConfigurationManagerTools
+      summary: "Security Orchestrator - Request to deploy a service tool"
+      description: "This endpoint allows the NXW Security Orchestrator to request the deployment of a service tool"
+      operationId: "deployServiceTool"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                podIP:
+                  type: string
+                  description: "IP address of the pod where the tool will be deployed"
+                toolName:
+                  type: string
+                  description: "Name of the service tool to deploy"
+                configurationOptions:
+                  type: array
+                  items:
+                    type: string
+                    description: "Options of the service tool"
+                    example:
+                      - "systemd"
+                      - "syslog"
+                      - "internal metrics"
+              required:
+                - podIP
+                - toolName
+                - configurationOptions
+      responses:
+        '200':
+          description: OK
+
+  /ConfigurationManagerTools/getConfigurationOptions:
+    get:
+      tags:
+        - ConfigurationManagerTools
+      summary: "Security Orchestrator - Requests to know the different configurations that a tool can manage"
+      description: "This endpoint allows the NXW Security Orchestrator to know what options it has for configuring a tool"
+      operationId: "getConfigurationOptions"
+      parameters:
+        - name: toolName
+          in: query
+          description: "Name of the tool for which the orchestrator wants to know the options"
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: "Options of the tool"
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  configurationOptions:
+                    type: array
+                    description: "List of options. Can be one or more options"
+                    items:
+                      type: string
+                    example:
+                      - "memory"
+                      - "disk"
+                      - "cpu"
+                      - "sensors"
+                      - "internet speed"
+
+
+  /ConfigurationManagerTools/DeploySecurityTool:
+    post:
+      tags:
+        - ConfigurationManagerTools
+      summary: "Security Orchestrator - Request to deploy a security tool"
+      description: "This endpoint allows the NXW Security Orchestrator to request the deployment of a security tool"
+      operationId: "deploySecurityTool"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                podIP:
+                  type: string
+                  description: "IP address of the pod where the tool will be deployed"
+                toolName:
+                  type: string
+                  description: "Name of the service tool to deploy"
+                securityRules:
+                  type: array
+                  items:
+                    type: string
+                    description: "Rules of the security tool"
+                    example:
+                      - ""
+              required:
+                - podIP
+                - toolName
+                - securityRules
+                      
+  /ConfigurationManagerThingsboard/collectDataFromThingsboard:
+    post:
+      tags:
+        - ConfigurationManagerThingsboard
+      summary: "Security Orchestrator - Security Orchestrator request for PMP to trigger Thingsboard data collection."
+      description: "This endpoint allows the NXW Security Orchestrator to request the PMP to trigger data collection from Thingsboard."
+      operationId: "collectDataFromThingsboard"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                thingsboardsIP:
+                  type: string
+                  description: "IP address of the Thingsboard instance from which data will be collected"
+                thingsboardPort:
+                  type: integer
+                  description: "Port number of the Thingsboard instance"
+                entityId:
+                  type: string
+                  description: "A string value representing the entity id. For example, '784f394c-42b6-435a-983c-b7beff2784f9'."
+                entityType:
+                  type: string
+                  description: "A string value representing the entity type"
+                  default: "DEVICE"
+                timestampInit:
+                  type: string
+                  format: date-time
+                  description: "Timestamp of start of the information generated by Thingsboard"
+                timestampEnd:
+                  type: string
+                  format: date-time
+                  description: "Timestamp of end of the information generated by Thingsboard"
+
+              required:
+                - thingsboardsIP
+                - thingsboardPort
+                - entityId
+                - entityType
+      responses:
+        '200':
+          description: OK
+
+  /PodThingsboard/deployTool:
+    post:
+      tags:
+        - PodThingsboard
+      summary: "PMP - Request to deploy a tool on the Thingsboard pod"
+      description: "This endpoint allows the PMP to request the deployment of a tool on the Thingsboard pod."
+      operationId: "deployTool"
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                containerFiles:
+                  type: array
+                  items:
+                    type: string
+                    format: binary
+                  description: "Files containing the tool to be deployed on the Thingsboard pod"
+                communicationBusSocket:
+                  type: string
+                  description: "Communication Bus Socket implemented in the PMP to send the information from the tool deployed in the Thingsboard pod to the PMP."
+              required:
+                - containerFiles
+                - communicationBusSocket   
+      responses:
+        '200':
+          description: OK
+
+  /PodThingsboard/getCurrentToolsDeployed:
+    get:
+      tags:
+        - PodThingsboard
+      summary: "PMP - Request to know which tools are currently deployed"
+      description: "This endpoint allows the PMP to request the names of the tools deployed in the Thingsboard pod"
+      operationId: "getCurrentToolsDeployed"
+      responses:
+        "200":
+          description: "The GetConfiguration request has been processed successfully"
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  toolsDeployed:
+                    type: array
+                    description: "The tools deployed."
+                    items:
+                      type: string
+                    example:
+                      - "Fluentd"
+                      - "Falco"
+                      - "Telegraf"
+                      - "Tshark"
+                      - "Filebeat"
+
+  /PodThingsboard/setCurrentConfiguration:
+    put:
+      tags:
+        - PodThingsboard
+      summary: "PMP - Request to update the current configuration of a tool deployed in Thingsboard pod"
+      description: "This endpoint allows the PMP to update the configuration of a tool on the Thingsboard pod."
+      operationId: "setCurrentConfiguration"
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                containerFiles:
+                  type: array
+                  items:
+                    type: string
+                    format: binary
+                  description: "Files containing the tool to be deployed on the Thingsboard pod"
+                toolName:
+                  type: string
+                  description: "Name of the tool to be update"
+              required:
+                - containerFiles
+                - toolName
+      responses:
+        '200':
+          description: OK  
+
 components:
   schemas:
     DataSource:

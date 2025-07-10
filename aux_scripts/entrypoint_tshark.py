@@ -4,10 +4,9 @@ import subprocess
 import sys
 import os
 import time
-import signal
 import re
 
-# Configuración
+
 LOG_PATH = "/data/traces/infile.json"
 ROTATED_PATH = LOG_PATH + ".backup"
 SIZE_LIMIT = 30 * 1024 * 1024  # 30 MB
@@ -20,14 +19,12 @@ def get_interfaces():
         )
         interfaces = result.stdout.strip().split()
     except subprocess.CalledProcessError:
-        print("ERROR 1: No se encontraron interfaces activas", file=sys.stderr)
+        print("ERROR 1: No active interfaces were found", file=sys.stderr)
         sys.exit(1)
 
     if not interfaces:
-        print("ERROR 2: No se encontraron interfaces activas", file=sys.stderr)
+        print("ERROR 2: No active interfaces were found", file=sys.stderr)
         sys.exit(1)
-
-    print(f"[*] Usando interfaces: {', '.join(interfaces)}")
     return interfaces
 
 def build_tshark_command(interfaces):
@@ -40,7 +37,6 @@ def build_tshark_command(interfaces):
 
 def run_tshark(command):
     output_file = open(LOG_PATH, "w")
-    print("[*] Iniciando tshark...")
     return subprocess.Popen(command, stdout=output_file), output_file
 
 def monitor_and_rotate(command, proc, output_file):
@@ -49,8 +45,6 @@ def monitor_and_rotate(command, proc, output_file):
         if os.path.exists(LOG_PATH):
             size = os.path.getsize(LOG_PATH)
             if size >= SIZE_LIMIT:
-                print(f"[!] Log alcanzó {size / (1024 * 1024):.2f} MB, rotando...")
-
                 proc.terminate()
                 try:
                     proc.wait(timeout=5)
@@ -59,14 +53,14 @@ def monitor_and_rotate(command, proc, output_file):
 
                 output_file.close()
 
-                if os.path.exists(ROTATED_PATH): #Mantiene un backup de la ultima rotación
+                if os.path.exists(ROTATED_PATH):
                     os.remove(ROTATED_PATH)
                 os.rename(LOG_PATH, ROTATED_PATH)
                 open(LOG_PATH, 'w').close()
 
                 proc, output_file = run_tshark(command)
         else:
-            print("[!] Fichero de log no existe, recreando...")
+            print("Log file does not exist, re-creating it")
             open(LOG_PATH, 'w').close()
 
         time.sleep(5)
@@ -78,7 +72,7 @@ def main():
     try:
         monitor_and_rotate(command, proc, output_file)
     except KeyboardInterrupt:
-        print("[*] Terminando por interrupción...")
+        print("Ending by interruption")
         proc.terminate()
         proc.wait()
         output_file.close()
