@@ -5,11 +5,12 @@ info:
   version: 1.0.0
 
 tags:
-  - name: SecurityOrchestrator
-    description: API for interacting with the Configuration Manager to deploy and manage security configurations by the Security Orchestrator.
 
-  - name: PlatformAdmin
-    description: API for interacting with the Configuration Manager to deploy and manage security configurations by the human administrator.
+  - name: ConfigurationManager
+    description: API for interacting with the Configuration Manager to request the deployment of tools by the NXW Security Orchestrator.
+
+  - name: ConfigurationManagerThingsboard
+    description: API for  interacting with the Configuration Manager to request information about Thingsboard deployed by the NXW Security Orchestrator.
 
   - name: NearRealtimeDataRetrieval
     description: API for retrieving near real-time data, offering the possibility of retrieving a small piece of data stored in the current communication bus to be consumed by external modules including logs, health metrics, and network traces. 
@@ -19,23 +20,18 @@ tags:
   
   - name: HistoricalDataRetrieval
     description: API for retrieving historical data, including logs, health metrics, and network traces.
-
-  - name: ConfigurationManagerTools
-    description: API for interacting with the Configuration Manager to request the deployment of tools by the NXW Security Orchestrator.
   
-  - name: ConfigurationManagerThingsboard
-    description: API for  interacting with the Configuration Manager to request information about Thingsboard deployed by the NXW Security Orchestrator.
-
   - name: PodThingsboard
     description: API for interacting with the Pod Thingsboard to deploy the tools needed.
+
 paths:
-  /SecurityOrchestrator/CreateConfiguration:
+  /ConfigurationManager/DeployNetworkTool: #FIXME actualizar con los sigma y nuevos parámetros si es necesario
     post:
       tags:
-        - SecurityOrchestrator
-      summary: "Security Orchestrator sends a configuration request."
-      description: "This endpoint allows the Security Orchestrator to submit configuration requests, including data sources, thresholds (optionally), policies, and tools to be deployed."
-      operationId: "soCreateConfiguration"
+        - ConfigurationManager
+      summary: "Security Orchestrator - Request to deploy a network tool"
+      description: "This endpoint allows the NXW Security Orchestrator to request the deployment of a network tool"
+      operationId: "deployNetworkTool"
       requestBody:
         required: true
         content:
@@ -43,107 +39,166 @@ paths:
             schema:
               type: object
               properties:
-                id:
+                podIP:
                   type: string
-                  description: "The id of the configuration."
-
-                toolsDeployed:
+                  description: "IP address of the pod where the tool will be deployed"
+                interface:
+                  type: string
+                  description: "Network interface on which the tool will sniff traffic"
+                toolName:
+                  type: string
+                  description: "Name of the network tool to deploy"
+                sigma_rules:
                   type: array
-                  description: "The tools deployed."
                   items:
-                    $ref: "#/components/schemas/Tool"
-                  example:
-                    - "Fluentd"
-                    - "Falco"
-                    - "Telegraf"
-                dataSourcelist:
-                  type: array
-                  description: "The data sources."
-                  items:
-                    $ref: "#/components/schemas/DataSource"
-    
-                threshold:
-                  type: array
-                  description: "The thresholds for monitoring."
-                  items:
-                      $ref: "#/components/schemas/Threshold"
+                    type: string
+                    description: "Sigma rules generated from the SSLA by the Security Orchestrator."
 
               required:
-                - id
-                - toolsDeployed
-                - dataSourcelist
+                - podIP
+                - interface
+                - toolName
+                - sigma_rules
       responses:
-        "200":
-          description: "The CreateConfiguration has been sent successfully"
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  code:
-                    type: integer
-                    example: 200
-                    description: "Response code indicating success"
-                  message:
+        '200':
+          description: OK
+  
+  /ConfigurationManager/DeployInfrastructureTool: #FIXME actualizar con los sigma y nuevos parámetros si es necesario
+    post:
+      tags:
+        - ConfigurationManager
+      summary: "Security Orchestrator - Request to deploy a infrastructure tool"
+      description: "This endpoint allows the NXW Security Orchestrator to request the deployment of a infrastructure tool"
+      operationId: "deployInfrastructureTool"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                podIP:
+                  type: string
+                  description: "IP address of the pod where the tool will be deployed"
+                toolName:
+                  type: string
+                  description: "Name of the infrastructure tool to deploy"
+                sigma_rules:
+                  type: array
+                  items:
                     type: string
-                    description: "Response message confirming the success of the request."
-                    example: "The configuration request has been sent successfully"
-  /SecurityOrchestrator/GetConfiguration:
+                    description: "Sigma rules generated from the SSLA by the Security Orchestrator."
+              required:
+                - podIP
+                - toolName
+                - sigma_rules
+      responses:
+        '200':
+          description: OK
+
+  /ConfigurationManager/DeployServiceTool: #FIXME actualizar con los sigma y nuevos parámetros si es necesario
+    post:
+      tags:
+        - ConfigurationManager
+      summary: "Security Orchestrator - Request to deploy a service tool"
+      description: "This endpoint allows the NXW Security Orchestrator to request the deployment of a service tool"
+      operationId: "deployServiceTool"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                podIP:
+                  type: string
+                  description: "IP address of the pod where the tool will be deployed"
+                toolName:
+                  type: string
+                  description: "Name of the service tool to deploy"
+                sigma_rules:
+                  type: array
+                  items:
+                    type: string
+                    description: "Sigma rules generated from the SSLA by the Security Orchestrator."
+              required:
+                - podIP
+                - toolName
+                - sigma_rules
+      responses:
+        '200':
+          description: OK
+
+
+
+  /ConfigurationManager/DeploySecurityTool: #FIXME actualizar con los sigma y nuevos parámetros si es necesario
+    post:
+      tags:
+        - ConfigurationManager
+      summary: "Security Orchestrator - Request to deploy a security tool"
+      description: "This endpoint allows the NXW Security Orchestrator to request the deployment of a security tool"
+      operationId: "deploySecurityTool"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                podIP:
+                  type: string
+                  description: "IP address of the pod where the tool will be deployed"
+                toolName:
+                  type: string
+                  description: "Name of the service tool to deploy"
+                sigma_rules:
+                  type: array
+                  items:
+                    type: string
+                    description: "Sigma rules generated from the SSLA by the Security Orchestrator."
+              required:
+                - podIP
+                - toolName
+                - sigma_rules
+
+  /ConfigurationManager/getConfigurationOptions: #FIXME actualizar con los sigma y nuevos parámetros si es necesario
     get:
       tags:
-        - SecurityOrchestrator
-      summary: "Security Orchestrator request the current configuration."
-      description: "This endpoint allows the Security Orchestrator to get the current deployed configuration."
-      operationId: "soGetConfiguration"
+        - ConfigurationManager
+      summary: "Security Orchestrator - Requests to know the different configurations that a tool can manage"
+      description: "This endpoint allows the NXW Security Orchestrator to know what options it has for configuring a tool"
+      operationId: "getConfigurationOptions"
       parameters:
-      - name: id
-        in: query
-        required: true
-        schema:
-          type: string
-          description: "The id of the configuration."
+        - name: toolName
+          in: query
+          description: "Name of the tool for which the orchestrator wants to know the options"
+          required: true
+          schema:
+            type: string
       responses:
-        "200":
-          description: "The GetConfiguration request has been processed successfully"
+        '200':
+          description: "Options of the tool"
           content:
             application/json:
               schema:
                 type: object
                 properties:
-                  code:
-                    type: integer
-                    example: 200
-                    description: "Response code indicating success"
-                  message:
-                    type: string
-                    example: "The request for the current configuration has been successfull"
-                    description: "Response message confirming the success of the request."
-                  id:
-                    type: string
-                    description: "The id of the current configuration."
-                  toolsDeployed:
+                  configurationOptions:
                     type: array
-                    description: "The tools deployed."
+                    description: "List of options. Can be one or more options"
                     items:
-                      $ref: "#/components/schemas/Tool"
+                      type: string
                     example:
-                      - "Fluentd"
-                      - "Falco"
-                      - "Telegraf"
-                  dataSourcelist:
-                    type: array
-                    description: "The data sources."
-                    items:
-                      $ref: "#/components/schemas/DataSource"
-                  threshold:
-                    type: array
-                    description: "The thresholds for monitoring."
-                    items:
-                      $ref: "#/components/schemas/Threshold"
-  /SecurityOrchestrator/UpdateConfiguration:
+                      - "memory"
+                      - "disk"
+                      - "cpu"
+                      - "sensors"
+                      - "internet speed"
+
+  /ConfigurationManager/UpdateConfiguration: #FIXME actualizar con los sigma y nuevos parámetros si es necesario
     put:
       tags:
-        - SecurityOrchestrator
+        - ConfigurationManager
       summary: "Security Orchestrator updates the current configuration."
       description: "This endpoint allows the Security Orchestrator to update the current deployed configuration."
       operationId: "soUpdateConfiguration"
@@ -154,34 +209,34 @@ paths:
             schema:
               type: object
               properties:
-                id:
+                podIP:
                   type: string
-                  description: "The id of the configuration."
-                toolsDeployed:
-                  type: array
-                  description: "The tools deployed."
-                  items:
-                    $ref: "#/components/schemas/Tool"
+                  description: "IP address of the pod where the tool is already deployed"
+                toolName:
+                  type: string
+                  description: "Name of the service tool to deployed"
+                tool_type:
+                  type: string
+                  description: "Type of the service tool deployed"
                   example:
-                    - "Fluentd"
-                    - "Kafka"
-                    - "Telegraf"
-                dataSourcelist:
+                   - "network"
+                   - "infrastructure"
+                   - "service"
+                   - "security"
+                sigma_rules:
                   type: array
-                  description: "The data sources."
                   items:
-                    $ref: "#/components/schemas/DataSource"
-                threshold:
-                  type: array
-                  description: "The thresholds for monitoring."
-                  items:
-                      $ref: "#/components/schemas/Threshold"
+                    type: string
+                    description: "New sigma rules generated from the SSLA by the Security Orchestrator."
               required:
-                - id
+                - podIP
+                - toolName
+                - toolName
+                - sigma_rules
 
       responses:
         "200":
-          description: "The configuration has been updated successfully"
+          description: "Proceeding to update the configuration"
           content:
             application/json:
               schema:
@@ -193,244 +248,11 @@ paths:
                     description: "Response code indicating success"
                   message:
                     type: string
-                    example: "The configuration has been updated successfully"
+                    example: "Proceeding to update the configuration"
                     description: "Response message confirming the success of the request."
-  /SecurityOrchestrator/DeleteConfiguration:
-    delete:
-      tags:
-        - SecurityOrchestrator
-      summary: "Security Orchestrator deletes the current configuration."
-      description: "This endpoint allows the Security Orchestrator to delete the current deployed configuration."
-      operationId: "soDeleteConfiguration"
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              properties:
-                id:
-                  type: string
-                  description: "The id of the configuration."
-              required:
-                - id
-      responses:
-        "200":
-          description: "The configuration has been deleted successfully"
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  code:
-                    type: integer
-                    example: 200
-                    description: "Response code indicating success"
-                  message:
-                    type: string
-                    example: "The configuration has been deleted successfully"
-                    description: "Response message confirming the success of the request."
+ 
   
-  /PlatformAdmin/CreateConfiguration:
-    post:
-      tags:
-        - PlatformAdmin
-      summary: "End-user (administrator) sends a configuration request."
-      description: "This endpoint allows the end-users to submit configuration requests, including data sources, thresholds (optionally), policies, and tools deployed."
-      operationId: "AdminCreateConfiguration"
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              properties:
-                id:
-                  type: string
-                  description: "The id of the configuration."
-                toolsDeployed:
-                  type: array
-                  description: "The tools deployed."
-                  items:
-                    $ref: "#/components/schemas/Tool"
-                  example:
-                    - "Fluentd"
-                    - "Falco"
-                    - "Telegraf"
-                dataSourcelist:
-                  type: array
-                  description: "The data sources."
-                  items:
-                    $ref: "#/components/schemas/DataSource"
-                threshold:
-                  type: array
-                  description: "The thresholds for monitoring."
-                  items:
-                      $ref: "#/components/schemas/Threshold"
-              required:
-                - id
-                - toolsDeployed
-                - dataSourcelist
-
-      responses:
-        "200":
-          description: "The configuration request has been sent successfully"
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  code:
-                    type: integer
-                    example: 200
-                    description: "Response code indicating success"
-                  message:
-                    type: string
-                    example: "The configuration request has been sent successfully"
-                    description: "Response message confirming the success of the request."
-  /PlatformAdmin/GetConfiguration:
-    get:
-      tags:
-        - PlatformAdmin
-      summary: "End-user (administrator) request the current configuration."
-      description: "This endpoint allows the end-user (administrator) to get the current deployed configuration."
-      operationId: "AdminGetConfiguration"
-      parameters:
-        - name: id
-          in: query
-          required: true
-          schema:
-            type: string
-            description: "The id of the configuration."
-      responses:
-        "200":
-          description: "The GetConfiguration request has been processed successfully."
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  code:
-                    type: integer
-                    example: 200
-                    description: "Response code indicating success."
-                  message:
-                    type: string
-                    example: "The request for the current configuration has been successfull."
-                    description: "Response message confirming the success of the request."
-                  id:
-                    type: string
-                    description: "The id of the current configuration."
-                  toolsDeployed:
-                    type: array
-                    description: "The tools deployed."
-                    items:
-                      $ref: "#/components/schemas/Tool"
-                    example:
-                      - "Fluentd"
-                      - "Falco"
-                      - "Telegraf"
-                  dataSourcelist:
-                    type: array
-                    description: "The data sources."
-                    items:
-                      $ref: "#/components/schemas/DataSource"
-                  threshold:
-                    type: array
-                    description: "The thresholds for monitoring."
-                    items:
-                      $ref: "#/components/schemas/Threshold"
-  /PlatformAdmin/UpdateConfiguration:
-    put:
-      tags:
-        - PlatformAdmin
-      summary: "End-user (administrator) updates the current configuration."
-      description: "This endpoint allows the end-user (administrator) to update the current deployed configuration."
-      operationId: "AdminUpdateConfiguration"
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              properties:
-                id:
-                  type: string
-                  description: "The id of the configuration."
-                toolsDeployed:
-                  type: array
-                  description: "The tools deployed."
-                  items:
-                    $ref: "#/components/schemas/Tool"
-                  example:
-                    - "Fluentd"
-                    - "Falco"
-                    - "Telegraf"
-                dataSourcelist:
-                  type: array
-                  description: "The data sources."
-                  items:
-                    $ref: "#/components/schemas/DataSource"
-                threshold:
-                  type: array
-                  description: "The thresholds for monitoring."
-                  items:
-                      $ref: "#/components/schemas/Threshold"
-              required:
-                - id
-
-      responses:
-        "200":
-          description: "The configuration has been updated successfully"
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  code:
-                    type: integer
-                    example: 200
-                    description: "Response code indicating success"
-                  message:
-                    type: string
-                    example: "The configuration has been updated successfully"
-                    description: "Response message confirming the success of the request."
-  /PlatformAdmin/DeleteConfiguration:
-    delete:
-      tags:
-        - PlatformAdmin
-      summary: "End-user (administrator) deletes the current configuration."
-      description: "This endpoint allows the end-user (administrator) to delete the current deployed configuration."
-      operationId: "AdminDeleteConfiguration"
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              properties:
-                id:
-                  type: string
-                  description: "The id of the configuration."
-              required:
-                - id
-      responses:
-        "200":
-          description: "The configuration has been deleted successfully"
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  code:
-                    type: integer
-                    example: 200
-                    description: "Response code indicating success"
-                  message:
-                    type: string
-                    example: "The configuration has been deleted successfully"
-                    description: "Response message confirming the success of the request."
-  
+   
   /NearRealtimeDataRetrieval/RawDataJSON:
     get:
       tags:
@@ -1091,189 +913,7 @@ paths:
                 example: "attachment; filename=historicalData.yang"
 
 
-  /ConfigurationManagerTools/DeployNetworkTool:
-    post:
-      tags:
-        - ConfigurationManagerTools
-      summary: "Security Orchestrator - Request to deploy a network tool"
-      description: "This endpoint allows the NXW Security Orchestrator to request the deployment of a network tool"
-      operationId: "deployNetworkTool"
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              properties:
-                podIP:
-                  type: string
-                  description: "IP address of the pod where the tool will be deployed"
-                interface:
-                  type: string
-                  description: "Network interface on which the tool will sniff traffic"
-                toolName:
-                  type: string
-                  description: "Name of the network tool to deploy"
-                timestampInit:
-                  type: string
-                  format: date-time
-                  description: "Timestamp when the tool deployment request was initiated"
-                timestampEnd:
-                  type: string
-                  format: date-time
-                  description: "Timestamp when the tool deployment request ended"
-              required:
-                - podIP
-                - interface
-                - toolName
-                - timestampInit
-                - timestampEnd
-      responses:
-        '200':
-          description: OK
-  
-  /ConfigurationManagerTools/DeployInfrastructureTool:
-    post:
-      tags:
-        - ConfigurationManagerTools
-      summary: "Security Orchestrator - Request to deploy a infrastructure tool"
-      description: "This endpoint allows the NXW Security Orchestrator to request the deployment of a infrastructure tool"
-      operationId: "deployInfrastructureTool"
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              properties:
-                podIP:
-                  type: string
-                  description: "IP address of the pod where the tool will be deployed"
-                toolName:
-                  type: string
-                  description: "Name of the infrastructure tool to deploy"
-                configurationOptions:
-                  type: array
-                  items:
-                    type: string
-                    description: "Options of the infrastructure tool"
-                    example:
-                      - "memory"
-                      - "disk"
-                      - "cpu"
-                      - "sensors"
-                      - "internet speed"
-              required:
-                - podIP
-                - toolName
-                - configurationOptions
-      responses:
-        '200':
-          description: OK
 
-  /ConfigurationManagerTools/DeployServiceTool:
-    post:
-      tags:
-        - ConfigurationManagerTools
-      summary: "Security Orchestrator - Request to deploy a service tool"
-      description: "This endpoint allows the NXW Security Orchestrator to request the deployment of a service tool"
-      operationId: "deployServiceTool"
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              properties:
-                podIP:
-                  type: string
-                  description: "IP address of the pod where the tool will be deployed"
-                toolName:
-                  type: string
-                  description: "Name of the service tool to deploy"
-                configurationOptions:
-                  type: array
-                  items:
-                    type: string
-                    description: "Options of the service tool"
-                    example:
-                      - "systemd"
-                      - "syslog"
-                      - "internal metrics"
-              required:
-                - podIP
-                - toolName
-                - configurationOptions
-      responses:
-        '200':
-          description: OK
-
-  /ConfigurationManagerTools/getConfigurationOptions:
-    get:
-      tags:
-        - ConfigurationManagerTools
-      summary: "Security Orchestrator - Requests to know the different configurations that a tool can manage"
-      description: "This endpoint allows the NXW Security Orchestrator to know what options it has for configuring a tool"
-      operationId: "getConfigurationOptions"
-      parameters:
-        - name: toolName
-          in: query
-          description: "Name of the tool for which the orchestrator wants to know the options"
-          required: true
-          schema:
-            type: string
-      responses:
-        '200':
-          description: "Options of the tool"
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  configurationOptions:
-                    type: array
-                    description: "List of options. Can be one or more options"
-                    items:
-                      type: string
-                    example:
-                      - "memory"
-                      - "disk"
-                      - "cpu"
-                      - "sensors"
-                      - "internet speed"
-
-
-  /ConfigurationManagerTools/DeploySecurityTool:
-    post:
-      tags:
-        - ConfigurationManagerTools
-      summary: "Security Orchestrator - Request to deploy a security tool"
-      description: "This endpoint allows the NXW Security Orchestrator to request the deployment of a security tool"
-      operationId: "deploySecurityTool"
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              properties:
-                podIP:
-                  type: string
-                  description: "IP address of the pod where the tool will be deployed"
-                toolName:
-                  type: string
-                  description: "Name of the service tool to deploy"
-                securityRules:
-                  type: array
-                  items:
-                    type: string
-                    description: "Rules of the security tool"
-                    example:
-                      - ""
-              required:
-                - podIP
-                - toolName
-                - securityRules
                       
   /ConfigurationManagerThingsboard/collectDataFromThingsboard:
     post:
