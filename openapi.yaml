@@ -25,7 +25,7 @@ tags:
     description: API for interacting with the Pod Thingsboard to deploy the tools needed.
 
 paths:
-  /ConfigurationManager/DeployNetworkTool: #FIXME actualizar con los sigma y nuevos parámetros si es necesario
+  /ConfigurationManager/DeployNetworkTool:
     post:
       tags:
         - ConfigurationManager
@@ -63,7 +63,7 @@ paths:
         '200':
           description: OK
   
-  /ConfigurationManager/DeployInfrastructureTool: #FIXME actualizar con los sigma y nuevos parámetros si es necesario
+  /ConfigurationManager/DeployInfrastructureTool: 
     post:
       tags:
         - ConfigurationManager
@@ -96,7 +96,7 @@ paths:
         '200':
           description: OK
 
-  /ConfigurationManager/DeployServiceTool: #FIXME actualizar con los sigma y nuevos parámetros si es necesario
+  /ConfigurationManager/DeployServiceTool: 
     post:
       tags:
         - ConfigurationManager
@@ -131,7 +131,7 @@ paths:
 
 
 
-  /ConfigurationManager/DeploySecurityTool: #FIXME actualizar con los sigma y nuevos parámetros si es necesario
+  /ConfigurationManager/DeploySecurityTool: 
     post:
       tags:
         - ConfigurationManager
@@ -161,7 +161,7 @@ paths:
                 - toolName
                 - sigma_rules
 
-  /ConfigurationManager/getConfigurationOptions: #FIXME actualizar con los sigma y nuevos parámetros si es necesario
+  /ConfigurationManager/getConfigurationOptions:
     get:
       tags:
         - ConfigurationManager
@@ -195,7 +195,7 @@ paths:
                       - "sensors"
                       - "internet speed"
 
-  /ConfigurationManager/UpdateConfiguration: #FIXME actualizar con los sigma y nuevos parámetros si es necesario
+  /ConfigurationManager/updateConfiguration:
     put:
       tags:
         - ConfigurationManager
