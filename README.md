@@ -1,4 +1,4 @@
-<h1 align="center">PMP (ProgramMable Monitoring Platform)</h1>
+<h1 align="center">PMP (Programmable Monitoring Platform)</h1>
 
 PMP is an open source, modularly designed, programmable platform for collecting, exposing and visualising data from data sources in the Contiuum Cloud. In addition, it provides threat detection to alert and notify on anomalous behaviour by analysing network traffic. Finally, PMP uses agnostic Sigma rules to configure the tools.
 
