@@ -2,7 +2,7 @@
 
 PMP is an open source, modularly designed, programmable platform for collecting, exposing and visualising data from data sources in the Contiuum Cloud. In addition, it provides threat detection to alert and notify on anomalous behaviour by analysing network traffic. Finally, PMP uses agnostic Sigma rules to configure the tools.
 
-![Framework](https://github.com/CyberDataLab/ROBUST-6G_PMP/blob/main/PMP_design.pdf)
+![Framework](https://github.com/CyberDataLab/ROBUST-6G_PMP/blob/main/PMP_design.svg)
 
 
 ## 🔧 Features
