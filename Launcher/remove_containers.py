@@ -4,7 +4,7 @@ import subprocess
 def executing_command(command):
     try:
         result = subprocess.run(command, shell=True, check=True, text=True, capture_output=True)
-        print(f"Result of {command}: {result.stdout}")
+        print(f"Result of {command}: \n {result.stdout}")
     except subprocess.CalledProcessError as e:
         print(f"Error executing the command {command}: {e}")
         print(f"Error output: {e.stderr}")
