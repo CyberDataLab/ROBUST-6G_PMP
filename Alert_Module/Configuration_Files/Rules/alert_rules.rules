@@ -1,0 +1,1 @@
+alert tcp any any <> any 443 (msg:"Alerta: Tráfico en puerto 443 detectado"; sid:1000001; rev:1;)
