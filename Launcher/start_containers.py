@@ -2,6 +2,8 @@
 
 import subprocess
 import platform
+import sys
+from pathlib import Path
 
 def detect_os():
     system = platform.system().lower()
@@ -15,8 +17,11 @@ def detect_os():
 
 def main():
     try:
+        
+        LFD = Path(__file__).resolve().parent # Launcher Folder Directory
+        mid_py = LFD / "machine_id" / "machine_id.py"
         mid = subprocess.check_output(
-            ["python3", "./machine_id/machine_id.py"],
+            [sys.executable, str(mid_py)],
             text=True
         ).strip()
     except subprocess.CalledProcessError as e:
@@ -25,12 +30,17 @@ def main():
 
     network_mode = detect_os()
 
-    with open(".env", "w", encoding="utf-8") as f:
+    # Guardar .env en el mismo directorio del script (robusto ante cwd distintos)
+    PFD = Path(__file__).resolve().parent.parent # Project Folder Directory
+    with open(LFD / ".env", "w", encoding="utf-8") as f:
         f.write(f"MACHINE_ID={mid}\n")
         f.write(f"NETWORK_MODE={network_mode}\n")
+        f.write(f"PFD={PFD}\n") 
 
     try:
-        subprocess.run(["docker-compose", "up", "-d"], check=True)
+        # Mantengo el fichero de compose que usas en pruebas ("test-compose.yml") como pediste.
+
+        subprocess.run(["docker-compose","-f", f"{str(LFD)}/docker-compose.yml" , "up", "-d"], check=True)
     except subprocess.CalledProcessError as e:
         print(f"Error executing docker-compose: {e}")
         return

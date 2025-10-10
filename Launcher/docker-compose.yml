@@ -11,7 +11,7 @@ services:
     volumes:
       - /var/log:/var/log:ro
       - /var/log/journal:/var/log/journal:ro
-      - ./data/fluentd_logs:/fluentd/log/out
+      - ${PFD}/Results/fluentd_logs:/fluentd/log/out
     ports:
       - "24231:24231"
       - "24220:24220" # This is a test to access via web using localhost:24220/api/plugins.json
@@ -64,10 +64,10 @@ services:
     depends_on:
       - kafka
     volumes:
-      - ./configuration_files/filebeat.yml:/usr/share/filebeat/filebeat.yml:ro
-      - ./data/fluentd_logs:/fluentd/log:ro
-      - ./data/tshark/traces:/tshark/traces:ro
-      - ./data/falco/logs:/falco/logs:ro
+      - ${PFD}/Communication_Bus/Configuration_Files/filebeat.yml:/usr/share/filebeat/filebeat.yml:ro
+      - ${PFD}/Results/fluentd_logs:/fluentd/log:ro
+      - ${PFD}/Results/tshark/traces:/tshark/traces:ro
+      - ${PFD}/Results/falco/logs:/falco/logs:ro
     restart: unless-stopped
     user: root
 
@@ -86,7 +86,7 @@ services:
       - /sys:/host/sys:ro
       - /etc:/host/etc:ro
       - /var:/host/var:ro
-      - ./configuration_files/telegraf.conf:/etc/telegraf/telegraf.conf:ro
+      - ${PFD}/Data_Collection_Module/Configuration_Files/telegraf.conf:/etc/telegraf/telegraf.conf:ro
       
   tshark:
     image: tshark_robust6g:latest
@@ -102,7 +102,7 @@ services:
       - NET_ADMIN # Modify network interfaces and adjust iptables rules
       - NET_RAW   # Capture packets without restrictions
     volumes:
-      - ./data/tshark/traces:/data/traces # Tshark logs accessible to Filebeat
+      - ${PFD}/Results/tshark/traces:/data/traces # Tshark logs accessible to Filebeat
       - /sys/class/net:/sys/class/net    # Allows script to see host interfaces
 
   falco:
@@ -127,4 +127,4 @@ services:
       - /boot:/host/boot:ro
       - /lib/modules:/host/lib/modules:ro
       - /usr:/host/usr:ro
-      - ./data/falco/logs:/var/log/falco/
+      - ${PFD}/Results/falco/logs:/var/log/falco/

@@ -1,4 +1,4 @@
-#sudo docker build -f Dockerfiles/dockerfile.fluentd -t fluentd_robust6g:latest .
+#sudo docker build -f ./Data_Collection_Module/Docker/Dockerfiles/dockerfile.fluentd -t fluentd_robust6g:latest .
 
 FROM  fluentd:v1.16.8-debian-1.0
 
@@ -35,9 +35,9 @@ RUN mkdir -p /fluentd/etc
 RUN mkdir -p /fluentd/scripts
 
 # Entrypoint and auxiliary scripts
-COPY ./configuration_files/fluent.conf /fluentd/etc/
-COPY ./aux_scripts/health_metrics.py /fluentd/scripts/
-COPY ./aux_scripts/entrypoint_fluentd.py /usr/local/bin/entrypoint_fluentd.py
+COPY ./Data_Collection_Module/Configuration_Files/fluent.conf /fluentd/etc/
+COPY ./Data_Collection_Module/Scripts/health_metrics.py /fluentd/scripts/
+COPY ./Data_Collection_Module/Docker/Entrypoints/entrypoint_fluentd.py /usr/local/bin/entrypoint_fluentd.py
 
 # Permissions
 RUN chown root:root /fluentd/etc/fluent.conf 

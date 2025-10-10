@@ -1,14 +1,17 @@
+from pathlib import Path
 import platform
 import subprocess
 import sys
-import os
 
 def get_device_id():
+    Dir_file = Path(__file__).resolve().parent
     system_name = platform.system().lower()
     if system_name == "windows":
-        mid_binary = "./machine_id/mid_windows/mid.exe"
+        mid_path = Dir_file / "mid_windows" / "mid.exe"
+        mid_binary = str(mid_path)
     else:
-        mid_binary = "./machine_id/mid_linux_macos/mid"
+        mid_path = Dir_file / "mid_linux_macos" / "mid"
+        mid_binary = str(mid_path)
 
     try:
         output = subprocess.check_output([mid_binary], stderr=subprocess.STDOUT)

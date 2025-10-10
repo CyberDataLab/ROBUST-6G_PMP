@@ -1,3 +1,4 @@
+from pathlib import Path
 import subprocess
 
 def executing_command(command):
@@ -10,11 +11,12 @@ def executing_command(command):
 
 if __name__ == "__main__":
     #docker stop $(docker ps -a -q), docker rm $(docker ps -a -q) insted of docker kill
+    PFD = Path(__file__).resolve().parent.parent # Project Folder Directory
     command_list = [
         "docker kill kafka fluentd filebeat telegraf tshark falco", 
         "docker container prune -f",
         "docker volume prune -f",
-        "rm -r data/"
+        f"rm -r {PFD}/Results/"
     ]
 
     for command in command_list:

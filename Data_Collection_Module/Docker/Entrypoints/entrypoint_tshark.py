@@ -5,7 +5,9 @@ import sys
 import os
 import time
 import re
+from pathlib import Path
 
+SCRIPT_DIR = Path(__file__).resolve().parent
 
 LOG_PATH = "/data/traces/infile.json"
 ROTATED_PATH = LOG_PATH + ".backup"
@@ -13,8 +15,9 @@ SIZE_LIMIT = 30 * 1024 * 1024  # 30 MB
 
 def get_interfaces():
     try:
+        # Ejecutar el script local search_interface.py con el mismo intérprete Python
         result = subprocess.run(
-            ["/usr/bin/python3", "/usr/local/bin/search_interface.py"],
+            [sys.executable, str(SCRIPT_DIR / "search_interface.py")],
             capture_output=True, text=True, check=True
         )
         interfaces = result.stdout.strip().split()
