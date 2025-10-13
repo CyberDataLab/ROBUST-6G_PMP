@@ -4,10 +4,10 @@ from pathlib import Path
 import subprocess
 import sys
 import threading
-
+from kafka_io import KafkaLineConsumer, KafkaProducer
 
 # === CONFIG ===
-PFD = Path(__file__).resolve().parent.parent #/home/Alert_Module in container
+PFD = Path(__file__).resolve().parent #/home/Alert_Module in container
 
 OUTPUT_DIR = str(PFD / "Parsing" / "PCAP_Files")
 J2P_PATH = str(PFD / "Parsing" / "JSON2PCAP" /"json2pcap.py")
@@ -22,8 +22,14 @@ PCAP_ROTATE_SIZE_MB = 2 * 1024 * 1024  # 2 MB
 ALERT_ROTATE_SIZE_MB = 200 * 1024 #* 1024 200KB
 
 # === TSHARK CONFIG ===
-TSHARK_INTERFACE = "enp0s3"
+#TSHARK_INTERFACE = "enp0s3"
 
+# === KAFKA CONFIG ===
+KAFKA_BOOTSTRAP = os.getenv("KAFKA_BOOTSTRAP", "localhost:9092")
+# Cada app distinta debe tener su propio group.id para fan-out (todas ven TODOS los mensajes)
+KAFKA_GROUP_ID = os.getenv("KAFKA_GROUP_ID", "alert-module-v1")
+KAFKA_TOPIC_IN = os.getenv("KAFKA_TOPIC_IN", "tshark_traces")
+KAFKA_TOPIC_OUT = os.getenv("KAFKA_TOPIC_OUT", "snort_alerts")
 
 
 # === SNORT CONFIG ===
@@ -36,7 +42,7 @@ SNORT_BASE_CMD = [
     f"{ALERT_FILE} = {{file = true, fields = 'msg timestamp pkt_num proto pkt_gen pkt_len dir src_ap dst_ap rule action'}}",
     "-l", ALERT_DIR
  ]
-def run_snort_on_pcap(pcap_path):
+def run_snort_on_pcap(pcap_path, producer):
     """Ejecuta Snort3 en un hilo separado sobre un PCAP rotado."""
     alert_path = os.path.join(ALERT_DIR,f"{ALERT_FILE}.txt")
 
@@ -70,6 +76,16 @@ def run_snort_on_pcap(pcap_path):
     proc.wait()
     print(f"✅ Snort3 terminó con {pcap_path}")
     os.chmod(alert_path,0o664) #Necesita los permisos en octal, por eso el 0o
+
+    #Leer alert_parth y mandarlo directamente a kafka con el producer. Controlar que solo se publiquen la nueva información
+    if os.path.exists(alert_path):
+        with open(alert_path, "r") as data:
+            lines = data.readlines() #con esto leería todas las alertas todo el rato
+        if not lines:
+            print(f"⚠️ Fichero {alert_path} vacío")
+
+        if data:
+            producer.produce_lines(lines)
 
         
 class Json2PcapWorker:
@@ -126,12 +142,13 @@ class Json2PcapWorker:
 class PacketWriter:
     """Gestiona la rotación de ficheros y lanza Snort en cada rotación."""
 
-    def __init__(self, output_dir, j2p_path, rotate_size_mb):
+    def __init__(self, output_dir, j2p_path, rotate_size_mb,producer):
         self.output_dir = output_dir
         self.j2p_path = j2p_path
         self.rotate_size = rotate_size_mb
         self.file_index = 0
         self.worker = None
+        self.producer = producer
         #os.makedirs(output_dir, exist_ok=True)
         self._new_file()
 
@@ -139,7 +156,7 @@ class PacketWriter:
         if self.worker:
             old_trace = self.worker.trace_path
             threading.Thread(target=self.worker.close, daemon=True).start()
-            threading.Thread(target=self.run_snort_delete_file, args=(old_trace,), daemon=True).start()
+            threading.Thread(target=self.run_snort_delete_file, args=(old_trace,self.producer,), daemon=True).start()
 
         trace_path = os.path.join(self.output_dir, f"trace_{self.file_index:02d}.pcapng")
         print(f"📂 Nuevo fichero abierto: {trace_path}")
@@ -160,10 +177,10 @@ class PacketWriter:
         if self.worker:
             old_trace = self.worker.trace_path
             self.worker.close()
-            threading.Thread(target=self.run_snort_delete_file, args=(old_trace,), daemon=True).start()
+            threading.Thread(target=self.run_snort_delete_file, args=(old_trace,self.producer), daemon=True).start()
 
-    def run_snort_delete_file(self,old_trace):
-        run_snort_on_pcap(old_trace)
+    def run_snort_delete_file(self,old_trace,producer):
+        run_snort_on_pcap(old_trace,producer)
         try:
             os.remove(old_trace)
             print(f"✅ Fichero {old_trace} borrado con exito")
@@ -171,8 +188,19 @@ class PacketWriter:
             print(f"❌ Error borrando {old_trace}: {e}")
 
 def main():
-    writer = PacketWriter(OUTPUT_DIR, J2P_PATH, PCAP_ROTATE_SIZE_MB)
-
+    producer = KafkaProducer(
+        topic=KAFKA_TOPIC_OUT,
+        bootstrap=KAFKA_BOOTSTRAP
+    )
+    writer = PacketWriter(OUTPUT_DIR, J2P_PATH, PCAP_ROTATE_SIZE_MB, producer)
+    
+    consumer = KafkaLineConsumer(
+        topic=KAFKA_TOPIC_IN,
+        message_field="message",
+        group_id=KAFKA_GROUP_ID,       # <-- fan-out: este módulo con su propio group
+        bootstrap=KAFKA_BOOTSTRAP
+    )
+    '''
     # Comando tshark
     tshark_command = [
         "tshark",
@@ -184,32 +212,30 @@ def main():
     ]
 
     print(f"🚀 Lanzando tshark: {' '.join(tshark_command)}")
+'''
+
 
     open_braces = 0
     buffer = []
 
-    with subprocess.Popen(tshark_command, stdout=subprocess.PIPE, text=True, bufsize=1) as proc:
-        for line in proc.stdout:
-            line = line.strip()
-            if not line:
-                continue
 
-            if "{" in line:
-                open_braces += line.count("{")
-            if open_braces > 0:
-                buffer.append(line)
-            if "}" in line:
-                open_braces -= line.count("}")
-                if open_braces == 0 and buffer:
-                    packet_str = "".join(buffer).rstrip()
-                    if packet_str.endswith(","):
-                        packet_str = packet_str[:-1]
-                    try:
-                        packet_dict = json.loads(packet_str)
-                        writer.write_packet(packet_dict)
-                    except json.JSONDecodeError as e:
-                        print(f"❌ Error parseando paquete: {e}")
-                    buffer = []
+    for line in consumer.iter_lines():
+        if "{" in line:
+            open_braces += line.count("{")
+        if open_braces > 0:
+            buffer.append(line)
+        if "}" in line:
+            open_braces -= line.count("}")
+            if open_braces == 0 and buffer:
+                packet_str = "".join(buffer).rstrip()
+                if packet_str.endswith(","):
+                    packet_str = packet_str[:-1]
+                try:
+                    packet_dict = json.loads(packet_str)
+                    writer.write_packet(packet_dict)
+                except json.JSONDecodeError as e:
+                    print(f"❌ Error parseando paquete: {e}")
+                buffer = []
 
     writer.close()
 

@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 
+import os
 import subprocess
 import platform
 import sys
@@ -39,8 +40,10 @@ def main():
 
     try:
         # Mantengo el fichero de compose que usas en pruebas ("test-compose.yml") como pediste.
-
-        subprocess.run(["docker-compose","-f", f"{str(LFD)}/docker-compose.yml" , "up", "-d"], check=True)
+        print(f"{PFD}")
+        if os.path.exists(str(PFD) + "/Alert_Module/Docker/docker-compose.yml"):
+            print(f"existe: {str(PFD)}/Alert_Module/Docker/docker-compose.yml")
+        subprocess.run(["docker", "compose","-f", f"{str(PFD)}/Alert_Module/Docker/alert-compose.yml" ,"--env-file",f"{str(PFD)}/Launcher/.env",  "up", "-d"], check=True) #El bueno es -> f"{str(LFD)}/docker-compose.yml"
     except subprocess.CalledProcessError as e:
         print(f"Error executing docker-compose: {e}")
         return
