@@ -35,6 +35,9 @@ filebeat.inputs:
       - ndjson:
           target: ""           # deja el JSON plano en la raíz del evento
           add_error_key: true
+    close.reader.on_eof: true              # closes when it finishes reading a file (EOF)
+    close.on_state_change.renamed: true    # closes when it detects that the file has been renamed
+    clean_removed: true                    # clears the status when the file is no longer present
   
   - type: filestream #log
     id: falco_events
