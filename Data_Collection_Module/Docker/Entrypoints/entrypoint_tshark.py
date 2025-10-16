@@ -9,7 +9,7 @@ from pathlib import Path
 
 SCRIPT_DIR = Path(__file__).resolve().parent
 
-LOG_PATH = "/data/traces/infile.json"
+LOG_PATH = "/data/traces/infile.ndjson"
 ROTATED_PATH = LOG_PATH + ".backup"
 SIZE_LIMIT = 30 * 1024 * 1024  # 30 MB
 
@@ -35,8 +35,11 @@ def build_tshark_command(interfaces):
     for interface in interfaces:
         new_interface = re.findall(r"'(.*?)'", interface)
         command.extend(["-i", new_interface[0]])
-    command.extend(["-T", "json", "-x", "--no-duplicate-keys"])
-    return command
+    command.extend(["-T", "json", "-l", "--no-duplicate-keys"])
+    # Parsing json -> ndjson 1 packet per line but usin the classic wireshark structure for json2pcap use
+    cmd = " ".join(map(str, command)) + " | /usr/local/bin/json_array_to_ndjson.py"
+    return ["/bin/sh", "-lc", cmd]
+
 
 def run_tshark(command):
     output_file = open(LOG_PATH, "w")

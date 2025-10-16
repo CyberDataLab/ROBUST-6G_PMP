@@ -20,7 +20,7 @@ services:
     image: apache/kafka:3.9.0
     container_name: kafka
     healthcheck:
-      test: ["CMD", "nc", "-z", "localhost", "29092"]
+      test: ["CMD", "nc", "-z", "localhost", "29092"] #bash -lc 'kafka-topics.sh --bootstrap-server localhost:29092 --list >/dev/null 2>&1'
       interval: 5s
       retries: 15
       start_period: 10s
@@ -31,17 +31,23 @@ services:
       KAFKA_NODE_ID: 1
       KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:9093
       # BROKER for internal connections and EXTERNAL for external connection
+      # kafka:29092 -> same Docker network
+      # host.docker.internal:9092 -> same host, but other network
+      # kafka-node1.lan:9094 -> other host
       KAFKA_LISTENERS: >
         BROKER://0.0.0.0:29092,
-        EXTERNAL://0.0.0.0:9092,
+        EXTERNAL_DOCKER://0.0.0.0:9092,
+        EXTERNAL_LAN://0.0.0.0:9094,
         CONTROLLER://:9093
       KAFKA_ADVERTISED_LISTENERS: >
         BROKER://kafka:29092,
-        EXTERNAL://localhost:9092,
+        EXTERNAL_DOCKER://host.docker.internal:9092,
+        EXTERNAL_LAN://kafka-node1.lan:9094,
         CONTROLLER://kafka:9093
       KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: >
         BROKER:PLAINTEXT,
-        EXTERNAL:PLAINTEXT,
+        EXTERNAL_DOCKER:PLAINTEXT,
+        EXTERNAL_LAN:PLAINTEXT,
         CONTROLLER:PLAINTEXT
       KAFKA_INTER_BROKER_LISTENER_NAME: BROKER
       KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
@@ -53,8 +59,9 @@ services:
       KAFKA_DEFAULT_REPLICATION_FACTOR: "1"
       KAFKA_NUM_PARTITIONS: "1"
     ports:
+      - "29092:29092"
       - "9092:9092"
-      - "29092:29092" # To Kafkacat
+      - "9094:9094"
 
   filebeat:
     image: elastic/filebeat:8.16.2

@@ -23,14 +23,18 @@ filebeat.inputs:
     fields_under_root: true
 
   - type: filestream #log
-    id: tshark_json_traces
+    id: tshark_ndjson_traces
     enable: true
     paths:
-      - "/tshark/traces/infile.json"
-    tags: ["tshark_json_traces"]
+      - "/tshark/traces/infile.ndjson"
+    tags: ["tshark_ndjson_traces"]
     fields:
       kafka_topic: "tshark_traces"
     fields_under_root: true
+    parsers:
+      - ndjson:
+          target: ""           # deja el JSON plano en la raíz del evento
+          add_error_key: true
   
   - type: filestream #log
     id: falco_events
@@ -43,9 +47,12 @@ filebeat.inputs:
     fields_under_root: true
 
 output.kafka:
-  hosts: ["kafka:29092"] # Internal broker to be used by containers
+  hosts: ["kafka:29092"] # Internal broker to be used by containers -> need to be changed to kafka-node1.lan:9094 if it is located in another machine
   topic: '%{[kafka_topic]}'
-
+  compression: lz4
+  required_acks: 1
+  partition.round_robin.reachable_only: true
+  bulk_max_size: 4096
 # Filebeat logs by stdout
 logging.to_files: false
 logging.level: info
