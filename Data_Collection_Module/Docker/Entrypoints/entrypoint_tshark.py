@@ -38,7 +38,7 @@ def build_tshark_command(interfaces) -> str:
     for interface in interfaces:
         new_interface = re.findall(r"'(.*?)'", interface)
         command.extend(["-i", new_interface[0]])
-    command.extend(["-T", "json", "-l", "--no-duplicate-keys"])
+    command.extend(["-T", "json", "-x","-l", "--no-duplicate-keys", "2>/dev/null"])
     return (
         f"{" ".join(map(str, command))}"
         f" | /usr/local/bin/json_array_to_ndjson.py"
