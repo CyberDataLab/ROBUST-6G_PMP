@@ -31,7 +31,7 @@ def main():
 
     network_mode = detect_os()
 
-    # Guardar .env en el mismo directorio del script (robusto ante cwd distintos)
+    # Guardar .env en el mismo directorio del script
     PFD = Path(__file__).resolve().parent.parent # Project Folder Directory
     with open(LFD / ".env", "w", encoding="utf-8") as f:
         f.write(f"MACHINE_ID={mid}\n")
@@ -39,8 +39,7 @@ def main():
         f.write(f"PFD={PFD}\n") 
 
     try:
-        # Mantengo el fichero de compose que usas en pruebas ("test-compose.yml") como pediste.
-        print(f"{PFD}")
+
         if os.path.exists(str(PFD) + "/Alert_Module/Docker/docker-compose.yml"):
             print(f"existe: {str(PFD)}/Alert_Module/Docker/docker-compose.yml")
         subprocess.run(["docker", "compose","-f", f"{str(PFD)}/Alert_Module/Docker/alert-compose.yml" ,"--env-file",f"{str(PFD)}/Launcher/.env",  "up", "-d"], check=True) #El bueno es -> f"{str(LFD)}/docker-compose.yml"
