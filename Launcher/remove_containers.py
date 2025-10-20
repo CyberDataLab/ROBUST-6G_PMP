@@ -13,7 +13,7 @@ if __name__ == "__main__":
     #docker stop $(docker ps -a -q), docker rm $(docker ps -a -q) insted of docker kill
     PFD = Path(__file__).resolve().parent.parent # Project Folder Directory
     command_list = [
-        "docker kill kafka fluentd filebeat telegraf tshark falco alert_module", 
+        "docker kill kafka fluentd filebeat telegraf tshark falco alert_module mongodb", 
         "docker container prune -f",
         "docker volume prune -f",
         f"rm -r {PFD}/Results/"

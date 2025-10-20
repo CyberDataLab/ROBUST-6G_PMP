@@ -7,6 +7,7 @@ import threading
 import time
 from kafka_io import KafkaLineConsumer, KafkaAlertProducer, get_bootstrap
 from queue import Queue, Empty, Full
+from pymongo import MongoClient, errors
 
 # === FILE CONFIG ===
 PFD = Path(__file__).resolve().parent #/home/Alert_Module in container
@@ -34,6 +35,22 @@ ALERT_ROTATE_SIZE_MB = 200 * 1024       #* 1024 # 200KB
 PACKET_QUEUE_MAX = 100000 # Queue limit
 WRITER_FLUSH_EVERY = 100  # flush every packet number
 WATCHDOG_STALL_SECS = 120 # inactivity watchdog
+
+# === MONGO CONFIG === #FIXME Mover al main y pasar como parámetro ya que solo se usa en una función
+MONGO_URI = os.getenv("MONGO_URI", "mongodb://admin:admin123@mongodb:27017/")
+client = MongoClient(MONGO_URI)
+db = client["snort_db"]
+alerts_collection = db["alerts"]
+
+existing_indexes = alerts_collection.index_information()
+if "timestamp_1" not in existing_indexes:
+    try:
+        alerts_collection.create_index([("timestamp", 1), ("msg", 1), ("src_ap", 1)], unique=True)
+        print("✅ Unique index created on field 'timestamp'")
+    except errors.OperationFailure as e:
+        print(f"⚠️ Could not create unique index on 'timestamp': {e}")
+else:
+    print("ℹ️ Unique index on 'timestamp' already exists.")
 
 
 # === SNORT CONFIG ===
@@ -79,6 +96,7 @@ def run_snort_on_pcap(pcap_path, producer):
     print(f"✅ Snort3 ended with {pcap_path}")
     os.chmod(alert_path,0o664) #It needs octal permissions
 
+    '''
     #Read alert_parth and send it directly to Kafka with the producer.
     # FIXME Controlar que solo se publiquen la nueva información
     if os.path.exists(alert_path):
@@ -89,6 +107,43 @@ def run_snort_on_pcap(pcap_path, producer):
 
         if data:
             producer.produce_lines(lines)
+    '''
+    # Read alerts and upload them to MongoDB
+    if not os.path.exists(alert_path):
+        print(f"⚠️ Alert file not found: {alert_path}")
+        return
+
+    with open(alert_path, "r") as data:
+        lines = data.readlines()
+
+    if not lines:
+        print(f"⚠️ File {alert_path} empty")
+        return
+
+    inserted, duplicates, _errors = 0, 0, 0
+
+    for line in lines:
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            alert_doc = json.loads(line)
+            alerts_collection.insert_one(alert_doc)
+            inserted += 1
+        except json.JSONDecodeError:
+            print(f"⚠️ Error decoding JSON line: {line}")
+            _errors += 1
+        except errors.DuplicateKeyError:
+            duplicates += 1
+        except errors.ServerSelectionTimeoutError:
+            print("❌ MongoDB connection timeout. Retrying later...")
+            _errors += 1
+        except Exception as e:
+            print(f"❌ Error inserting alert: {e}")
+            _errors += 1
+
+    print(f"✅ Inserted {inserted} new alerts, skipped {duplicates} duplicates and errors {_errors}.")
+
 
         
 class Json2PcapWorker:

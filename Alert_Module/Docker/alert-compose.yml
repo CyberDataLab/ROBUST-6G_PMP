@@ -97,9 +97,23 @@ services:
         condition: service_healthy
     environment:
       - TZ=UTC
-      - KAFKA_BOOTSTRAP=kafka:29092            # same Docker network 
+      - KAFKA_BOOTSTRAP=kafka:29092            # same Docker network
+      - MONGO_URI=mongodb://admin:admin123@mongodb:27017/
     # If host.docker.internal is used in Linux:
     extra_hosts:
       - "host.docker.internal:host-gateway"
     volumes: #local_folder : #container_folder
       - ${PFD}/Results/Alerts:/home/Alert_Module/Alerts
+
+  #sudo docker exec -it mongodb mongo -u admin -p admin123
+  mongodb:
+    image: mongo:4.4.29
+    container_name: mongodb
+    restart: unless-stopped
+    ports:
+      - "27017:27017"
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: admin
+      MONGO_INITDB_ROOT_PASSWORD: admin123
+    volumes:
+      - ${PFD}/Results/mongo_data:/data/db

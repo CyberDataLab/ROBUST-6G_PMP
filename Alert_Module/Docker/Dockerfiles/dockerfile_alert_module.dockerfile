@@ -9,7 +9,7 @@ RUN chmod +x /home/Alert_Module/Snort_configuration/snort3_auto_install.sh
 RUN  ./home/Alert_Module/Snort_configuration/snort3_auto_install.sh
 
 # Requirements
-RUN pip install ijson scapy bitstring confluent-kafka
+RUN pip install ijson scapy bitstring confluent-kafka pymongo
 
 RUN mkdir -p /home/Alert_Module/Alerts \
     /home/Alert_Module/Snort_configuration/lua \
