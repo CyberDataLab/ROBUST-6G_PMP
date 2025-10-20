@@ -1,8 +1,7 @@
-# kafka_io_v2.py
+# kafka_io.py
 # ------------------------------------------------------------
-# Utilidades Kafka para integrarse con tu pipeline:
-# - KafkaLineConsumer: entrega líneas tipo "tshark" desde un topic.
-# - KafkaCSVProducer: publica líneas de un CSV a un topic.
+# - KafkaLineConsumer: delivers ‘tshark’ type lines from a topic.
+# - KafkaAlertProducer: publishes security alerts to a topic.
 # ------------------------------------------------------------
 
 import os
@@ -20,15 +19,15 @@ from confluent_kafka import (
 )
 
 # -----------------------------
-# Defaults (configurables por env)
+# Defaults (configurable by env)
 # -----------------------------
 
 def get_bootstrap(override: Optional[str] = None) -> str:
     """
-    Orden de resolución:
-    1) argumento explícito (override),
-    2) env KAFKA_BOOTSTRAP,
-    3) default "kafka:29092" (mejor dentro de Docker).
+    Resolution order:
+    1) explicit argument (override),
+    2) KAFKA_BOOTSTRAP environment variable,
+    3) default ‘kafka:29092’ (best within Docker).
     """
     if override:
         return override
@@ -37,7 +36,7 @@ def get_bootstrap(override: Optional[str] = None) -> str:
 DEFAULT_TOPIC_IN = os.getenv("KAFKA_TOPIC_IN", "tshark_traces")
 DEFAULT_TOPIC_OUT = os.getenv("KAFKA_TOPIC_OUT", "snort_alerts")
 DEFAULT_GROUP_ID = os.getenv("KAFKA_GROUP_ID", "net-traces-consumer")
-DEFAULT_MESSAGE_FIELD = os.getenv("KAFKA_MESSAGE_FIELD", "message")
+DEFAULT_MESSAGE_FIELD = os.getenv("KAFKA_MESSAGE_FIELD", "_source")
 
 # Consumer behavior
 DEFAULT_AUTO_OFFSET_RESET = os.getenv("KAFKA_AUTO_OFFSET_RESET", "earliest")  # earliest/latest/none
@@ -54,7 +53,7 @@ DEFAULT_COMPRESSION = os.getenv("KAFKA_PRODUCER_COMPRESSION", "zstd")  # zstd, l
 
 def _kafka_consumer_config(bootstrap: Optional[str], group_id: Optional[str], debug: Optional[str] = None) -> dict:
     """
-    Config típica de consumer para single-broker KRaft con grupos.
+    Consumer configuration for single-broker KRaft with groups.
     """
     cfg = {
         "bootstrap.servers": get_bootstrap(bootstrap),
@@ -64,11 +63,11 @@ def _kafka_consumer_config(bootstrap: Optional[str], group_id: Optional[str], de
         "allow.auto.create.topics": DEFAULT_ALLOW_AUTO_CREATE_TOPICS,
         "enable.partition.eof": DEFAULT_ENABLE_PARTITION_EOF,
         "partition.assignment.strategy": DEFAULT_ASSIGNMENT_STRATEGY,
-        # --- ajustes para ráfagas ---
-        "fetch.min.bytes": 1048576,            # 1 MiB antes de devolver
-        "fetch.wait.max.ms": 50,               # espera hasta 50 ms para llenar batch
-        "queued.max.messages.kbytes": 262144,  # 256 MiB de cola interna
-        "max.poll.interval.ms": 900000,        # 15 min para procesados pesados
+
+        "fetch.min.bytes": 1048576,            # 1 MiB before returning
+        "fetch.wait.max.ms": 50,               # wait up to 50 ms to fill batch
+        "queued.max.messages.kbytes": 262144,  # 256 MiB  of internal queue
+        "max.poll.interval.ms": 900000,        # 15 min for heavy processing
         "session.timeout.ms": 10000,
         "socket.keepalive.enable": True,
     }
@@ -85,7 +84,6 @@ def _kafka_producer_config(bootstrap: Optional[str], debug: Optional[str] = None
         "batch.size": DEFAULT_BATCH_SIZE,
         "compression.type": DEFAULT_COMPRESSION,
         "socket.keepalive.enable": True,
-        # "acks": "all",
     }
     if debug:
         cfg["debug"] = debug  # ej: "msg"
@@ -94,8 +92,8 @@ def _kafka_producer_config(bootstrap: Optional[str], debug: Optional[str] = None
 
 class KafkaLineConsumer:
     """
-    Consumer orientado a leer documentos JSON (Filebeat) y extraer el campo 'message'.
-    Usa consumer groups (subscribe + coordinator).
+    Consumer designed to read network traces in NDJSON format (from Kafka) and extract the “_source” field.
+    Uses consumer groups (subscribe + coordinator).
     """
     def __init__(
         self,
@@ -120,85 +118,83 @@ class KafkaLineConsumer:
         def _on_assign(consumer, partitions):
             pretty = [f"{p.topic}[{p.partition}]@{p.offset}" for p in partitions]
             if self._is_cooperative:
-                print(f"📌 (coop) Añadiendo: {pretty}", flush=True)
+                print(f"📌 (coop) Adding: {pretty}", flush=True)
                 consumer.incremental_assign(partitions)
             else:
-                print(f"📌 Asignado a: {pretty}", flush=True)
+                print(f"📌 Asigned to: {pretty}", flush=True)
                 consumer.assign(partitions)
 
         def _on_revoke(consumer, partitions):
             pretty = [f"{p.topic}[{p.partition}]@{p.offset}" for p in partitions]
             if self._is_cooperative:
-                print(f"↩️  (coop) Revocando: {pretty}", flush=True)
+                print(f"↩️  (coop) Revoking: {pretty}", flush=True)
                 consumer.incremental_unassign(partitions)
             else:
-                print(f"↩️  Revocado: {pretty}", flush=True)
+                print(f"↩️  Revoked: {pretty}", flush=True)
                 consumer.unassign()
 
         self._consumer.subscribe([self.topic], on_assign=_on_assign, on_revoke=_on_revoke)
 
-    # Señales de cierre limpio
     def _trap_signals(self):
+        """
+        Use of signals for clean consumer closure
+        """
         def _sig_handler(signum, frame):
-            print("\n🛑 Señal recibida, cerrando consumer…", flush=True)
+            print("\n🛑 Signal received, closing consumer...", flush=True)
             self._closing = True
         signal.signal(signal.SIGINT, _sig_handler)
         signal.signal(signal.SIGTERM, _sig_handler)
 
     def _extract_line(self, payload: bytes) -> Optional[str]:
         """
-        Intenta parsear JSON y extraer el campo configurado (por defecto '_source').
-        Siempre devuelve una cadena JSON serializada y, si el campo es '_source',
-        re-envuelve en {"_source": ...} para que json2pcap encuentre layers.frame_raw.
+        Attempts to parse JSON and extract the configured field (default “_source”).
+        Always returns a serialised JSON string and, if the field is “_source”,
+        re-wraps it in {'_source': ...} so that JSON2PCAP finds layers.frame_raw.
         """
         try:
             txt = payload.decode("utf-8", errors="replace")
         except Exception:
             return None
 
-        # Si no parece JSON, devolvemos el texto tal cual
         if not txt or not txt.lstrip().startswith("{"):
             return txt
 
         try:
             obj = json.loads(txt)
         except Exception:
-            # No se pudo parsear JSON, devolvemos el texto original
             return txt
 
-        # 1) Caso normal: el mensaje trae el campo configurado
         if self.message_field in obj:
             val = obj[self.message_field]
 
-            # Si el campo es "_source", aseguramos la envoltura {"_source": ...}
+            # Ensuring the wrapper {"_source": ...}
             if self.message_field == "_source":
-                # Si ya viene como dict, lo re-envolvemos; si es string, intentamos parsearlo
+                # If it is string -> try to parse it
+                # If it comes as dict -> re-wrap it
                 if isinstance(val, str):
                     try:
                         val_obj = json.loads(val)
                     except Exception:
-                        # No es JSON válido, así que lo metemos como texto bajo _source_raw
+                        # It is not valid JSON, so we put it as text under _source_raw
                         return json.dumps({"_source": {"_source_raw": val}}, ensure_ascii=False)
                 else:
                     val_obj = val
 
-                # Si lo que hay dentro NO es un dict, lo guardamos crudo
+                # If it is NOT a dict -> store it raw
                 if not isinstance(val_obj, dict):
                     return json.dumps({"_source": {"_source_raw": val_obj}}, ensure_ascii=False)
 
-                # En este punto devolvemos SIEMPRE {"_source": <dict>}
                 return json.dumps({"_source": val_obj}, ensure_ascii=False)
 
-            # 2) Para cualquier otro message_field, siempre texto JSON
             return val if isinstance(val, str) else json.dumps(val, ensure_ascii=False)
 
-        # 3) Fallback: algunos productores mandan "layers" en la raíz → lo envolvemos como _source
+        # Fallback: some producers send ""layers" in the root -> wrap it as _source
         if isinstance(obj, dict) and "layers" in obj:
             return json.dumps({"_source": {"layers": obj["layers"]}}, ensure_ascii=False)
 
-        # 4) Si nada de lo anterior aplica, devolvemos el JSON original en texto
+        # If none of the above -> Return the original JSON in text
         return txt
-
+    '''
     def iter_lines(self) -> Generator[str, None, None]:
         """Itera sólo la línea decodificada (para casos simples)."""
         self._trap_signals()
@@ -232,7 +228,7 @@ class KafkaLineConsumer:
                 print(f"❌ Exception: {ex}", flush=True)
 
         self.close()
-
+        '''
     def iter_records(self) -> Generator[Tuple[object, Optional[str]], None, None]:
         """Como iter_lines(), pero rinde (msg, line) para poder hacer commit tras procesar."""
         self._trap_signals()
@@ -274,7 +270,7 @@ class KafkaLineConsumer:
 
 
 class KafkaAlertProducer:
-    """Producer para publicar líneas (p. ej. CSV ya generado por un módulo principal)."""
+    """Producer for publishing lines."""
     def __init__(self, topic: str = DEFAULT_TOPIC_OUT, bootstrap: Optional[str] = None, debug: Optional[str] = None):
         self.topic = topic
         cfg = _kafka_producer_config(bootstrap, debug)
@@ -288,79 +284,6 @@ class KafkaAlertProducer:
         for line in lines:
             data = line if isinstance(line, (bytes, bytearray)) else line.encode("utf-8", errors="replace")
             self._producer.produce(self.topic, value=data, on_delivery=self._delivery_cb)
-            self._producer.poll(0)  # sirve callbacks
+            self._producer.poll(0)  # serves callbacks
         self._producer.flush()
 
-
-# -----------------------------
-# CLI
-# -----------------------------
-
-def _cmd_consume(args: argparse.Namespace):
-    print(
-        f"🚀 Consumiendo desde '{args.topic}' en {get_bootstrap(args.bootstrap)}"
-        f" (group: {args.group_id or DEFAULT_GROUP_ID})  Ctrl+C para salir",
-        flush=True,
-    )
-
-    consumer = KafkaLineConsumer(
-        topic=args.topic,
-        message_field=args.message_field,
-        group_id=args.group_id,
-        bootstrap=args.bootstrap,
-        debug=args.debug,
-    )
-
-    try:
-        for line in consumer.iter_lines():
-            if not args.quiet:
-                sys.stdout.write(line + ("\n" if not line.endswith("\n") else ""))
-                sys.stdout.flush()
-    finally:
-        consumer.close()
-
-
-def _cmd_produce(args: argparse.Namespace):
-    print(f"📤 Publicando CSV '{args.csv}' a topic '{args.topic}' en {get_bootstrap(args.bootstrap)}", flush=True)
-    if not os.path.exists(args.csv):
-        print(f"❌ No existe el fichero: {args.csv}", flush=True)
-        sys.exit(2)
-
-    prod = KafkaAlertProducer(topic=args.topic, bootstrap=args.bootstrap, debug=args.debug)
-
-    with open(args.csv, "rb") as f:
-        prod.produce_lines(f)
-
-    print("✅ Envío completado", flush=True)
-
-
-def _make_parser() -> argparse.ArgumentParser:
-    p = argparse.ArgumentParser(prog="kafka_io_v2.py", description="Herramientas Kafka para trazas y CSV.")
-    p.add_argument("--bootstrap", default=None, help=f"bootstrap.servers (default: {get_bootstrap()})")
-    p.add_argument("--debug", default=None, help="flags de debug de librdkafka (ej: cgrp,topic,fetch,protocol)")
-
-    sub = p.add_subparsers(dest="cmd", required=True)
-
-    pc = sub.add_parser("consume", help="Consume de un topic y saca el campo 'message' si existe")
-    pc.add_argument("--topic", default=DEFAULT_TOPIC_IN, help="Topic a consumir")
-    pc.add_argument("--group-id", default=None, help=f"Consumer group id (default: {DEFAULT_GROUP_ID})")
-    pc.add_argument("--message-field", default=DEFAULT_MESSAGE_FIELD, help="Campo JSON a extraer")
-    pc.add_argument("--quiet", action="store_true", help="No imprimir las líneas (útil para probar suscripción)")
-    pc.set_defaults(func=_cmd_consume)
-
-    pp = sub.add_parser("produce", help="Publica un CSV (línea a línea) en un topic")
-    pp.add_argument("--topic", default=DEFAULT_TOPIC_OUT, help="Topic destino")
-    pp.add_argument("--csv", required=True, help="Ruta del CSV a publicar")
-    pp.set_defaults(func=_cmd_produce)
-
-    return p
-
-
-def main():
-    parser = _make_parser()
-    args = parser.parse_args()
-    args.func(args)
-
-
-if __name__ == "__main__":
-    main()

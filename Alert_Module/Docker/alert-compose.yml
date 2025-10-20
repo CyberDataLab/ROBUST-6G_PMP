@@ -45,12 +45,12 @@ services:
       KAFKA_DEFAULT_REPLICATION_FACTOR: "1"
       KAFKA_NUM_PARTITIONS: "1"
 
-  # === Retención por defecto (APLICA POR PARTICIÓN - NUM_PARTITIONS = 1) ===
-      KAFKA_LOG_RETENTION_MS: "86400000"          # 1 día
+  # === Default retention (APPLIES PER PARTITION - NUM_PARTITIONS = 1) ===
+      KAFKA_LOG_RETENTION_MS: "86400000"          # 1 day
       KAFKA_LOG_RETENTION_BYTES: "1073741824"     # 1 GiB (1 * 1024^3)
-      KAFKA_LOG_CLEANUP_POLICY: "delete"          # borra (no solo compacta)
-      KAFKA_LOG_SEGMENT_BYTES: "268435456"        # 256 MiB: rota más a menudo
-      KAFKA_LOG_ROLL_MS: "3600000"                # rota por tiempo si hay poco tráfico
+      KAFKA_LOG_CLEANUP_POLICY: "delete"          # deletion (not only compact)
+      KAFKA_LOG_SEGMENT_BYTES: "268435456"        # 256 MiB: rotates more frequently
+      KAFKA_LOG_ROLL_MS: "3600000"                # rotated by time if there is little traffic
 
     ports:
       - "29092:29092"
@@ -92,10 +92,9 @@ services:
     image: alert_module_robust6g:latest
     container_name: alert_module
     restart: unless-stopped
-    #depends_on:
-    #  kafka:
-    #    condition: service_healthy
-    # #FIXME CAMBIAR Y PROBAR LA NUEVA FORMA DE LLAMAR A LOS LISTENERS -> ADEMAS CAMBIAR KAFKA_IO Y alert_module_run
+    depends_on:
+      kafka:
+        condition: service_healthy
     environment:
       - TZ=UTC
       - KAFKA_BOOTSTRAP=kafka:29092            # same Docker network 
@@ -104,4 +103,3 @@ services:
       - "host.docker.internal:host-gateway"
     volumes: #local_folder : #container_folder
       - ${PFD}/Results/Alerts:/home/Alert_Module/Alerts
-      #- /sys/class/net:/sys/class/net    # Allows script to see host interfaces -> quitarlo seguramente porque no va a ser necesario para snort solo

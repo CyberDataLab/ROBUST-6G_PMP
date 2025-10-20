@@ -26,14 +26,14 @@ KAFKA_TOPIC_IN = os.getenv("KAFKA_TOPIC_IN", "tshark_traces")
 KAFKA_TOPIC_OUT = os.getenv("KAFKA_TOPIC_OUT", "snort_alerts")
 
 # === ROTATION ===
-PCAP_ROTATE_SIZE_MB = 2 * 1024 * 1024       # 200 MB
-ALERT_ROTATE_SIZE_MB = 200 * 1024 #* 1024 # 200KB
+PCAP_ROTATE_SIZE_MB = 2 * 1024 * 1024   # 200 MB
+ALERT_ROTATE_SIZE_MB = 200 * 1024       #* 1024 # 200KB
 
 
 # === WRITER CONTROL ===
-PACKET_QUEUE_MAX = 100000                 # Queue limit
-WRITER_FLUSH_EVERY = 100                 # flush every packet number
-WATCHDOG_STALL_SECS = 120                # inactivity watchdog
+PACKET_QUEUE_MAX = 100000 # Queue limit
+WRITER_FLUSH_EVERY = 100  # flush every packet number
+WATCHDOG_STALL_SECS = 120 # inactivity watchdog
 
 
 # === SNORT CONFIG ===
