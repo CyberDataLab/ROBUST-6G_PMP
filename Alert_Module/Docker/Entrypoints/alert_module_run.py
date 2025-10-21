@@ -36,23 +36,6 @@ PACKET_QUEUE_MAX = 100000 # Queue limit
 WRITER_FLUSH_EVERY = 100  # flush every packet number
 WATCHDOG_STALL_SECS = 120 # inactivity watchdog
 
-# === MONGO CONFIG === #FIXME Mover al main y pasar como parámetro ya que solo se usa en una función
-MONGO_URI = os.getenv("MONGO_URI", "mongodb://admin:admin123@mongodb:27017/")
-client = MongoClient(MONGO_URI)
-db = client["snort_db"]
-alerts_collection = db["alerts"]
-
-existing_indexes = alerts_collection.index_information()
-if "timestamp_1" not in existing_indexes:
-    try:
-        alerts_collection.create_index([("timestamp", 1), ("msg", 1), ("src_ap", 1)], unique=True)
-        print("✅ Unique index created on field 'timestamp'")
-    except errors.OperationFailure as e:
-        print(f"⚠️ Could not create unique index on 'timestamp': {e}")
-else:
-    print("ℹ️ Unique index on 'timestamp' already exists.")
-
-
 # === SNORT CONFIG ===
 SNORT_BASE_CMD = [
     "snort",
@@ -64,51 +47,10 @@ SNORT_BASE_CMD = [
     "-l", ALERT_DIR
  ]
 
-def run_snort_on_pcap(pcap_path, producer):
-    """Run Snort3 in a separate thread on a rotated PCAP."""
-    alert_path = os.path.join(ALERT_DIR,f"{ALERT_FILE}.txt")
-
-    if os.path.exists(alert_path) and os.path.getsize(alert_path) >= ALERT_ROTATE_SIZE_MB:
-        try:
-            os.remove(alert_path)
-            print(f"✅ Alert file successfully rotated: {alert_path}")
-        except Exception as e:
-            print(f"❌ Error deleting the alert file: {e}")
-
-    cmd = SNORT_BASE_CMD + ["-r", pcap_path]
-    print(f"⚡ Running Snort3 on {pcap_path}")
-
-    proc = subprocess.Popen(
-        cmd,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-        text=True
-    )
-
-    def log_output(stream, prefix):
-        for line in stream:
-            print(f"[{prefix}] {line.strip()}")
-    '''Only for debugging
-    #threading.Thread(target=log_output, args=(proc.stdout, f"snort-out-{os.path.basename(pcap_path)}"), daemon=True).start()
-    #threading.Thread(target=log_output, args=(proc.stderr, f"snort-err-{os.path.basename(pcap_path)}"), daemon=True).start()
-    '''
-    proc.wait()
-    print(f"✅ Snort3 ended with {pcap_path}")
-    os.chmod(alert_path,0o664) #It needs octal permissions
-
-    '''
-    #Read alert_parth and send it directly to Kafka with the producer.
-    # FIXME Controlar que solo se publiquen la nueva información
-    if os.path.exists(alert_path):
-        with open(alert_path, "r") as data:
-            lines = data.readlines()
-        if not lines:
-            print(f"⚠️ File {alert_path} empty")
-
-        if data:
-            producer.produce_lines(lines)
-    '''
-    # Read alerts and upload them to MongoDB
+def save_to_database(alert_path, alerts_collection):
+    """
+    Read alerts and upload them to MongoDB
+    """ 
     if not os.path.exists(alert_path):
         print(f"⚠️ Alert file not found: {alert_path}")
         return
@@ -143,6 +85,52 @@ def run_snort_on_pcap(pcap_path, producer):
             _errors += 1
 
     print(f"✅ Inserted {inserted} new alerts, skipped {duplicates} duplicates and errors {_errors}.")
+
+def run_snort_on_pcap(pcap_path, producer, alerts_collection):
+    """Run Snort3 in a separate thread on a rotated PCAP."""
+    alert_path = os.path.join(ALERT_DIR,f"{ALERT_FILE}.txt")
+
+    if os.path.exists(alert_path) and os.path.getsize(alert_path) >= ALERT_ROTATE_SIZE_MB:
+        try:
+            os.remove(alert_path)
+            print(f"✅ Alert file successfully rotated: {alert_path}")
+        except Exception as e:
+            print(f"❌ Error deleting the alert file: {e}")
+
+    cmd = SNORT_BASE_CMD + ["-r", pcap_path]
+    print(f"⚡ Running Snort3 on {pcap_path}")
+
+    proc = subprocess.Popen(
+        cmd,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True
+    )
+
+    def log_output(stream, prefix):
+        for line in stream:
+            print(f"[{prefix}] {line.strip()}")
+    '''Only for debugging
+    #threading.Thread(target=log_output, args=(proc.stdout, f"snort-out-{os.path.basename(pcap_path)}"), daemon=True).start()
+    #threading.Thread(target=log_output, args=(proc.stderr, f"snort-err-{os.path.basename(pcap_path)}"), daemon=True).start()
+    '''
+    proc.wait()
+    print(f"✅ Snort3 ended with {pcap_path}")
+    os.chmod(alert_path,0o664) #It needs octal permissions
+
+
+    #Read alert_parth and send it directly to Kafka with the producer.
+    # FIXME Controlar que solo se publiquen la nueva información
+    if os.path.exists(alert_path):
+        with open(alert_path, "r") as data:
+            lines = data.readlines()
+        if not lines:
+            print(f"⚠️ File {alert_path} empty")
+
+        if data:
+            producer.produce_lines(lines)
+
+    #save_to_database(alert_path, alerts_collection)
 
 
         
@@ -200,13 +188,14 @@ class Json2PcapWorker:
 
 class PacketWriter:
     """Manage file rotation and launch Snort at each rotation (with queue and backoff)."""
-    def __init__(self, output_dir, j2p_path, rotate_size_mb, producer):
+    def __init__(self, output_dir, j2p_path, rotate_size_mb, producer, alerts_collection):
         self.output_dir = output_dir
         self.j2p_path = j2p_path
         self.rotate_size = rotate_size_mb
         self.file_index = 0
         self.j2p_worker = None
         self.producer = producer
+        self.alerts_collection = alerts_collection
         os.makedirs(output_dir, exist_ok=True)
 
         self.q = Queue(maxsize=PACKET_QUEUE_MAX)
@@ -297,7 +286,7 @@ class PacketWriter:
             self._running = False
 
     def _run_snort_and_delete(self, old_trace):
-        run_snort_on_pcap(old_trace, self.producer)
+        run_snort_on_pcap(old_trace, self.producer, self.alerts_collection)
         try:
             os.remove(old_trace)
             print(f"✅ File {old_trace} successfully deleted")
@@ -306,6 +295,22 @@ class PacketWriter:
 
 
 def main():
+
+    mongo_uri = os.getenv("MONGO_URI", "mongodb://admin:admin123@mongodb:27017/")
+    client = MongoClient(mongo_uri)
+    db = client["snort_db"]
+    alerts_collection = db["alerts"]
+
+    existing_indexes = alerts_collection.index_information()
+    if "timestamp_1" not in existing_indexes:
+        try:
+            alerts_collection.create_index([("timestamp", 1), ("msg", 1), ("src_ap", 1)], unique=True)
+            print("✅ Unique index created on field 'timestamp'")
+        except errors.OperationFailure as e:
+            print(f"⚠️ Could not create unique index on 'timestamp': {e}")
+    else:
+        print("ℹ️ Unique index on 'timestamp' already exists.")
+
     kafka_producer = KafkaAlertProducer(
         topic=KAFKA_TOPIC_OUT,
         bootstrap=get_bootstrap()
@@ -315,7 +320,8 @@ def main():
         output_dir=OUTPUT_DIR,
         j2p_path=J2P_PATH,
         rotate_size_mb=PCAP_ROTATE_SIZE_MB,
-        producer=kafka_producer
+        producer=kafka_producer,
+        alerts_collection=alerts_collection
     )
 
     consumer = KafkaLineConsumer(
