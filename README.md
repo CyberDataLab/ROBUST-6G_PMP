@@ -25,9 +25,11 @@ PMP is an open source, modularly designed, programmable platform for collecting,
  * Tshark
  * Filebeat
  * Kafka
+ * Snort3
+ * MongoDB
+ * CICFlowMeter
 
 :construction: Future development
- * Snort3
  * Grafana
  * Kibana
  * Elasticsearch
@@ -47,9 +49,11 @@ PMP is an open source, modularly designed, programmable platform for collecting,
 
 3. **Generate modified images**
     ```bash
-    sudo docker build -f Dockerfiles/dockerfile.falco -t falco_robust6g:latest .
-    sudo docker build -f Dockerfiles/dockerfile.fluentd -t fluentd_robust6g:latest .
-    sudo docker build -f Dockerfiles/dockerfile.tshark -t tshark_robust6g:latest .
+    sudo docker build -f ./Alert_Module/Docker/Dockerfiles/alert_module.dockerfile -t alert_module_novadef:latest .
+    sudo docker build -f ./Data_Collection_Module/Docker/Dockerfiles/falco.dockerfile -t falco_novadef:latest .
+    sudo docker build -f ./Data_Collection_Module/Docker/Dockerfiles/fluentd.dockerfile -t fluentd_novadef:latest .
+    sudo docker build -f ./Data_Collection_Module/Docker/Dockerfiles/tshark.dockerfile -t tshark_novadef:latest .
+    sudo docker build -f ./Flow_Module/Docker/Dockerfiles/flow_module.dockerfile -t flow_module_novadef:latest .
     ```
 
 
@@ -62,17 +66,41 @@ PMP is an open source, modularly designed, programmable platform for collecting,
     sudo chown root:root configuration_files/filebeat.yml
     ```
 
-2. **Usage and deployment** using 
+2. **Usage and deployment** as a general option in which all modules are activated.
     ```bash
-    python3 start_containers.py
+    python3 ./Launcher/start_containers.py all
+    ```
+3. **Usage and deplyment** exploiting the modularity of PMP. Use `-m` to name each **module** followed by `-t` with the simple name of the **tools** to be deployed. Tools can be concatenated using **spaces** or **commas**. If you need to use **all the tools** in the module, you can use `-t all`.
+    ```bash
+    sudo python3 ./Launcher/start_containers.py -m moduleName -t all
+    ```
+    Or
+    ```bash
+    sudo python3 ./Launcher/start_containers.py -m moduleName -t toolName1,toolName2
+    ```
+    In example
+    ```bash
+    sudo python3 ./Launcher/start_containers.py -m alert_module -t all -m db_module -t all -m communication_module -t all -m flow_module -t all -m collection_module -t tshark,fluentd,telegraf
     ```
 
-Do not use the `docker-compose.yml` file because the PMP needs an environment variable to uniquely identify the machine using the monitoring tools.
+Do not use the `docker-compose.yml` file, as the PMP requires an environment file to run correctly.
 
-3. **Delete** containers and deployed volumes as well as generated data at the same time.
+4. **Delete** containers and deployed volumes as well as generated data at the same time.
     ```bash
-    python3 remove_containers.py
+    python3 ./Launcher/remove_containers.py
     ```
+
+## :notebook: Notes
+Table of current modules and tools implemented.
+
+|        Modules       |    Tool 1    |  Tool 2  |  Tool 3 |  Tool 4 |
+|:--------------------:|:------------:|:--------:|:-------:|:-------:|
+|     alert_module     | alert_module |          |         |         |
+| communication_module |     kafka    | filebeat |         |         |
+|   collection_module  |    fluentd   | telegraf |  tshark |  falco  |
+|      flow_module     |  flow_module |          |         |         |
+|       db_module      |    mongodb   |          |         |         |
+
 
 ## 📋 Requirements
 
