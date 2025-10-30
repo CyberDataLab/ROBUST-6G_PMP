@@ -117,10 +117,11 @@ PMP is **open-source** under the **GPL-3.0 license**. See the `LICENSE` file for
 ## :heavy_exclamation_mark: Errors
 
 In case `filebeat.yml` is showing errors, change the permissions with: 
-```bash
+
+    ```bash
     sudo chmod 644 filebeat.yml
     sudo chown root:root filebeat.yml
-``` 
+    ``` 
 
 If you are using PMP as a test on your local machine, remember to update the `/etc/hosts` file to avoid issues with DNS addressing on Kafka brokers. In example:
 
@@ -133,4 +134,3 @@ Write the following line below the `127.0.1.1       user`:
     ```bash
 	yourIP	kafka_robust6g-node1.lan
     ```
-    
