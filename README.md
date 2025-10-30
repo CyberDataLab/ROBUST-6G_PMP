@@ -104,8 +104,8 @@ Table of current modules and tools implemented.
 
 ## 📋 Requirements
 
- * `Docker` 27.5.1 or higher.
- * `docker-compose` 1.29.2 or higher.
+ * `Docker` 28.5.1 or higher.
+ * ~~`docker-compose` 1.29.2 or higher.~~ Please do not use the individual docker-compose module. Docker 28.5.1 or higher utilises the updated version of `docker compose`, which has the appropriate functionalities to run the PMP.
  * `Python3.12` or higher.
 
 The tool containers already satisfy their requirements without the need of any user installation.
@@ -121,3 +121,13 @@ In case `filebeat.yml` is showing errors, change the permissions with:
     sudo chmod 644 filebeat.yml
     sudo chown root:root filebeat.yml
 ``` 
+
+If you are using PMP as a test on your local machine, remember to update the `/etc/hosts` file to avoid issues with DNS addressing on Kafka brokers. In example:
+
+    ```bash
+    sudo nano /etc/hosts
+    ```
+Write the following line below the `127.0.1.1       user`:
+    ```bash
+	yourIP	kafka_robust6g-node1.lan
+    ```
