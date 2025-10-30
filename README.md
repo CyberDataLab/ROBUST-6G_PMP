@@ -127,7 +127,10 @@ If you are using PMP as a test on your local machine, remember to update the `/e
     ```bash
     sudo nano /etc/hosts
     ```
+
 Write the following line below the `127.0.1.1       user`:
+
     ```bash
 	yourIP	kafka_robust6g-node1.lan
     ```
+    
