@@ -1,0 +1,20 @@
+# sudo docker compose up -d
+# sudo docker exec -it IDCONTAINER bash
+---
+services:
+  alert_module:
+    image: alert_module_robust6g:latest
+    container_name: alert_module_robust6g
+    profiles: ["alert_module.alert_module"]
+    restart: unless-stopped
+    depends_on:
+      kafka_robust6g:
+        condition: service_healthy
+    environment:
+      - TZ=UTC
+      - KAFKA_BOOTSTRAP=kafka_robust6g:29092            # same Docker network
+    # If host.docker.internal is used in Linux:
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    volumes:
+      - ${PFD}/Results/Alerts:/home/Alert_Module/Alerts
