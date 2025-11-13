@@ -16,7 +16,7 @@ if __name__ == "__main__":
         "docker kill \
             kafka_robust6g filebeat_robust6g \
             fluentd_robust6g telegraf_robust6g tshark_robust6g falco_robust6g  \
-            alert_module_robust6g \
+            alert_module_streaming_robust6g \
             flow_module_robust6g \
             mongodb_robust6g ",
         "docker container prune -f",
