@@ -5,10 +5,11 @@ import subprocess
 import sys
 import threading
 import time
+import fcntl
+import struct
 
 from kafka_io import KafkaLineConsumer, KafkaAlertProducer, get_bootstrap
 from pymongo import MongoClient, errors
-from scapy.all import Ether, sendp
 
 # ====== RUTAS / CONFIG FICHEROS ======
 PFD = Path(__file__).resolve().parent  # /home/Alert_Module en el contenedor
@@ -40,13 +41,15 @@ SNORT_BASE_CMD = [
     "-k", "none",
 ]
 
+# ====== CONSTANTES TUN/TAP ======
+TUNSETIFF = 0x400454ca
+IFF_TAP = 0x0002
+IFF_NO_PI = 0x1000
 
 # ================== UTILIDADES FICHEROS ==================
 
 def ensure_mode_644(path: str):
-    """
-    Pone permisos 0644 solo si hace falta.
-    """
+    """Pone permisos 0644 solo si hace falta."""
     try:
         st_mode = os.stat(path).st_mode & 0o777
         if st_mode != 0o644:
@@ -58,9 +61,7 @@ def ensure_mode_644(path: str):
 
 
 def truncate_alert_file(alert_path: str):
-    """
-    Deja el fichero de alertas vacío (para no re-procesar alertas viejas al arrancar).
-    """
+    """Deja el fichero de alertas vacío (para no re-procesar alertas viejas al arrancar)."""
     try:
         os.makedirs(os.path.dirname(alert_path), exist_ok=True)
         with open(alert_path, "w"):
@@ -71,10 +72,7 @@ def truncate_alert_file(alert_path: str):
 
 
 def insert_alert_line(alerts_collection, line: str):
-    """
-    Inserta UNA alerta (línea JSON) en MongoDB.
-    Respeta el índice único (saltará DuplicateKeyError si ya existe).
-    """
+    """Inserta UNA alerta (línea JSON) en MongoDB."""
     try:
         alert_doc = json.loads(line)
     except json.JSONDecodeError:
@@ -94,32 +92,39 @@ def insert_alert_line(alerts_collection, line: str):
 
 # ================== TAP & SNORT LIVE ==================
 
-def create_tap_interface(ifname: str):
+def open_tap_interface(ifname: str) -> int:
     """
-    Crea una interfaz TAP dentro del contenedor (requiere --cap-add=NET_ADMIN).
-    Si ya existe, simplemente la levanta.
+    Abre (y si hace falta crea) una interfaz TAP usando /dev/net/tun y devuelve su descriptor.
+    Requiere:
+      - dispositivo /dev/net/tun montado en el contenedor
+      - capabilities NET_ADMIN (ya las tienes en docker-compose)
     """
     try:
-        # ¿ya existe?
-        res = subprocess.run(["ip", "link", "show", ifname],
-                             stdout=subprocess.DEVNULL,
-                             stderr=subprocess.DEVNULL)
-        if res.returncode != 0:
-            print(f"🔧 Creating TAP interface {ifname}...")
-            subprocess.run(["ip", "tuntap", "add", "dev", ifname, "mode", "tap"],
-                           check=True)
-        # Levantar interfaz
-        subprocess.run(["ip", "link", "set", ifname, "up"], check=True)
-        print(f"✅ TAP interface {ifname} is up")
-    except subprocess.CalledProcessError as e:
-        print(f"❌ Error creating/bringing up TAP interface {ifname}: {e}")
+        tun_fd = os.open("/dev/net/tun", os.O_RDWR)
+    except OSError as e:
+        print(f"❌ Cannot open /dev/net/tun: {e}")
         sys.exit(1)
+
+    ifr = struct.pack("16sH", ifname.encode(), IFF_TAP | IFF_NO_PI)
+    try:
+        fcntl.ioctl(tun_fd, TUNSETIFF, ifr)
+    except OSError as e:
+        print(f"❌ TUNSETIFF failed for {ifname}: {e}")
+        os.close(tun_fd)
+        sys.exit(1)
+
+    # Levantar interfaz en modo UP
+    try:
+        subprocess.run(["ip", "link", "set", ifname, "up"], check=True)
+        print(f"✅ TAP interface {ifname} is up (fd={tun_fd})")
+    except subprocess.CalledProcessError as e:
+        print(f"⚠️ Could not bring {ifname} up: {e}")
+
+    return tun_fd
 
 
 def start_snort_live(ifname: str):
-    """
-    Lanza Snort3 en modo live ('-i ifname'), escribiendo alertas al fichero JSON.
-    """
+    """Lanza Snort3 en modo live ('-i ifname'), escribiendo alertas al fichero JSON."""
     cmd = SNORT_BASE_CMD + ["-i", ifname]
     print(f"🚀 Starting Snort3 live on interface {ifname}")
     proc = subprocess.Popen(
@@ -134,7 +139,6 @@ def start_snort_live(ifname: str):
         for line in stream:
             print(f"[{prefix}] {line.strip()}")
 
-    # Si quieres ver logs de Snort, descomenta estas líneas:
     threading.Thread(target=_log_stream, args=(proc.stdout, "snort-out"), daemon=True).start()
     threading.Thread(target=_log_stream, args=(proc.stderr, "snort-err"), daemon=True).start()
 
@@ -191,71 +195,52 @@ def alerts_tail_loop(alert_path: str, producer: KafkaAlertProducer, alerts_colle
 
 # ================== EXTRACCIÓN Y ENVÍO DE TRÁFICO A TAP ==================
 
-from scapy.all import sendp, Packet as ScapyPacket  # import aquí para no romper si falta scapy en otros contextos
-
-
 def extract_frame_bytes(packet_dict) -> bytes:
     """
-    Extrae los bytes de la trama Ethernet a partir del dict JSON de tshark.
-    Asume formato: {"_source": {"layers": { "frame_raw": [hex, pos, len, bitmask, type], ... } } }
+    Extrae los bytes de la trama Ethernet completa a partir del dict JSON de tshark.
+    Usamos preferentemente 'frame_raw', que ya contiene:
+        dst_mac | src_mac | ethertype | payload...
     """
     try:
         layers = packet_dict["_source"]["layers"]
-    except Exception as e:
-        print(f"⚠️ Packet without '_source.layers': {e}")
+    except Exception:
+        print("⚠️ Missing _source.layers in packet")
         return None
 
     frame_raw = layers.get("frame_raw")
     if frame_raw is None:
-        print("⚠️ No 'frame_raw' field found in packet")
+        # Hay paquetes que solo traen eth_raw/ip_raw/...; de momento los ignoramos
+        print("⚠️ No 'frame_raw' in packet, skipping injection for this packet")
         return None
 
     try:
-        # En tshark típico: frame_raw = [hex_str, pos, len, bitmask, type]
         if isinstance(frame_raw, list) and len(frame_raw) > 0:
             hex_str = frame_raw[0]
         elif isinstance(frame_raw, str):
             hex_str = frame_raw
         else:
-            print(f"⚠️ Unexpected frame_raw format: {type(frame_raw)}")
+            print(f"⚠️ Unexpected frame_raw format: {frame_raw}")
             return None
 
-        return bytes(bytearray.fromhex(hex_str))
+        return bytes.fromhex(hex_str)
     except Exception as e:
         print(f"⚠️ Error converting frame_raw to bytes: {e}")
         return None
 
 
-def inject_packet_to_tap(packet_dict, iface: str):
+def inject_packet_to_tap(packet_dict, tap_fd: int):
+    """
+    Inyecta el paquete en el descriptor TAP (nivel 2) escribiendo directamente en /dev/net/tun.
+    Aquí ya NO usamos sockets RAW ni Scapy → evitamos [Errno 90] Message too long.
+    """
     frame_bytes = extract_frame_bytes(packet_dict)
     if not frame_bytes:
         return
 
     try:
-        # Caso 1: ¿parece un frame Ethernet (tiene MAC dest + MAC src + EtherType)?
-        if len(frame_bytes) >= 14:
-            ethertype = int.from_bytes(frame_bytes[12:14], "big")
-
-            # Rangos válidos de EtherType (0x0600+ son EtherTypes reales)
-            if ethertype >= 0x0600:
-                # Ya es Ethernet → enviar tal cual
-                sendp(frame_bytes, iface=iface, verbose=False)
-                return
-
-        # Caso 2: no es Ethernet → creamos una cabecera dummy
-        # Deducción del tipo (IPv4 vs IPv6)
-        if frame_bytes[0] >> 4 == 4:      # IPv4
-            ether = Ether(type=0x0800)
-        elif frame_bytes[0] >> 4 == 6:    # IPv6
-            ether = Ether(type=0x86DD)
-        else:
-            ether = Ether(type=0x0800)    # fallback
-
-        pkt = ether / frame_bytes
-        sendp(bytes(pkt), iface=iface, verbose=False)
-
-    except Exception as e:
-        print(f"❌ Error injecting packet into {iface}: {e}")
+        os.write(tap_fd, frame_bytes)
+    except OSError as e:
+        print(f"❌ Error writing frame to TAP fd={tap_fd}: {e}")
 
 
 # ================== MAIN ==================
@@ -291,7 +276,7 @@ def main():
     )
 
     # ---- TAP + Snort live ----
-    create_tap_interface(TAP_IFACE)
+    tap_fd = open_tap_interface(TAP_IFACE)
 
     # Limpiar fichero de alertas antes de empezar (no procesar alertas antiguas)
     truncate_alert_file(ALERT_PATH)
@@ -313,7 +298,7 @@ def main():
         bootstrap=get_bootstrap()
     )
 
-    print("📥 Starting Kafka consume loop (network traces) -> TAP interface...")
+    print("📥 Starting Kafka consume loop (network traces) -> TAP interface.")
     for msg, line in consumer.iter_records():
         if not line:
             consumer.commit_msg(msg)
@@ -321,7 +306,7 @@ def main():
 
         line = line.strip()
         try:
-            print("RAW Kafka message:", line)
+            #print("ℹ️ RAW Kafka message:", line) # Usar solo para ver el paquete raw
             packet_dict = json.loads(line)
         except json.JSONDecodeError:
             # Línea corrupta -> commit y seguir
@@ -329,7 +314,7 @@ def main():
             continue
 
         # Inyectar directamente en la interfaz TAP (streaming real)
-        inject_packet_to_tap(packet_dict, TAP_IFACE)
+        inject_packet_to_tap(packet_dict, tap_fd)
 
         # Confirmamos procesamiento del mensaje de Kafka
         consumer.commit_msg(msg)
@@ -337,6 +322,11 @@ def main():
     # Si salimos del bucle, cerramos Snort
     try:
         snort_proc.terminate()
+    except Exception:
+        pass
+
+    try:
+        os.close(tap_fd)
     except Exception:
         pass
 
