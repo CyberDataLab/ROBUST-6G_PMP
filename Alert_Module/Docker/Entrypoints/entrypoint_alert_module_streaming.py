@@ -11,8 +11,8 @@ import struct
 from kafka_io import KafkaLineConsumer, KafkaAlertProducer, get_bootstrap
 from pymongo import MongoClient, errors
 
-# ====== RUTAS / CONFIG FICHEROS ======
-PFD = Path(__file__).resolve().parent  # /home/Alert_Module en el contenedor
+# === FILE CONFIG ===
+PFD = Path(__file__).resolve().parent  # /home/Alert_Module in container
 
 SNORT_CONFIG_DIR = PFD / "Snort_configuration"
 SNORT_LUA = str(SNORT_CONFIG_DIR / "lua" / "snort.lua")
@@ -26,10 +26,7 @@ KAFKA_GROUP_ID = os.getenv("KAFKA_GROUP_ID", "alert-module-v1")
 KAFKA_TOPIC_IN = os.getenv("KAFKA_TOPIC_IN", "tshark_traces")
 KAFKA_TOPIC_OUT = os.getenv("KAFKA_TOPIC_OUT", "snort_alerts")
 
-# ====== TAP / INTERFAZ SNORT ======
-TAP_IFACE = os.getenv("ALERT_TAP_IFACE", "tap0")
-
-# ====== SNORT BASE CMD (sin -i/-r aún) ======
+# === SNORT CONFIG ===
 SNORT_BASE_CMD = [
     "snort",
     "-c", SNORT_LUA,
@@ -41,15 +38,16 @@ SNORT_BASE_CMD = [
     "-k", "none",
 ]
 
-# ====== CONSTANTES TUN/TAP ======
+# ====== CONSTANTS TUN/TAP ======
+TAP_IFACE = os.getenv("ALERT_TAP_IFACE", "tap0")
 TUNSETIFF = 0x400454ca
 IFF_TAP = 0x0002
 IFF_NO_PI = 0x1000
 
-# ================== UTILIDADES FICHEROS ==================
-
 def ensure_mode_644(path: str):
-    """Pone permisos 0644 solo si hace falta."""
+    """
+    Set permissions to 0644 only if necessary (avoid redundant chmod).
+    """
     try:
         st_mode = os.stat(path).st_mode & 0o777
         if st_mode != 0o644:
@@ -61,7 +59,9 @@ def ensure_mode_644(path: str):
 
 
 def truncate_alert_file(alert_path: str):
-    """Deja el fichero de alertas vacío (para no re-procesar alertas viejas al arrancar)."""
+    """
+    Truncate the alert file to avoid duplicates.
+    """    
     try:
         os.makedirs(os.path.dirname(alert_path), exist_ok=True)
         with open(alert_path, "w"):
@@ -72,7 +72,10 @@ def truncate_alert_file(alert_path: str):
 
 
 def insert_alert_line(alerts_collection, line: str):
-    """Inserta UNA alerta (línea JSON) en MongoDB."""
+    """
+    Parses a single JSON-formatted alert line and inserts it into MongoDB.
+    Handles JSON decoding issues, duplicate entries, and database timeouts.
+    """
     try:
         alert_doc = json.loads(line)
     except json.JSONDecodeError:
@@ -82,7 +85,6 @@ def insert_alert_line(alerts_collection, line: str):
     try:
         alerts_collection.insert_one(alert_doc)
     except errors.DuplicateKeyError:
-        # ya existe, sin drama
         pass
     except errors.ServerSelectionTimeoutError:
         print("❌ MongoDB connection timeout while inserting alert. Will continue...")
@@ -90,14 +92,12 @@ def insert_alert_line(alerts_collection, line: str):
         print(f"❌ Error inserting alert: {e}")
 
 
-# ================== TAP & SNORT LIVE ==================
-
 def open_tap_interface(ifname: str) -> int:
     """
-    Abre (y si hace falta crea) una interfaz TAP usando /dev/net/tun y devuelve su descriptor.
-    Requiere:
-      - dispositivo /dev/net/tun montado en el contenedor
-      - capabilities NET_ADMIN (ya las tienes en docker-compose)
+    Creates or opens a TAP interface using /dev/net/tun and returns its file descriptor.
+    Configures the interface in TAP mode without packet information (IFF_NO_PI)
+    and brings it up using system network tools.
+    Requires /dev/net/tun access and NET_ADMIN capabilities.
     """
     try:
         tun_fd = os.open("/dev/net/tun", os.O_RDWR)
@@ -113,7 +113,7 @@ def open_tap_interface(ifname: str) -> int:
         os.close(tun_fd)
         sys.exit(1)
 
-    # Levantar interfaz en modo UP
+    # Upping the TAP interface
     try:
         subprocess.run(["ip", "link", "set", ifname, "up"], check=True)
         print(f"✅ TAP interface {ifname} is up (fd={tun_fd})")
@@ -124,7 +124,12 @@ def open_tap_interface(ifname: str) -> int:
 
 
 def start_snort_live(ifname: str):
-    """Lanza Snort3 en modo live ('-i ifname'), escribiendo alertas al fichero JSON."""
+    """
+    Launches Snort3 in live-capture mode using the specified interface.
+    Executes Snort with the predefined configuration and rule set,
+    redirecting output streams to background logging threads.
+    Returns the running subprocess handle for lifecycle management.
+    """
     cmd = SNORT_BASE_CMD + ["-i", ifname]
     print(f"🚀 Starting Snort3 live on interface {ifname}")
     proc = subprocess.Popen(
@@ -145,15 +150,13 @@ def start_snort_live(ifname: str):
     return proc
 
 
-# ================== TAIL DE ALERTAS SNORT ==================
 
 def alerts_tail_loop(alert_path: str, producer: KafkaAlertProducer, alerts_collection):
     """
-    Lee continuamente nuevas líneas del fichero de alertas de Snort y:
-      - las envía a Kafka
-      - las inserta en MongoDB
+    Continuously monitors the Snort alert file for newly appended lines.
+    Each new alert is forwarded to Kafka and optionally stored in MongoDB.
+    Implements buffered Kafka publishing to reduce overhead.
     """
-    # Asegurar que el fichero existe
     os.makedirs(os.path.dirname(alert_path), exist_ok=True)
     if not os.path.exists(alert_path):
         open(alert_path, "a").close()
@@ -161,24 +164,22 @@ def alerts_tail_loop(alert_path: str, producer: KafkaAlertProducer, alerts_colle
 
     print(f"📡 Starting alerts tail on {alert_path}")
     with open(alert_path, "r", encoding="utf-8", errors="replace") as f:
-        # Ir al final del fichero (solo procesar líneas nuevas)
-        f.seek(0, os.SEEK_END)
+        f.seek(0, os.SEEK_END) # Go to the end of the file (only new lines)
 
         buffer = []
         last_flush = time.time()
-        FLUSH_INTERVAL = 1.0  # segs
+        FLUSH_INTERVAL = 1.0  # seconds
 
         while True:
             line = f.readline()
             if not line:
-                # Sin datos nuevos -> pequeña espera
-                time.sleep(0.5)
+                time.sleep(0.5) # Waiting to receive new alerts
             else:
                 line = line.strip()
                 if not line:
                     continue
 
-                # 1) Enviar a Kafka (lote para eficiencia)
+                #  Sending to Kafka (in batches for efficiency)
                 buffer.append(line)
                 if time.time() - last_flush >= FLUSH_INTERVAL:
                     try:
@@ -188,18 +189,83 @@ def alerts_tail_loop(alert_path: str, producer: KafkaAlertProducer, alerts_colle
                     buffer.clear()
                     last_flush = time.time()
 
-                # 2) Insertar en MongoDB
+                # Sending alerts to MongoDB
                 if alerts_collection is not None:
                     insert_alert_line(alerts_collection, line)
 
 
-# ================== EXTRACCIÓN Y ENVÍO DE TRÁFICO A TAP ==================
+def rebuild_frame_from_layers(layers):
+    """
+    Reconstructs an Ethernet frame from dissected protocol layer fields
+    when a raw frame is not available. Supports Ethernet, IP, TCP/UDP,
+    and data payload assembly. Returns None if mandatory fields are missing.
+    """
+    try:
+        # Ethernet header
+        dst = layers.get("eth_dst_raw")
+        src = layers.get("eth_src_raw")
+        eth_type = layers.get("eth_type_raw")
+
+        if not (dst and src and eth_type):
+            print("⚠️ Cannot rebuild frame: missing ethernet fields")
+            return None
+
+        if isinstance(dst, list): dst = dst[0]
+        if isinstance(src, list): src = src[0]
+        if isinstance(eth_type, list): eth_type = eth_type[0]
+
+        eth_header = bytes.fromhex(dst + src + eth_type)
+
+        # IP raw
+        ip_raw = layers.get("ip_raw")
+        if isinstance(ip_raw, list):
+            ip_raw = ip_raw[0]
+        ip_bytes = bytes.fromhex(ip_raw) if ip_raw else b""
+
+        # TCP raw
+        tcp_raw = layers.get("tcp_raw")
+        if isinstance(tcp_raw, list):
+            tcp_raw = tcp_raw[0]
+        tcp_bytes = bytes.fromhex(tcp_raw) if tcp_raw else b""
+
+        # UDP raw
+        udp_raw = layers.get("udp_raw")
+        if isinstance(udp_raw, list):
+            udp_raw = udp_raw[0]
+        udp_bytes = bytes.fromhex(udp_raw) if udp_raw else b""
+
+        # Payload
+        payload = b""
+        pay = layers.get("data_data")
+        if pay:
+            if isinstance(pay, list):
+                pay = pay[0]
+            try:
+                payload = bytes.fromhex(pay)
+            except Exception:
+                payload = b""
+
+        # Final frame 
+        frame = eth_header + ip_bytes + tcp_bytes + udp_bytes + payload
+
+        if len(frame) == 0:
+            print("⚠️ Rebuilt frame is empty")
+            return None
+
+        return frame
+
+    except Exception as e:
+        print(f"❌ Error rebuilding frame: {e}")
+        return None
+
+
 
 def extract_frame_bytes(packet_dict) -> bytes:
     """
-    Extrae los bytes de la trama Ethernet completa a partir del dict JSON de tshark.
-    Usamos preferentemente 'frame_raw', que ya contiene:
-        dst_mac | src_mac | ethertype | payload...
+    Extracts raw frame bytes from a packet dictionary.
+    Prefers the 'frame_raw' field when present; otherwise attempts
+    to reconstruct the frame from individual protocol layer fields.
+    Returns None when extraction or reconstruction fails.
     """
     try:
         layers = packet_dict["_source"]["layers"]
@@ -208,30 +274,29 @@ def extract_frame_bytes(packet_dict) -> bytes:
         return None
 
     frame_raw = layers.get("frame_raw")
-    if frame_raw is None:
-        # Hay paquetes que solo traen eth_raw/ip_raw/...; de momento los ignoramos
-        print("⚠️ No 'frame_raw' in packet, skipping injection for this packet")
-        return None
+    if frame_raw:
+        try:
+            if isinstance(frame_raw, list):
+                frame_raw = frame_raw[0]
+            return bytes.fromhex(frame_raw)
+        except Exception as e:
+            print(f"⚠️ Error converting frame_raw to bytes: {e}")
 
-    try:
-        if isinstance(frame_raw, list) and len(frame_raw) > 0:
-            hex_str = frame_raw[0]
-        elif isinstance(frame_raw, str):
-            hex_str = frame_raw
-        else:
-            print(f"⚠️ Unexpected frame_raw format: {frame_raw}")
-            return None
+    # Reconstruction
+    print("ℹ️ Rebuilding frame: no frame_raw present")
+    frame = rebuild_frame_from_layers(layers)
+    if frame:
+        return frame
 
-        return bytes.fromhex(hex_str)
-    except Exception as e:
-        print(f"⚠️ Error converting frame_raw to bytes: {e}")
-        return None
+    print("❌ Could not rebuild frame, packet skipped")
+    return None
 
 
 def inject_packet_to_tap(packet_dict, tap_fd: int):
     """
-    Inyecta el paquete en el descriptor TAP (nivel 2) escribiendo directamente en /dev/net/tun.
-    Aquí ya NO usamos sockets RAW ni Scapy → evitamos [Errno 90] Message too long.
+    Writes an Ethernet frame into a TAP interface using its file descriptor.
+    Uses direct write operations to avoid limitations of raw sockets or Scapy.
+    Skips packets that do not yield valid frame bytes.
     """
     frame_bytes = extract_frame_bytes(packet_dict)
     if not frame_bytes:
@@ -243,10 +308,15 @@ def inject_packet_to_tap(packet_dict, tap_fd: int):
         print(f"❌ Error writing frame to TAP fd={tap_fd}: {e}")
 
 
-# ================== MAIN ==================
 
 def main():
-    # ---- MongoDB ----
+    """
+    Initializes MongoDB, Kafka, TAP interface, and Snort live mode.
+    Spawns background workers for alert tailing and packet injection.
+    Consumes NDJSON packet streams from Kafka and forwards them to TAP.
+    Ensures graceful cleanup of resources on exit.
+    """
+
     mongo_uri = os.getenv("MONGO_URI", "mongodb://admin:admin123@mongodb:27017/")
     try:
         client = MongoClient(mongo_uri)
@@ -269,28 +339,24 @@ def main():
         print(f"❌ Error connecting to MongoDB: {e}")
         alerts_collection = None
 
-    # ---- Kafka producer (alertas) ----
+
     kafka_producer = KafkaAlertProducer(
         topic=KAFKA_TOPIC_OUT,
         bootstrap=get_bootstrap()
     )
 
-    # ---- TAP + Snort live ----
     tap_fd = open_tap_interface(TAP_IFACE)
 
-    # Limpiar fichero de alertas antes de empezar (no procesar alertas antiguas)
     truncate_alert_file(ALERT_PATH)
 
     snort_proc = start_snort_live(TAP_IFACE)
 
-    # Hilo para leer alertas de Snort en tiempo real
     threading.Thread(
         target=alerts_tail_loop,
         args=(ALERT_PATH, kafka_producer, alerts_collection),
         daemon=True
     ).start()
 
-    # ---- Kafka consumer (tráfico de red) ----
     consumer = KafkaLineConsumer(
         topic=KAFKA_TOPIC_IN,
         message_field="_source",
@@ -306,20 +372,17 @@ def main():
 
         line = line.strip()
         try:
-            #print("ℹ️ RAW Kafka message:", line) # Usar solo para ver el paquete raw
             packet_dict = json.loads(line)
         except json.JSONDecodeError:
-            # Línea corrupta -> commit y seguir
+            # Corrupted line -> jumping
             consumer.commit_msg(msg)
             continue
 
-        # Inyectar directamente en la interfaz TAP (streaming real)
+        # Injecting directly into the TAP interface
         inject_packet_to_tap(packet_dict, tap_fd)
 
-        # Confirmamos procesamiento del mensaje de Kafka
         consumer.commit_msg(msg)
 
-    # Si salimos del bucle, cerramos Snort
     try:
         snort_proc.terminate()
     except Exception:
