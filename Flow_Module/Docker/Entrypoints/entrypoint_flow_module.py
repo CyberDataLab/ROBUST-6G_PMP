@@ -24,11 +24,11 @@ CIC_LAUNCHER = str(FFD / "Preinstall" / "CICFlowMeter" / "launch_cfm.sh")
 J2P_PATH = str(FFD / "Scripts" / "Parsing" / "JSON2PCAP" / "json2pcap.py")
 
 # === ROTATION ===
-ROTATE_SIZE_MB = 2 * 1024 * 1024       # ↑ 200 MB (menos rotaciones bajo ráfagas)
-CIC_ROTATE_SIZE_MB = 50 * 1024           # ~50 MB
-
+PCAP_ROTATE_SIZE_MB = 100 * 1024     # 100 KB
+CIC_ROTATE_SIZE_MB = 50 * 1024           # 50 KB
+ROTATE_TIME_SEC = 0.5
 # === WRITER CONTROL ===
-PACKET_QUEUE_MAX = 100000                 # ↑ margen para ráfagas
+PACKET_QUEUE_MAX = 100000
 WRITER_FLUSH_EVERY = 100                 # flush cada N
 WATCHDOG_STALL_SECS = 120                # watchdog de inactividad
 
@@ -261,6 +261,7 @@ class PacketWriter:
 
         self.q = Queue(maxsize=PACKET_QUEUE_MAX)
         self._last_write_ts = time.time()
+        self._last_file_ts = time.time()
         self._written_since_flush = 0
         self._running = True
         threading.Thread(target=self._writer_loop, daemon=True).start()
@@ -281,19 +282,23 @@ class PacketWriter:
 
     def _writer_loop(self):
         """
-        Thread that writes packets to json2pcap and rotates if necessary.
+        Thread that writes packets to json2pcap and rotates per time or size if necessary.
         """
         while self._running:
+            # Rotation per time
+            if time.time() - self._last_file_ts >= ROTATE_TIME_SEC:
+                self._new_file()
+                self._last_file_ts = time.time()
+
             try:
-                packet_dict, ack_fn = self.q.get(timeout=1)
+                packet_dict, ack_fn = self.q.get(timeout=0.1)
             except Empty:
-                if time.time() - self._last_write_ts > WATCHDOG_STALL_SECS:
-                    print("⏱️  Watchdog: no recent writing to PCAP", flush=True)
                 continue
 
             try:
                 self.j2p_worker.write_packet(packet_dict)
                 self._written_since_flush += 1
+
                 if self._written_since_flush >= WRITER_FLUSH_EVERY:
                     try:
                         self.j2p_worker.proc.stdin.flush()
@@ -302,18 +307,22 @@ class PacketWriter:
                     self._written_since_flush = 0
 
                 trace_file = self.j2p_worker.trace_path
+
+                # Rotation per size
                 if os.path.exists(trace_file) and os.path.getsize(trace_file) >= self.rotate_size:
                     self._new_file()
+                    self._last_file_ts = time.time()
 
-                self._last_write_ts = time.time()
-
+ 
                 if ack_fn:
                     try:
                         ack_fn()
                     except Exception as e:
-                        print(f"⚠️  Error in ack_fn: {e}", flush=True)
+                        print(f"⚠️ Error in ack_fn: {e}")
+
             except Exception as e:
-                print(f"❌ Error in writer_loop: {e}", flush=True)
+                print(f"❌ Error in writer_loop: {e}")
+
 
     def _new_file(self):
         """
@@ -329,10 +338,12 @@ class PacketWriter:
         print(f"📂 New file opened: {trace_path}")
         self.j2p_worker = Json2PcapWorker(trace_path, self.j2p_path)
 
-        if self.file_index < 5:
+        if self.file_index < 99:
             self.file_index += 1
         else:
             self.file_index = 0
+        
+        self._last_file_ts = time.time()
 
     def write_packet(self, packet_dict):
         """
@@ -384,7 +395,7 @@ def main():
         output_dir=OUTPUT_DIR,
         cic_results=CIC_Results,
         j2p_path=J2P_PATH,
-        rotate_size_mb=ROTATE_SIZE_MB,
+        rotate_size_mb=PCAP_ROTATE_SIZE_MB,
         cic_rotate_size_mb=CIC_ROTATE_SIZE_MB,
         c2k_producer=producer,
         db_collection=flow_collection

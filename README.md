@@ -62,8 +62,8 @@ PMP is an open source, modularly designed, programmable platform for collecting,
 
 1. **Permissions** of Filebeat configuration
    ```bash
-   sudo chmod 644 configuration_files/filebeat.yml
-   sudo chown root:root configuration_files/filebeat.yml
+   sudo chmod 644 Communication_Bus/Configuration_Files/filebeat.yml
+   sudo chown root:root Communication_Bus/Configuration_Files/filebeat.yml
    ```
 
 2. **Usage and deployment** as a general option in which all modules are activated.
