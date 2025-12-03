@@ -3,8 +3,8 @@
 ---
 services:
   alert_module:
-    image: alert_module_streaming_robust6g:latest
-    container_name: alert_module_streaming_robust6g
+    image: alert_module_robust6g:latest
+    container_name: alert_module_robust6g
     profiles: ["alert_module.alert_module"]
     restart: unless-stopped
     depends_on:

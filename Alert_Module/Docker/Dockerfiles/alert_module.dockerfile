@@ -1,4 +1,4 @@
-#sudo docker build -f ./Alert_Module/Docker/Dockerfiles/alert_module.dockerfile -t alert_module_streaming_robust6g:latest .
+#sudo docker build -f ./Alert_Module/Docker/Dockerfiles/alert_module.dockerfile -t alert_module_robust6g:latest .
 FROM ubuntu:jammy
 
 RUN mkdir -p /home/Alert_Module/Snort_configuration
@@ -15,15 +15,13 @@ RUN apt-get install iproute2 -y
 RUN mkdir -p /home/Alert_Module/Alerts \
     /home/Alert_Module/Snort_configuration/lua \
     /home/Alert_Module/Snort_configuration/Rules \
-    /home/Alert_Module/Parsing/JSON2PCAP \
     /home/Alert_Module/Parsing/PCAP_Files
 
-COPY ./Alert_Module/Docker/Entrypoints/entrypoint_alert_module_streaming.py /home/Alert_Module
+COPY ./Alert_Module/Docker/Entrypoints/entrypoint_alert_module.py /home/Alert_Module
 COPY ./Alert_Module/Scripts/kafka_io.py /home/Alert_Module/
 COPY ./Alert_Module/Configuration_Files/lua/. /home/Alert_Module/Snort_configuration/lua
 COPY ./Alert_Module/Configuration_Files/Rules/. /home/Alert_Module/Snort_configuration/Rules
-COPY ./Alert_Module/Scripts/JSON2PCAP/. /home/Alert_Module/Parsing/JSON2PCAP/ 
 
 
-ENTRYPOINT ["/usr/bin/python3","/home/Alert_Module/entrypoint_alert_module_streaming.py"]
+ENTRYPOINT ["/usr/bin/python3","/home/Alert_Module/entrypoint_alert_module.py"]
 
