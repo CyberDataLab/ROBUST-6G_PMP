@@ -1,0 +1,37 @@
+
+services:
+  prometheus:
+    image: prom/prometheus:v3.8.0
+    container_name: prometheus_server_robust6g
+    depends_on:
+      - discovery-agent
+    volumes:
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./prometheus/rules:/etc/prometheus/rules:ro
+      - prometheus_data:/prometheus
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.path=/prometheus"
+      - "--storage.tsdb.retention.time=30d"
+      - "--web.enable-lifecycle"
+    ports:
+      - "9090:9090"
+    restart: unless-stopped
+
+  discovery-agent:
+    image: discovery_agent_robust6g:latest
+    build:
+      context: ${PFD}
+      dockerfile: Aggregation_Normalisation_Module/Docker/Dockerfiles/discovery_agent.dockerfile
+    container_name: discovery_agent_robust6g
+    environment:
+      SCAN_PORT: "9999"
+      SCAN_TIMEOUT: "0.2"
+    volumes:
+      - ./discovery:/opt/discovery
+    ports:
+      - "8000:8000"
+    restart: unless-stopped
+
+volumes:
+  prometheus_data:
