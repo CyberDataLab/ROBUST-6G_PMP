@@ -1,5 +1,5 @@
 #sudo docker build -f ./Data_Collection_Module/Docker/Dockerfiles/tshark.dockerfile -t tshark_robust6g:latest .
-FROM alpine:latest
+FROM alpine:3.23.0
 
 # Installing Tshark and required dependencies
 RUN apk add --no-cache tshark libcap

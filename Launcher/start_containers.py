@@ -32,6 +32,7 @@ class cmd_parser:
         "collection_module":    ["fluentd", "telegraf", "tshark", "falco"],
         "flow_module":          ["flow_module"],
         "db_module":            ["mongodb"],
+        "aggregation_module":   ["prometheus"],
     }
 
     def __init__(self) -> None:
@@ -235,9 +236,22 @@ def main():
     args, selected = parser.parse()
 
     compose_profiles_list = parser.build_compose_profiles(selected)
+    telegraf = "0"
+    fluentd = "0"
+    falco = "0"
+    
+    if "collection_module.telegraf" in compose_profiles_list:
+        telegraf = "1"
+    if "collection_module.fluentd" in compose_profiles_list:
+        fluentd = "1"
+    if "collection_module.falco" in compose_profiles_list:
+        falco = "1"
+
+    # Only activate the info_device microservice if Prometheus is requested
+    if "aggregation_module" in compose_profiles_list:
+        compose_profiles_list.append("collection_module.info")
+
     compose_profiles = ",".join(compose_profiles_list)
-    # Example wiring for your system:
-    # start_containers(compose_profiles, debug=args.debug)
     print("Selected:", selected)
     print("COMPOSE_PROFILES:", compose_profiles_list)
     if args.debug:
@@ -250,6 +264,9 @@ def main():
         f.write(f"NETWORK_MODE={network_mode}\n")
         f.write(f"PFD={PFD}\n") 
         f.write(f"COMPOSE_PROFILES={compose_profiles}") # COMPOSE_PROFILES=kafka,filebeat,flow_module,...
+        f.write(f"ENABLE_TELEGRAF={telegraf}")
+        f.write(f"ENABLE_FLUENTD={fluentd}")
+        f.write(f"ENABLE_FALCO={falco}")
 
     try:
 

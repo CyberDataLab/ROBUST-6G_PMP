@@ -100,7 +100,7 @@ Table of current modules and tools implemented.
 |   collection_module  |    fluentd   | telegraf |  tshark |  falco  |
 |      flow_module     |  flow_module |          |         |         |
 |       db_module      |    mongodb   |          |         |         |
-
+|  aggregation_module  |   prometheus |          |         |         |
 
 ## 📋 Requirements
 
