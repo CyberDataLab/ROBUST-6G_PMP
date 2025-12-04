@@ -5,8 +5,8 @@ services:
   alert_module:
     image: alert_module_robust6g:latest
     build:
-      context: ${PFD}/Alert_Module/Docker/Dockerfiles/
-      dockerfile: alert_module.dockerfile
+      context: ${PFD}
+      dockerfile: Alert_Module/Docker/Dockerfiles/alert_module.dockerfile
     container_name: alert_module_robust6g
     profiles: ["alert_module.alert_module"]
     depends_on:

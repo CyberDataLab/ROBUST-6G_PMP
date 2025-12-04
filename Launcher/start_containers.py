@@ -263,10 +263,10 @@ def main():
         f.write(f"MACHINE_ID={mid}\n")
         f.write(f"NETWORK_MODE={network_mode}\n")
         f.write(f"PFD={PFD}\n") 
-        f.write(f"COMPOSE_PROFILES={compose_profiles}") # COMPOSE_PROFILES=kafka,filebeat,flow_module,...
-        f.write(f"ENABLE_TELEGRAF={telegraf}")
-        f.write(f"ENABLE_FLUENTD={fluentd}")
-        f.write(f"ENABLE_FALCO={falco}")
+        f.write(f"COMPOSE_PROFILES={compose_profiles}\n") # COMPOSE_PROFILES=kafka,filebeat,flow_module,...
+        f.write(f"ENABLE_TELEGRAF={telegraf}\n")
+        f.write(f"ENABLE_FLUENTD={fluentd}\n")
+        f.write(f"ENABLE_FALCO={falco}\n")
 
     try:
 

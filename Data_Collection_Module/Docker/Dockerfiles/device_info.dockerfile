@@ -6,7 +6,7 @@ RUN apk add --update --no-cache python3
 RUN apk add py3-pip
 RUN pip install flask
 
-COPY ./Data_Collection_Module/Docker/Entrypoints/entrypoint_device_info.py /usr/local/bin/entrypoint_device_info.py
+COPY Data_Collection_Module/Docker/Entrypoints/entrypoint_device_info.py /usr/local/bin/entrypoint_device_info.py
 
 RUN chmod +x /usr/local/bin/entrypoint_device_info.py
 

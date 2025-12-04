@@ -33,8 +33,8 @@ RUN mkdir -p /fluentd/etc
 RUN mkdir -p /fluentd/scripts
 
 # Entrypoint and auxiliary scripts
-COPY ./Data_Collection_Module/Configuration_Files/fluent.conf /fluentd/etc/
-COPY ./Data_Collection_Module/Docker/Entrypoints/entrypoint_fluentd.py /usr/local/bin/entrypoint_fluentd.py
+COPY Data_Collection_Module/Configuration_Files/fluent.conf /fluentd/etc/
+COPY Data_Collection_Module/Docker/Entrypoints/entrypoint_fluentd.py /usr/local/bin/entrypoint_fluentd.py
 
 # Permissions
 RUN chown root:root /fluentd/etc/fluent.conf 

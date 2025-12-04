@@ -5,8 +5,8 @@ services:
   
     image: fluentd_robust6g:latest
     build:
-      context: ${PFD}/Data_Collection_Module/Docker/Dockerfiles/
-      dockerfile: fluentd.dockerfile
+      context: ${PFD}
+      dockerfile: Data_Collection_Module/Docker/Dockerfiles/fluentd.dockerfile
 
     container_name: fluentd_robust6g
     profiles: ["collection_module.fluentd"]
@@ -51,8 +51,8 @@ services:
   tshark:
     image: tshark_robust6g:latest
     build:
-      context: ${PFD}/Data_Collection_Module/Docker/Dockerfiles/
-      dockerfile: tshark.dockerfile
+      context: ${PFD}
+      dockerfile: Data_Collection_Module/Docker/Dockerfiles/tshark.dockerfile
     container_name: tshark_robust6g
     profiles: ["collection_module.tshark"]
     depends_on:
@@ -72,8 +72,8 @@ services:
   falco:
     image: falco_robust6g:latest
     build:
-      context: ${PFD}/Data_Collection_Module/Docker/Dockerfiles/
-      dockerfile: falco.dockerfile
+      context: ${PFD}
+      dockerfile: Data_Collection_Module/Docker/Dockerfiles/falco.dockerfile
     container_name: falco_robust6g
     profiles: ["collection_module.falco"]
     labels:
@@ -122,8 +122,8 @@ services:
   device-info:
     image: device_info_robust6g:latest
     build:
-      context: ${PFD}/Data_Collection_Module/Docker/Dockerfiles/
-      dockerfile: device_info.dockerfile
+      context: ${PFD}
+      dockerfile: Data_Collection_Module/Docker/Dockerfiles/device_info.dockerfile
     container_name: device_info
     profiles: ["collection_module.info"]
     environment:
