@@ -270,7 +270,7 @@ def main():
 
     try:
 
-        subprocess.run(["docker", "compose","-f", f"{str(LFD)}/docker-compose.yml" ,"--env-file",f"{str(LFD)}/.env",  "up", "-d"], check=True)
+        subprocess.run(["docker", "compose","-f", f"{str(LFD)}/docker-compose.yml" ,"--env-file",f"{str(LFD)}/.env",  "up", "--build","-d"], check=True)
     except subprocess.CalledProcessError as e:
         print(f"Error executing docker-compose: {e}")
         return

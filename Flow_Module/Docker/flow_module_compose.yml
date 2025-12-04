@@ -5,6 +5,9 @@ services:
 
   flow_module:
     image: flow_module_robust6g:latest
+    build:
+      context: ${PFD}/Flow_Module/Docker/Dockerfiles/
+      dockerfile: flow_module.dockerfile
     container_name: flow_module_robust6g
     profiles: ["flow_module.flow_module"]
     restart: unless-stopped

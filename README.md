@@ -31,6 +31,7 @@ PMP is an open source, modularly designed, programmable platform for collecting,
 
 :construction: Future development
  * Grafana
+ * Prometheus
  * Kibana
  * Elasticsearch
  * InfluxDB

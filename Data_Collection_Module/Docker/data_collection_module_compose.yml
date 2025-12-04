@@ -2,7 +2,12 @@
 ---
 services:
   fluentd:
+  
     image: fluentd_robust6g:latest
+    build:
+      context: ${PFD}/Data_Collection_Module/Docker/Dockerfiles/
+      dockerfile: fluentd.dockerfile
+
     container_name: fluentd_robust6g
     profiles: ["collection_module.fluentd"]
     labels:
@@ -45,6 +50,9 @@ services:
 
   tshark:
     image: tshark_robust6g:latest
+    build:
+      context: ${PFD}/Data_Collection_Module/Docker/Dockerfiles/
+      dockerfile: tshark.dockerfile
     container_name: tshark_robust6g
     profiles: ["collection_module.tshark"]
     depends_on:
@@ -63,6 +71,9 @@ services:
 
   falco:
     image: falco_robust6g:latest
+    build:
+      context: ${PFD}/Data_Collection_Module/Docker/Dockerfiles/
+      dockerfile: falco.dockerfile
     container_name: falco_robust6g
     profiles: ["collection_module.falco"]
     labels:
@@ -110,6 +121,9 @@ services:
 # Autodiscovery using HTTP-SD. Prometheus will read the information to identify dinamically this device.
   device-info:
     image: device_info_robust6g:latest
+    build:
+      context: ${PFD}/Data_Collection_Module/Docker/Dockerfiles/
+      dockerfile: device_info.dockerfile
     container_name: device_info
     profiles: ["collection_module.info"]
     environment:
