@@ -1,14 +1,15 @@
-
 services:
   prometheus:
     image: prom/prometheus:v3.8.0
     container_name: prometheus_server_robust6g
     depends_on:
       - discovery-agent
+    environment:
+      - TZ=UTC
     volumes:
-      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
-      - ./prometheus/rules:/etc/prometheus/rules:ro
-      - prometheus_data:/prometheus
+      - ${PFD}/Aggregation_Normalisation_Module/Configuration_Files/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ${PFD}/Aggregation_Normalisation_Module/Configuration_Files/rules:/etc/prometheus/rules:ro
+      - ${PFD}/Results/prometheus_data:/prometheus
     command:
       - "--config.file=/etc/prometheus/prometheus.yml"
       - "--storage.tsdb.path=/prometheus"
@@ -25,12 +26,12 @@ services:
       dockerfile: Aggregation_Normalisation_Module/Docker/Dockerfiles/discovery_agent.dockerfile
     container_name: discovery_agent_robust6g
     environment:
-      SCAN_PORT: "9999"
-      SCAN_TIMEOUT: "0.2"
+      - SCAN_PORT="9999"
+      - SCAN_TIMEOUT="0.2"
+      - TZ=UTC
+    network_mode: "${NETWORK_MODE}"
     volumes:
-      - ./discovery:/opt/discovery
-    ports:
-      - "8000:8000"
+      - ${PFD}/Aggregation_Normalisation_Module/Scripts:/opt/discovery
     restart: unless-stopped
 
 volumes:

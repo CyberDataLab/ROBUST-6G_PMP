@@ -111,7 +111,8 @@ services:
     depends_on:
       - falco
     environment:
-      MACHINE_ID: "${MACHINE_ID}"
+      - MACHINE_ID=${MACHINE_ID}
+      - TZ=UTC
     volumes:
       - /var/run/falco:/var/run/falco
     ports:
@@ -127,10 +128,11 @@ services:
     container_name: device_info
     profiles: ["collection_module.info"]
     environment:
-      MACHINE_ID: "${MACHINE_ID}"
-      ENABLE_TELEGRAF: "${ENABLE_TELEGRAF}"
-      ENABLE_FLUENTD: "${ENABLE_FLUENTD}"
-      ENABLE_FALCO: "${ENABLE_FALCO}"
+      - MACHINE_ID=${MACHINE_ID}
+      - ENABLE_TELEGRAF=${ENABLE_TELEGRAF}
+      - ENABLE_FLUENTD=${ENABLE_FLUENTD}
+      - ENABLE_FALCO=${ENABLE_FALCO}
+      - TZ=UTC
     ports:
       - "9999:9999"
     restart: unless-stopped
