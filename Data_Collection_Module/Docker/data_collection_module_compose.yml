@@ -125,7 +125,7 @@ services:
     build:
       context: ${PFD}
       dockerfile: Data_Collection_Module/Docker/Dockerfiles/device_info.dockerfile
-    container_name: device_info
+    container_name: device_info_robust6g
     profiles: ["collection_module.info"]
     environment:
       - MACHINE_ID=${MACHINE_ID}

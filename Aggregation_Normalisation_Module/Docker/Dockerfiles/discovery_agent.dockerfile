@@ -6,10 +6,15 @@ RUN apk add --update --no-cache python3
 RUN apk add py3-pip
 RUN apk add nmap
 
+
+ENV VIRTUAL_ENV=/opt/venv
+RUN python3 -m venv $VIRTUAL_ENV
+ENV PATH="$VIRTUAL_ENV/bin:$PATH"
+
 RUN pip install flask netaddr requests
 
 COPY Aggregation_Normalisation_Module/Scripts/discovery_agent.py /opt/discovery/discovery_agent.py
 
 WORKDIR /opt/discovery
 
-ENTRYPOINT ["/usr/bin/python3", "/opt/discovery/discovery_agent.py"]
+ENTRYPOINT ["python3", "/opt/discovery/discovery_agent.py"]

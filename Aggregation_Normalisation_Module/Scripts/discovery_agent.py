@@ -44,17 +44,27 @@ def adjust_subnet(net):
     return net
 
 def scan_host(ip):
-    """Check if /prom-targets is alive."""
+    """Check if /prom-targets is alive and FIX localhost addresses."""
     url = f"http://{ip}:{SCAN_PORT}/prom-targets"
     try:
         r = requests.get(url, timeout=SCAN_TIMEOUT)
         if r.status_code == 200:
-            return r.json()
+            data = r.json()
+            # If the scanned device uses localhost or 127.0.0.1, it is replaced with its actual IP address.
+            for group in data:
+                new_targets = []
+                for t in group.get("targets", []):
+                    if "localhost" in t or "127.0.0.1" in t:
+                        new_targets.append(t.replace("localhost", ip).replace("127.0.0.1", ip))
+                    else:
+                        new_targets.append(t)
+                group["targets"] = new_targets
+            return data
     except:
         pass
     return None
 
-@app.route("/sd")
+@app.route("/sd") # In server is http://device_ip:8000/sd
 def service_discovery():
     local_ip = get_local_ip()
     subnet = get_subnet(local_ip)
