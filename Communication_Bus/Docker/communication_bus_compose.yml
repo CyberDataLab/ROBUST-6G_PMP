@@ -57,5 +57,8 @@ services:
       - ${PFD}/Results/fluentd_logs:/fluentd/log:ro
       - ${PFD}/Results/tshark/traces:/tshark/traces:ro
       - ${PFD}/Results/falco/logs:/falco/logs:ro
+    command: 
+      - "--strict.perms=false" # Manual change of owner was avoided by using this flag in Filebeat.
+      - "-e"
     restart: unless-stopped
     user: root

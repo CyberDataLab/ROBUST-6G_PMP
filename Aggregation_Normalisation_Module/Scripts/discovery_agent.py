@@ -3,6 +3,8 @@ import subprocess
 import json
 import socket
 import ipaddress
+import threading
+import time
 import requests
 from flask import Flask, jsonify
 
@@ -10,6 +12,8 @@ app = Flask(__name__)
 
 SCAN_PORT = int("9999")
 SCAN_TIMEOUT = 0.2
+REFRESH_INTERVAL = 30
+cached_results = []
 
 def get_local_ip():
     """Obtain local IP by opening UDP socket."""
@@ -64,23 +68,40 @@ def scan_host(ip):
         pass
     return None
 
-@app.route("/sd") # In server is http://device_ip:8000/sd
+def background_scanner():
+    """Function to run in background and update cache."""
+    global cached_results
+    while True:
+        print("[DISCOVERY] Starting network scan...")
+        local_ip = get_local_ip()
+        subnet = get_subnet(local_ip)
+        subnet = adjust_subnet(subnet)
+
+        print(f"[DISCOVERY] Local IP: {local_ip}")
+        print(f"[DISCOVERY] Scanning subnet: {subnet}")
+
+        results = []
+        for ip in subnet.hosts():
+            data = scan_host(str(ip))
+            if data:
+                print(f"[DISCOVERY] Found active device-info at {ip}")
+                results.extend(data)
+        
+        # Update the cache results
+        cached_results = results
+        print("[DISCOVERY] Scan complete. Cache updated.")
+        
+        # Esperar para el siguiente escaneo
+        time.sleep(REFRESH_INTERVAL)
+
+
+@app.route("/sd")
 def service_discovery():
-    local_ip = get_local_ip()
-    subnet = get_subnet(local_ip)
-    subnet = adjust_subnet(subnet)
+    # Cache results response
+    return jsonify(cached_results)
 
-    print(f"[DISCOVERY] Local IP: {local_ip}")
-    print(f"[DISCOVERY] Scanning subnet: {subnet}")
-
-    results = []
-
-    for ip in subnet.hosts():
-        data = scan_host(str(ip))
-        if data:
-            print(f"[DISCOVERY] Found active device-info at {ip}")
-            results.extend(data)
-
-    return jsonify(results)
-
-app.run(host="0.0.0.0", port=8000)
+if __name__ == "__main__":
+    scanner_thread = threading.Thread(target=background_scanner, daemon=True)
+    scanner_thread.start()
+    
+    app.run(host="0.0.0.0", port=8000)
