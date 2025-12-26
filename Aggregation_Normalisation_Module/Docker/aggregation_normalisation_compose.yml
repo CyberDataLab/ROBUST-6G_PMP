@@ -52,7 +52,6 @@ services:
       - ${PFD}/Aggregation_Normalisation_Module/Scripts:/opt/discovery
     restart: unless-stopped
 
-# Init container to fix OpenSearch data permissions (UID 1000 required)
   init-opensearch:
     image: busybox:latest
     container_name: init_opensearch
@@ -108,7 +107,6 @@ services:
     restart: unless-stopped
 
   logstash:
-    # Using the OpenSearch project image which includes the necessary output plugin pre-installed.
     image: opensearchproject/logstash-oss-with-opensearch-output-plugin:8.9.0
     container_name: logstash_robust6g
     profiles: ["aggregation_module.opensearch"]
