@@ -28,12 +28,12 @@ PMP is an open source, modularly designed, programmable platform for collecting,
  * Snort3
  * MongoDB
  * CICFlowMeter
+ * Prometheus
+ * Logstash
+ * OpenSearch
 
 :construction: Future development
  * Grafana
- * Prometheus
- * Kibana
- * Elasticsearch
  * InfluxDB
  * Sigma translator
 
@@ -48,30 +48,13 @@ PMP is an open source, modularly designed, programmable platform for collecting,
    cd ROBUST-6G_PMP/
    ```
 
-3. **Generate modified images**
-   ```bash
-   sudo docker build -f ./Alert_Module/Docker/Dockerfiles/alert_module.dockerfile -t alert_module_novadef:latest .
-   sudo docker build -f ./Data_Collection_Module/Docker/Dockerfiles/falco.dockerfile -t falco_novadef:latest .
-   sudo docker build -f ./Data_Collection_Module/Docker/Dockerfiles/fluentd.dockerfile -t fluentd_novadef:latest .
-   sudo docker build -f ./Data_Collection_Module/Docker/Dockerfiles/tshark.dockerfile -t tshark_novadef:latest .
-   sudo docker build -f ./Flow_Module/Docker/Dockerfiles/flow_module.dockerfile -t flow_module_novadef:latest .
-   ```
-
-
 ## 🕹️ Usage
 
-
-1. **Permissions** of Filebeat configuration
-   ```bash
-   sudo chmod 644 Communication_Bus/Configuration_Files/filebeat.yml
-   sudo chown root:root Communication_Bus/Configuration_Files/filebeat.yml
-   ```
-
-2. **Usage and deployment** as a general option in which all modules are activated.
+1. **Usage and deployment** as a general option in which all modules are activated.
    ```bash
    python3 ./Launcher/start_containers.py all
    ```
-3. **Usage and deployment** exploiting the modularity of PMP. Use `-m` to name each **module** followed by `-t` with the simple name of the **tools** to be deployed. Tools can be concatenated using **spaces** or **commas**. If you need to use **all the tools** in the module, you can use `-t all`.
+2. **Usage and deployment** exploiting the modularity of PMP. Use `-m` to name each **module** followed by `-t` with the simple name of the **tools** to be deployed. Tools can be concatenated using **spaces** or **commas**. If you need to use **all the tools** in the module, you can use `-t all`.
    ```bash
    sudo python3 ./Launcher/start_containers.py -m moduleName -t all
    ```
@@ -86,7 +69,7 @@ PMP is an open source, modularly designed, programmable platform for collecting,
 
 Do not use the `docker-compose.yml` file, as the PMP requires an environment file to run correctly.
 
-4. **Delete** containers and deployed volumes as well as generated data at the same time.
+3. **Deletes** containers, volumes, and Docker networks, but not the data generated.
    ```bash
    python3 ./Launcher/remove_containers.py
    ```
@@ -94,14 +77,25 @@ Do not use the `docker-compose.yml` file, as the PMP requires an environment fil
 ## :notebook: Notes
 Table of current modules and tools implemented.
 
-|        Modules       |    Tool 1    |  Tool 2  |  Tool 3 |  Tool 4 |
-|:--------------------:|:------------:|:--------:|:-------:|:-------:|
-|     alert_module     | alert_module |          |         |         |
-| communication_module |     kafka    | filebeat |         |         |
-|   collection_module  |    fluentd   | telegraf |  tshark |  falco  |
-|      flow_module     |  flow_module |          |         |         |
-|       db_module      |    mongodb   |          |         |         |
-|  aggregation_module  |   prometheus |          |         |         |
+|        Modules       |    Tool 1    |  Tool 2   |  Tool 3 |  Tool 4 |  Tool 5 |
+|:--------------------:|:------------:|:---------:|:-------:|:-------:|:-------:|
+|     alert_module     | alert_module |           |         |         |         |
+| communication_module |     kafka    | filebeat  |         |         |         |
+|   collection_module  |    fluentd   | telegraf  |  tshark |  falco  |  info\* |
+|      flow_module     |  flow_module |           |         |         |         |
+|       db_module      |    mongodb   |           |         |         |         |
+|  aggregation_module  |   prometheus |opensearch |         |         |         |
+
+\* info: This container exposes the endpoint addresses of the data collection tools deployed on the target device, as well as its machine_id, which identifies it. Use it only if `prometheus` is to be deployed or is already deployed.
+
+There are more containers associated with some tools to provide necessary services such as these:
+
+ * _Collection_Module > falco-exporter_: `falco` has a current exporter plugin developed by the official organisation to expose information to `prometheus`. It is automatically implemented with `falco`.
+ * _Aggregation_module > init-prometheus_: Used to change the owner of the /prometheus folder to user 65534 (nobody). It is necessary to manage `prometheus` data from the Docker volume. It changes the owner and is removed when its job is done. It is automatically deployed with `prometheus`.
+ * _Aggregation_module > discovery-agent_: Continuously scans the network to discover devices that expose their data from the `info` container. `prometheus` extracts the information from the endpoint of this container. It is automatically deployed with `prometheus`.
+ * _Aggregation_module > init-opensearch_: Performs the same task as the `init-prometheus` container, but is used in `opensearch` to correct OpenSearch data permissions (UID 1000). It is automatically implemented with `opensearch`.
+ * _Aggregation_module > opensearch-dashboards_: Official dashboard implementation for `opensearch`. Used to visualise data exposed to `opensearch` in Elastic Common Schema format. Automatically deployed with `opensearch`.
+ * _Aggregation_module > logstash_: This container implements `logstash` to analyse information from `kafka` topics to Elastic Common Schema. It sends the information to `opensearch`. It is automatically deployed with `opensearch`.
 
 ## 📋 Requirements
 
@@ -117,11 +111,11 @@ PMP is **open-source** under the **GPL-3.0 license**. See the `LICENSE` file for
 
 ## :heavy_exclamation_mark: Errors
 
-In case `filebeat.yml` is showing errors, change the permissions with: 
+In case `filebeat.yml` is showing errors, change the permissions manually with: 
 
    ```bash
-   sudo chmod 644 filebeat.yml
-   sudo chown root:root filebeat.yml
+   sudo chmod 644 /Communication_Bus/Configuration_Files/filebeat.yml
+   sudo chown root:root /Communication_Bus/Configuration_Files/filebeat.yml
    ``` 
 
 If you are using PMP as a test on your local machine, remember to update the `/etc/hosts` file to avoid issues with DNS addressing on Kafka brokers. In example:
