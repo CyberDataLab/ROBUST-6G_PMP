@@ -112,7 +112,12 @@ The tool containers already satisfy their requirements without the need of any u
 
 ## 📜 License
 
-PMP is **open-source** under the **GPL-3.0 license**. See the `LICENSE` file for details.
+PMP is **open-source** and distributed under the GNU AGPLv3 License. See `LICENSE` for more information.
+
+* **Community Edition** — released under the **GNU Affero GPL v3.0**.
+* **Enterprise Edition** — proprietary license & premium support available.
+
+Contact **alberto.garciap@um.es** and **josemaria.jorquera@um.es** for commercial terms.
 
 ## :heavy_exclamation_mark: Errors
 
