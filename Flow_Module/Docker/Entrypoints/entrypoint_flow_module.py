@@ -378,6 +378,24 @@ class PacketWriter:
         except Exception as e:
             print(f"❌ Error deleting {old_trace}: {e}")
 
+def sanitize_packet_timestamp(packet_dict):
+    """
+    Search for the frame.time_epoch field. If it is an ISO 8601 string, convert it to float (Epoch timestamp).
+    """
+    try:
+        # _source -> layers -> frame -> frame.time_epoch
+        layers = packet_dict.get('_source', {}).get('layers', {})
+        frame = layers.get('frame', {})        
+        raw_time = frame.get('frame.time_epoch')
+        
+        if raw_time and isinstance(raw_time, str) and 'T' in raw_time and 'Z' in raw_time:
+            clean_str = raw_time.replace('Z', '')[:26]       
+            dt_obj = dt.datetime.strptime(clean_str, "%Y-%m-%dT%H:%M:%S.%f").replace(tzinfo=dt.timezone.utc)      
+            epoch_val = dt_obj.timestamp()
+            frame['frame.time_epoch'] = str(epoch_val)
+            
+    except Exception as e:
+        print(f"⚠️ Warning sanitizing timestamp: {e}")
 
 def main():
 
@@ -418,6 +436,8 @@ def main():
         except json.JSONDecodeError:
             consumer.commit_msg(msg)
             continue
+        
+        sanitize_packet_timestamp(packet_dict)
 
         writer.enqueue_packet(
             packet_dict,
