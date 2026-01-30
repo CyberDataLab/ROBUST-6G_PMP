@@ -35,7 +35,8 @@ class cmd_parser:
         "collection_module":    ["fluentd", "telegraf", "tshark", "falco", "info"],
         "flow_module":          ["flow_module"],
         "db_module":            ["mongodb"],
-        "aggregation_module":   ["prometheus", "opensearch"], 
+        "aggregation_module":   ["prometheus", "opensearch"],
+        "thingsboard_module":   ["alert_collector"],
     }
 
     def __init__(self) -> None:
