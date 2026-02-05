@@ -13,6 +13,7 @@ RUN pip install --no-cache-dir \
 # App files
 COPY ThingsBoard_Collector_Module/Scripts/thingsboard_api.py /app/thingsboard_api.py
 COPY ThingsBoard_Collector_Module/Scripts/api_server.py /app/api_server.py
+COPY ThingsBoard_Collector_Module/Scripts/utils.py /app/utils.py
 
 # Create non-root user for security
 RUN useradd -m -u 1000 tbcollector && \

@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
 """
-ThingsBoard API client for retrieving device alarms and telemetry.
+ThingsBoard API client for retrieving device alarms.
 """
 
 import requests
 import logging
 import time
-from typing import Optional, Dict, List
+from typing import Optional, Dict
 from datetime import datetime
 
 logger = logging.getLogger(__name__)
@@ -138,37 +138,7 @@ class ThingsBoardClient:
                 return None
         
         return None
-    
-    def get_device_id_by_name(self, device_name: str) -> Optional[str]:
-        """
-        Retrieve Device ID by device name.
-        
-        Args:
-            device_name: Name of the device in ThingsBoard
-            
-        Returns:
-            Device ID (UUID) or None if not found
-        """
-        def _request():
-            url = f"{self.base_url}/api/tenant/devices"
-            params = {"deviceName": device_name}
-            headers = {"X-Authorization": f"Bearer {self.token}"}
-            return self.session.get(url, params=params, headers=headers, verify=False, timeout=10)
-        
-        data = self._handle_request_with_retry(_request)
-        
-        if not data:
-            return None
-        
-        devices = data.get("data", [])
-        if not devices:
-            logger.warning(f"⚠️  Device '{device_name}' not found")
-            return None
-        
-        device_id = devices[0].get("id", {}).get("id")
-        logger.info(f"✅ Device ID found: {device_id}")
-        return device_id
-    
+       
     def get_alarms(self, entity_id: str, entity_type: str = "DEVICE", 
                    status: str = "ACTIVE_UNACK", page_size: int = 50,
                    start_ts: Optional[int] = None, end_ts: Optional[int] = None) -> Optional[Dict]:
@@ -211,53 +181,39 @@ class ThingsBoardClient:
         
         return data
     
-    def get_telemetry(self, entity_id: str, entity_type: str = "DEVICE",
-                      keys: Optional[List[str]] = None, 
-                      start_ts: Optional[int] = None, 
-                      end_ts: Optional[int] = None) -> Optional[Dict]:
+    def validate_device_exists(self, entity_id: str, entity_type: str = "DEVICE") -> bool:
         """
-        Retrieve telemetry data for a specific entity.
+        Validates if a device exists in ThingsBoard by attempting to fetch its attributes.
         
         Args:
-            entity_id: Entity UUID
+            entity_id: Entity UUID to validate
             entity_type: Type of entity (DEVICE, ASSET, etc.)
-            keys: List of telemetry keys to retrieve (None = all)
-            start_ts: Start timestamp in milliseconds
-            end_ts: End timestamp in milliseconds
             
         Returns:
-            JSON response with telemetry data or None if request fails
+            True if the device exists, False otherwise
         """
         def _request():
-            url = f"{self.base_url}/api/plugins/telemetry/{entity_type}/{entity_id}/values/timeseries"
-            params = {}
-            
-            if keys:
-                params["keys"] = ",".join(keys)
-            if start_ts:
-                params["startTs"] = start_ts
-            if end_ts:
-                params["endTs"] = end_ts
-            
+            url = f"{self.base_url}/api/plugins/telemetry/{entity_type}/{entity_id}/values/attributes"
             headers = {"X-Authorization": f"Bearer {self.token}"}
-            return self.session.get(url, params=params, headers=headers, verify=False, timeout=10)
+            return self.session.get(url, headers=headers, verify=False, timeout=10)
         
-        data = self._handle_request_with_retry(_request)
-        
-        if data:
-            logger.info(f"✅ Retrieved telemetry data for entity {entity_id}")
-        
-        return data
-
-
-def datetime_to_epoch_ms(dt: datetime) -> int:
-    """
-    Convert datetime object to epoch timestamp in milliseconds.
-    
-    Args:
-        dt: datetime object
-        
-    Returns:
-        Timestamp in milliseconds
-    """
-    return int(dt.timestamp() * 1000)
+        try:
+            if not self._ensure_authenticated():
+                logger.error("Failed to authenticate before validation")
+                return False
+            
+            response = _request()
+            
+            if response.status_code == 200:
+                logger.debug(f"✅ Device {entity_id} exists in ThingsBoard")
+                return True
+            elif response.status_code == 404:
+                logger.warning(f"❌ Device {entity_id} not found in ThingsBoard")
+                return False
+            else:
+                logger.error(f"Unexpected status code {response.status_code} when validating device {entity_id}")
+                return False
+                
+        except requests.exceptions.RequestException as e:
+            logger.error(f"Network error validating device {entity_id}: {e}")
+            return False
