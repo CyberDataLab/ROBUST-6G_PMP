@@ -9,7 +9,7 @@ import logging
 import hashlib
 import threading
 from datetime import datetime, timezone
-from typing import Dict, Set, Optional
+from typing import Dict, Set
 from confluent_kafka import Producer, KafkaException
 from confluent_kafka.admin import AdminClient, NewTopic
 
