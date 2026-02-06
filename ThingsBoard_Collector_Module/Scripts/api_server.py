@@ -488,10 +488,14 @@ def monitoring_status():
         with active_devices_lock:
             status = {}
             for entity_id, info in active_devices.items():
+                t = info.get('thread')
+                is_alive = bool(t and t.is_alive())
+
                 status[entity_id] = {
                     "started_at": info['started_at'].isoformat(),
                     "last_poll": info['last_poll'].isoformat() if info['last_poll'] else None,
-                    "is_alive": info['thread'].is_alive(),
+                    "is_alive": is_alive,
+                    "status": info.get('status', None),
                     "total_polls": info['total_polls'],
                     "total_alarms_sent": info['total_alarms_sent'],
                     "kafka_topic": info['kafka_topic'],
@@ -521,17 +525,27 @@ def health_check():
     """
     with active_devices_lock:
         active_count = len(active_devices)
-        alive_threads = sum(1 for info in active_devices.values() if info['thread'].is_alive())
-    
+        alive_threads = sum(
+            1 for info in active_devices.values()
+            if info.get('thread') and info['thread'].is_alive()
+        )
+
+    # Cuenta real de threads "monitor-*" vivos en el proceso (detecta huérfanos)
+    monitor_threads_alive = sum(
+        1 for t in threading.enumerate()
+        if t.name.startswith("monitor-") and t.is_alive()
+    )
+
     return jsonify({
         "status": "healthy",
         "service": "ThingsBoard Collector",
         "kafka_bootstrap": KAFKA_BOOTSTRAP,
         "active_devices": active_count,
-        "alive_threads": alive_threads,
+        "alive_threads": alive_threads,  # threads vivos que SIGUES trackeando
+        "monitor_threads_alive": monitor_threads_alive,  # threads "monitor-*" vivos reales
+        "orphan_monitor_threads": max(0, monitor_threads_alive - alive_threads),
         "max_devices": MAX_CONCURRENT_DEVICES
     }), 200
-
 
 if __name__ == '__main__':
     import urllib3
