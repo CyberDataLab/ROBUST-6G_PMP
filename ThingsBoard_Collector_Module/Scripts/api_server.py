@@ -9,7 +9,6 @@ import logging
 import signal
 import sys
 import threading
-from datetime import datetime, timezone
 from typing import Dict
 from flask import Flask, request, jsonify
 
@@ -530,7 +529,6 @@ def health_check():
             if info.get('thread') and info['thread'].is_alive()
         )
 
-    # Cuenta real de threads "monitor-*" vivos en el proceso (detecta huérfanos)
     monitor_threads_alive = sum(
         1 for t in threading.enumerate()
         if t.name.startswith("monitor-") and t.is_alive()
@@ -541,8 +539,8 @@ def health_check():
         "service": "ThingsBoard Collector",
         "kafka_bootstrap": KAFKA_BOOTSTRAP,
         "active_devices": active_count,
-        "alive_threads": alive_threads,  # threads vivos que SIGUES trackeando
-        "monitor_threads_alive": monitor_threads_alive,  # threads "monitor-*" vivos reales
+        "alive_threads": alive_threads, 
+        "monitor_threads_alive": monitor_threads_alive,
         "orphan_monitor_threads": max(0, monitor_threads_alive - alive_threads),
         "max_devices": MAX_CONCURRENT_DEVICES
     }), 200

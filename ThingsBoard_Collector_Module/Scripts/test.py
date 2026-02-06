@@ -325,7 +325,7 @@ def main() -> int:
 
         #9b) Last check
         print_section("9b) Check /health until monitor_threads_alive == 0 and no orphans")
-        deadline = time.time() + 20  # segundos
+        deadline = time.time() + 20
         last_health = None
         while time.time() < deadline:
             h = get_health_json(session, base_url, args.timeout)

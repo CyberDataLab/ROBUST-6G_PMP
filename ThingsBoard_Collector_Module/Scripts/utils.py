@@ -9,7 +9,6 @@ import json
 import logging
 import hashlib
 import threading
-import time
 from datetime import datetime, timezone
 from collections import deque
 from typing import Dict, Set, Deque
@@ -175,7 +174,7 @@ def continuous_poll_device(config: Dict, stop_event: threading.Event,
                 active_devices[entity_id]['status'] = 'error'
         return
     
-    # Avoid duplicates - bounded memory (simple LRU)
+    # Avoid duplicates - bounded memory (simple LRU - Least Recently Used)
     seen_alarm_hashes: Set[str] = set()
     seen_alarm_hashes_queue: Deque[str] = deque()
     
@@ -274,7 +273,7 @@ def start_device_monitoring(entity_id: str, config: Dict, active_devices: Dict,
     """
     topic_name = f"thingsboard_{entity_id}"
     
-    # Step 1: Reserve slot INSIDE lock to prevent race condition
+    # Reserve slot INSIDE lock to prevent race condition
     with active_devices_lock:
         if entity_id in active_devices:
             existing = active_devices[entity_id]
@@ -303,10 +302,10 @@ def start_device_monitoring(entity_id: str, config: Dict, active_devices: Dict,
             "last_poll": None,
             "total_polls": 0,
             "total_alarms_sent": 0,
-            "status": "starting"  # Important: marks as reserved
+            "status": "starting"  # Marks as reserved
         }
     
-    # Step 2: Create Kafka topic OUTSIDE lock (can take time)
+    # Create Kafka topic OUTSIDE lock (can take time)
     if not ensure_kafka_topic(topic_name, kafka_bootstrap):
         # Failed to create topic, cleanup reservation (no thread yet)
         with active_devices_lock:
@@ -319,7 +318,7 @@ def start_device_monitoring(entity_id: str, config: Dict, active_devices: Dict,
             "message": f"Failed to create Kafka topic for device {entity_id}"
         }
     
-    # Step 2.5: If a stop was requested during startup, cancel before starting the thread
+    # If a stop was requested during startup, cancel before starting the thread
     with active_devices_lock:
         if entity_id not in active_devices:
             return {
@@ -343,7 +342,7 @@ def start_device_monitoring(entity_id: str, config: Dict, active_devices: Dict,
                 "kafka_topic": topic_name
             }
     
-    # Step 3: Create and start thread OUTSIDE lock (daemon=False for proper shutdown)
+    # Create and start thread OUTSIDE lock (daemon=False for proper shutdown)
     thread = threading.Thread(
         target=continuous_poll_device,
         args=(config, stop_event, active_devices, active_devices_lock,
@@ -353,7 +352,7 @@ def start_device_monitoring(entity_id: str, config: Dict, active_devices: Dict,
     )
     thread.start()
     
-    # Step 4: Update with thread reference INSIDE lock
+    # Update with thread reference INSIDE lock
     stop_requested = False
     with active_devices_lock:
         if entity_id in active_devices:
@@ -401,7 +400,7 @@ def stop_device_monitoring(entity_id: str, active_devices: Dict,
     Returns:
         Dictionary with status and details
     """
-    # Step 1: Extract info and signal stop INSIDE lock (quick operation)
+    # Extract info and signal stop INSIDE lock
     with active_devices_lock:
         if entity_id not in active_devices:
             return {
@@ -442,12 +441,12 @@ def stop_device_monitoring(entity_id: str, active_devices: Dict,
         total_polls = device_info['total_polls']
         total_alarms = device_info['total_alarms_sent']
     
-    # Step 2: Join OUTSIDE lock (blocking operation)
+    # Join OUTSIDE lock (blocking operation)
     if thread and thread.is_alive():
         logger.info(f"⏳ Waiting up to {timeout}s for device {entity_id} thread to stop...")
         thread.join(timeout=timeout)
     
-    # Step 3: Check if thread actually stopped and cleanup INSIDE lock
+    # Check if thread actually stopped and cleanup INSIDE lock
     with active_devices_lock:
         if entity_id not in active_devices:
             # Another thread already cleaned up
@@ -472,7 +471,7 @@ def stop_device_monitoring(entity_id: str, active_devices: Dict,
                 "warning": "Thread marked as timeout - will remain in tracking to prevent orphan"
             }
         
-        # Thread is confirmed dead OR was never started (startup canceled) - safe to delete
+        # Thread is confirmed dead OR was never started (startup canceled) -> safe to delete
         device_info = active_devices[entity_id]
         kafka_topic = device_info.get('kafka_topic')
         total_polls = device_info.get('total_polls', 0)
@@ -506,7 +505,6 @@ def shutdown_all_threads(active_devices: Dict, active_devices_lock: threading.Lo
     """
     logger.info("🛑 Shutting down all monitoring threads...")
     
-    # Get list of device IDs outside lock
     with active_devices_lock:
         device_ids = list(active_devices.keys())
     
