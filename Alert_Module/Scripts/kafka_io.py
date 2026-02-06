@@ -27,11 +27,11 @@ def get_bootstrap(override: Optional[str] = None) -> str:
     Resolution order:
     1) explicit argument (override),
     2) KAFKA_BOOTSTRAP environment variable,
-    3) default "kafka_robust6g:29092" (best within Docker).
+    3) default "kafka_robust6g-node1.lan:9094".
     """
     if override:
         return override
-    return os.getenv("KAFKA_BOOTSTRAP", "kafka_robust6g:29092")
+    return os.getenv("KAFKA_BOOTSTRAP", "kafka_robust6g-node1.lan:9094")
 
 DEFAULT_TOPIC_IN = os.getenv("KAFKA_TOPIC_IN", "tshark_traces")
 DEFAULT_TOPIC_OUT = os.getenv("KAFKA_TOPIC_OUT", "snort_alerts")

@@ -50,7 +50,7 @@ filebeat.inputs:
     fields_under_root: true
 
 output.kafka:
-  hosts: ["kafka_robust6g:29092"] # Internal broker to be used by containers -> need to be changed to kafka_robust6g-node1.lan:9094 if it is located in another machine
+  hosts: ["kafka_robust6g-node1.lan:9094"]
   topic: '%{[kafka_topic]}'
   compression: lz4
   required_acks: 1

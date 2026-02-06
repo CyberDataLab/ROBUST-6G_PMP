@@ -38,6 +38,8 @@ services:
     environment:
       - TZ=UTC
       - MACHINE_ID=${MACHINE_ID}
+    extra_hosts:
+      - "kafka_robust6g-node1.lan:host-gateway"
     volumes:
       - /proc:/host/proc:ro
       - /sys:/host/sys:ro
@@ -59,6 +61,8 @@ services:
       - kafka_robust6g
     environment:
       - TZ=UTC
+    extra_hosts:
+      - "kafka_robust6g-node1.lan:host-gateway"
     network_mode: "${NETWORK_MODE}" # Allows container to see host interfaces
     cap_add:
       # https://man7.org/linux/man-pages/man7/capabilities.7.html
@@ -85,6 +89,8 @@ services:
       - TZ=UTC
       - MACHINE_ID=${MACHINE_ID}
       - SKIP_DRIVER_LOADER=1
+    extra_hosts:
+      - "kafka_robust6g-node1.lan:host-gateway"
     network_mode: "${NETWORK_MODE}"
     cap_add:
       - SYS_PTRACE

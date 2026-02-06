@@ -16,11 +16,12 @@ services:
         condition: service_healthy
     environment:
       - TZ=UTC
-      - KAFKA_BOOTSTRAP=kafka_robust6g:29092            # same Docker network
+      - KAFKA_BOOTSTRAP=kafka_robust6g-node1.lan:9094            # same Docker network
       - KAFKA_ENABLE_AUTO_COMMIT=false
     # If host.docker.internal is used in Linux:
     extra_hosts:
       - "host.docker.internal:host-gateway"
+      - "kafka_robust6g-node1.lan:host-gateway"
     volumes:
       - ${PFD}/Results/Flows:/home/Flow_Module/Results/Flows
       - ${PFD}/Results/Traces_Flow_Module:/home/Flow_Module/Scripts/Parsing/PCAP_Files/

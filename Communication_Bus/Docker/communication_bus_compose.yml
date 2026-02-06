@@ -52,6 +52,8 @@ services:
       - kafka_robust6g
     environment:
       - TZ=UTC
+    extra_hosts:
+      - "kafka_robust6g-node1.lan:host-gateway"
     volumes:
       - ${PFD}/Communication_Bus/Configuration_Files/filebeat.yml:/usr/share/filebeat/filebeat.yml:ro
       - ${PFD}/Results/fluentd_logs:/fluentd/log:ro

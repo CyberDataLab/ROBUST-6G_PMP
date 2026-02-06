@@ -14,10 +14,11 @@ services:
         condition: service_healthy
     environment:
       - TZ=UTC
-      - KAFKA_BOOTSTRAP=kafka_robust6g:29092            # same Docker network
+      - KAFKA_BOOTSTRAP=kafka_robust6g-node1.lan:9094
     # If host.docker.internal is used in Linux:
     extra_hosts:
       - "host.docker.internal:host-gateway"
+      - "kafka_robust6g-node1.lan:host-gateway"
     cap_add:
       - NET_ADMIN
       - NET_RAW
