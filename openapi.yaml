@@ -20,9 +20,11 @@ tags:
   
   - name: HistoricalDataRetrieval
     description: API for retrieving historical data, including logs, health metrics, and network traces.
-  
-  - name: PodThingsboard
-    description: API for interacting with the Pod Thingsboard to deploy the tools needed.
+
+
+servers:
+  - url: http://localhost:5000
+    description: Local / default environmen
 
 paths:
   /ConfigurationManager/DeployNetworkTool:
@@ -53,15 +55,21 @@ paths:
                   items:
                     type: string
                     description: "Sigma rules generated from the SSLA by the Security Orchestrator."
-
+                configuration:
+                  type: array
+                  items:
+                    type: string
+                    description: "Configuration in JSON format from the ZTSO"
+                  examples:
+                    - 
+                      - TSHARK_BASE_TOPIC: tshark_traces
               required:
                 - podIP
                 - interface
                 - toolName
-                - sigma_rules
       responses:
         '200':
-          description: OK
+          description: "Request successfully. You can collect the information in IP:Port -> kafka_robust6g-node1.lan:9094"
   
   /ConfigurationManager/DeployInfrastructureTool: 
     post:
@@ -156,10 +164,37 @@ paths:
                   items:
                     type: string
                     description: "Sigma rules generated from the SSLA by the Security Orchestrator."
+                configuration:
+                  type: array
+                  items:
+                    type: string
+                    description: "Configuration in JSON format from the ZTSO"
+                  examples:
+                     -
+                     # Snort3 configuration
+                      - SNORT_KAFKA_TOPIC_OUT: "snort_alerts"
+                      - SNORT_ALERT_TAP_IFACE: "tap0"
+                      - SNORT_KAFKA_MESSAGE_FIELD: "_source"
+                      - SNORT_CONSUMER_KAFKA_AUTO_OFFSET_RESET: "earliest"
+                      - SNORT_CONSUMER_KAFKA_ENABLE_AUTO_COMMIT: true
+                      - SNORT_CONSUMER_KAFKA_PARTITION_ASSIGNMENT_STRATEGY: "cooperative-sticky"
+                      - SNORT_CONSUMER_KAFKA_ENABLE_PARTITION_EOF: true
+                      - SNORT_CONSUMER_KAFKA_ALLOW_AUTO_CREATE_TOPICS: true
+                      - SNORT_CONSUMER_FETCH_MIN_BYTES:  1048576
+                      - SNORT_CONSUMER_FETCH_WAIT_MAX_MS:  50
+                      - SNORT_CONSUMER_QUEUED_MAX_MESSAGES_KBYTE:  262144
+                      - SNORT_CONSUMER_MAX_POLL_INTERVAL_MS: 900000
+                      - SNORT_CONSUMER_SESSION_TIMEOUT_MS: 10000
+                      - SNORT_PRODUCER_KAFKA_PRODUCER_LINGER_MS: 5
+                      - SNORT_PRODUCER_BATCH_NUM_MESSAGES: 10000
+                      - SNORT_PRODUCER_KAFKA_PRODUCER_BATCH_SIZE: 32768
+                      - SNORT_PRODUCER_KAFKA_PRODUCER_COMPRESSION: "zstd"
               required:
                 - podIP
                 - toolName
-                - sigma_rules
+      responses:
+        '200':
+          description: "Request successfully. You can collect the information in IP:Port -> kafka_robust6g-node1.lan:9094"
 
   /ConfigurationManager/getConfigurationOptions:
     get:
@@ -188,7 +223,7 @@ paths:
                     description: "List of options. Can be one or more options"
                     items:
                       type: string
-                    example:
+                    examples:
                       - "memory"
                       - "disk"
                       - "cpu"
@@ -917,135 +952,146 @@ paths:
                       
   /ConfigurationManagerThingsboard/collectDataFromThingsboard:
     post:
-      tags:
-        - ConfigurationManagerThingsboard
-      summary: "Security Orchestrator - Security Orchestrator request for PMP to trigger Thingsboard data collection."
-      description: "This endpoint allows the NXW Security Orchestrator to request the PMP to trigger data collection from Thingsboard."
-      operationId: "collectDataFromThingsboard"
+      tags: [ConfigurationManagerThingsboard]
+      summary: Start continuous monitoring for one or multiple devices
+      operationId: collectDataFromThingsboard
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              type: object
-              properties:
-                thingsboardsIP:
-                  type: string
-                  description: "IP address of the Thingsboard instance from which data will be collected"
-                thingsboardPort:
-                  type: integer
-                  description: "Port number of the Thingsboard instance"
-                entityId:
-                  type: string
-                  description: "A string value representing the entity id. For example, '784f394c-42b6-435a-983c-b7beff2784f9'."
-                entityType:
-                  type: string
-                  description: "A string value representing the entity type"
-                  default: "DEVICE"
-                timestampInit:
-                  type: string
-                  format: date-time
-                  description: "Timestamp of start of the information generated by Thingsboard"
-                timestampEnd:
-                  type: string
-                  format: date-time
-                  description: "Timestamp of end of the information generated by Thingsboard"
-
-              required:
-                - thingsboardsIP
-                - thingsboardPort
-                - entityId
-                - entityType
-      responses:
-        '200':
-          description: OK
-
-  /PodThingsboard/deployTool:
-    post:
-      tags:
-        - PodThingsboard
-      summary: "PMP - Request to deploy a tool on the Thingsboard pod"
-      description: "This endpoint allows the PMP to request the deployment of a tool on the Thingsboard pod."
-      operationId: "deployTool"
-      requestBody:
-        required: true
-        content:
-          multipart/form-data:
-            schema:
-              type: object
-              properties:
-                containerFiles:
-                  type: array
-                  items:
-                    type: string
-                    format: binary
-                  description: "Files containing the tool to be deployed on the Thingsboard pod"
-                communicationBusSocket:
-                  type: string
-                  description: "Communication Bus Socket implemented in the PMP to send the information from the tool deployed in the Thingsboard pod to the PMP."
-              required:
-                - containerFiles
-                - communicationBusSocket   
-      responses:
-        '200':
-          description: OK
-
-  /PodThingsboard/getCurrentToolsDeployed:
-    get:
-      tags:
-        - PodThingsboard
-      summary: "PMP - Request to know which tools are currently deployed"
-      description: "This endpoint allows the PMP to request the names of the tools deployed in the Thingsboard pod"
-      operationId: "getCurrentToolsDeployed"
+              $ref: "#/components/schemas/CollectDataRequest"
       responses:
         "200":
-          description: "The GetConfiguration request has been processed successfully"
+          description: Successfully processed
           content:
             application/json:
               schema:
-                type: object
-                properties:
-                  toolsDeployed:
-                    type: array
-                    description: "The tools deployed."
-                    items:
-                      type: string
-                    example:
-                      - "Fluentd"
-                      - "Falco"
-                      - "Telegraf"
-                      - "Tshark"
-                      - "Filebeat"
+                $ref: "#/components/schemas/CollectDataResponse"
+        "400":
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Device(s) not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CollectNotFoundResponse"
+        "429":
+          description: Maximum number of concurrent devices reached
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "500":
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
 
-  /PodThingsboard/setCurrentConfiguration:
-    put:
-      tags:
-        - PodThingsboard
-      summary: "PMP - Request to update the current configuration of a tool deployed in Thingsboard pod"
-      description: "This endpoint allows the PMP to update the configuration of a tool on the Thingsboard pod."
-      operationId: "setCurrentConfiguration"
+  /ConfigurationManagerThingsboard/stopMonitoring:
+    post:
+      tags: [ConfigurationManagerThingsboard]
+      summary: Stop monitoring for one or multiple devices
+      operationId: stopMonitoring
       requestBody:
         required: true
         content:
-          multipart/form-data:
+          application/json:
             schema:
-              type: object
-              properties:
-                containerFiles:
-                  type: array
-                  items:
-                    type: string
-                    format: binary
-                  description: "Files containing the tool to be deployed on the Thingsboard pod"
-                toolName:
-                  type: string
-                  description: "Name of the tool to be update"
-              required:
-                - containerFiles
-                - toolName
+              $ref: "#/components/schemas/StopMonitoringRequest"
       responses:
-        '200':
-          description: OK  
+        "200":
+          description: Successfully processed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StopMonitoringResponse"
+        "400":
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "500":
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /ConfigurationManagerThingsboard/stopAllMonitoring:
+    post:
+      tags: [ConfigurationManagerThingsboard]
+      summary: Stop monitoring for ALL active devices
+      operationId: stopAllMonitoring
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/StopAllMonitoringRequest"
+      responses:
+        "200":
+          description: Successfully processed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StopAllMonitoringResponse"
+        "400":
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "500":
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /ConfigurationManagerThingsboard/monitoringStatus:
+    get:
+      tags: [ConfigurationManagerThingsboard]
+      summary: Retrieve the status of monitored devices
+      operationId: monitoringStatus
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MonitoringStatusResponse"
+        "500":
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /health:
+    get:
+      tags: [ConfigurationManagerThingsboard]
+      summary: Service health check endpoint
+      operationId: healthCheck
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthResponse"
 
 components:
   schemas:
@@ -1134,3 +1180,337 @@ components:
               type: string
               format: binary
               description: "The JSON configuration file for the tool."
+    CollectDataRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - thingsboardsIP
+        - thingsboardPort
+        - entityType
+      properties:
+        thingsboardsIP:
+          type: string
+          description: ThingsBoard server IP or hostname
+        thingsboardPort:
+          type: integer
+          minimum: 1
+          maximum: 65535
+          description: ThingsBoard server port
+        entityType:
+          type: string
+          default: DEVICE
+          description: Entity type (typically DEVICE)
+        entityId:
+          type: string
+          description: Single device ID (mutually exclusive with entityIds)
+        entityIds:
+          type: array
+          minItems: 1
+          description: Multiple device IDs (mutually exclusive with entityId)
+          items:
+            type: string
+      oneOf:
+        - required: [entityId]
+          not:
+            required: [entityIds]
+        - required: [entityIds]
+          not:
+            required: [entityId]
+
+    StopMonitoringRequest:
+      type: object
+      additionalProperties: false
+      properties:
+        entityId:
+          type: string
+          description: Single device ID
+        entityIds:
+          type: array
+          minItems: 1
+          description: Multiple device IDs
+          items:
+            type: string
+      oneOf:
+        - required: [entityId]
+          not:
+            required: [entityIds]
+        - required: [entityIds]
+          not:
+            required: [entityId]
+
+    StopAllMonitoringRequest:
+      type: object
+      additionalProperties: false
+      required: [confirm]
+      properties:
+        confirm:
+          type: boolean
+          description: Must be true to confirm stopping all devices
+
+    CollectDataResponse:
+      type: object
+      required: [message, summary, results]
+      properties:
+        message:
+          type: string
+        summary:
+          $ref: "#/components/schemas/CollectSummary"
+        results:
+          type: array
+          items:
+            $ref: "#/components/schemas/CollectResultItem"
+
+    CollectSummary:
+      type: object
+      additionalProperties: false
+      required:
+        - total
+        - success
+        - already_monitoring
+        - canceled
+        - errors
+      properties:
+        total:
+          type: integer
+        success:
+          type: integer
+        already_monitoring:
+          type: integer
+        canceled:
+          type: integer
+        errors:
+          type: integer
+
+    CollectResultItem:
+      type: object
+      additionalProperties: false
+      required:
+        - entity_id
+        - status
+        - message
+      properties:
+        entity_id:
+          type: string
+        status:
+          type: string
+          enum:
+            - success
+            - already_monitoring
+            - error
+            - canceled
+        message:
+          type: string
+        kafka_topic:
+          type: string
+          description: Associated Kafka topic (when applicable)
+
+    StopMonitoringResponse:
+      type: object
+      required: [message, summary, results]
+      properties:
+        message:
+          type: string
+        summary:
+          $ref: "#/components/schemas/StopSummary"
+        results:
+          type: array
+          items:
+            $ref: "#/components/schemas/StopResultItem"
+
+    StopAllMonitoringResponse:
+      type: object
+      required: [message, summary, results]
+      properties:
+        message:
+          type: string
+        summary:
+          $ref: "#/components/schemas/StopSummary"
+        results:
+          type: array
+          items:
+            $ref: "#/components/schemas/StopResultItem"
+
+    StopSummary:
+      type: object
+      additionalProperties: false
+      required:
+        - total
+        - success
+        - not_found
+        - already_stopping
+        - stopping
+        - timeout
+        - errors
+      properties:
+        total:
+          type: integer
+        success:
+          type: integer
+        not_found:
+          type: integer
+        already_stopping:
+          type: integer
+        stopping:
+          type: integer
+        timeout:
+          type: integer
+        errors:
+          type: integer
+
+    StopResultItem:
+      type: object
+      additionalProperties: false
+      required:
+        - entity_id
+        - status
+        - message
+      properties:
+        entity_id:
+          type: string
+        status:
+          type: string
+          enum:
+            - success
+            - not_found
+            - already_stopping
+            - stopping
+            - timeout
+            - error
+        message:
+          type: string
+        kafka_topic:
+          type: string
+        warning:
+          type: string
+        statistics:
+          $ref: "#/components/schemas/StopStatistics"
+
+    StopStatistics:
+      type: object
+      additionalProperties: false
+      required:
+        - total_polls
+        - total_alarms_sent
+      properties:
+        total_polls:
+          type: integer
+        total_alarms_sent:
+          type: integer
+
+    MonitoringStatusResponse:
+      type: object
+      required:
+        - active_devices
+        - max_devices
+        - poll_interval_seconds
+        - devices
+      properties:
+        active_devices:
+          type: integer
+        max_devices:
+          type: integer
+        poll_interval_seconds:
+          type: integer
+        devices:
+          type: object
+          additionalProperties:
+            $ref: "#/components/schemas/DeviceStatus"
+
+    DeviceStatus:
+      type: object
+      required:
+        - started_at
+        - last_poll
+        - is_alive
+        - status
+        - total_polls
+        - total_alarms_sent
+        - kafka_topic
+        - config
+      properties:
+        started_at:
+          type: string
+          format: date-time
+        last_poll:
+          type: string
+          nullable: true
+          format: date-time
+        is_alive:
+          type: boolean
+        status:
+          type: string
+          nullable: true
+        total_polls:
+          type: integer
+        total_alarms_sent:
+          type: integer
+        kafka_topic:
+          type: string
+        config:
+          type: object
+          required:
+            - thingsboardsIP
+            - thingsboardPort
+            - entityType
+          properties:
+            thingsboardsIP:
+              type: string
+            thingsboardPort:
+              type: integer
+            entityType:
+              type: string
+
+    HealthResponse:
+      type: object
+      required:
+        - status
+        - service
+        - kafka_bootstrap
+        - active_devices
+        - alive_threads
+        - monitor_threads_alive
+        - orphan_monitor_threads
+        - max_devices
+      properties:
+        status:
+          type: string
+        service:
+          type: string
+        kafka_bootstrap:
+          type: string
+        active_devices:
+          type: integer
+        alive_threads:
+          type: integer
+        monitor_threads_alive:
+          type: integer
+        orphan_monitor_threads:
+          type: integer
+        max_devices:
+          type: integer
+
+    ErrorResponse:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: string
+
+    CollectNotFoundResponse:
+      type: object
+      required:
+        - error
+        - validation_errors
+      properties:
+        error:
+          type: string
+        validation_errors:
+          type: array
+          items:
+            type: object
+            required: [entity_id, error]
+            properties:
+              entity_id:
+                type: string
+              error:
+                type: string
