@@ -16,7 +16,7 @@ PFD = Path(__file__).resolve().parent  # /home/Alert_Module in container
 
 SNORT_CONFIG_DIR = PFD / "Snort_configuration"
 SNORT_LUA = str(SNORT_CONFIG_DIR / "lua" / "snort.lua")
-SNORT_RULES = str(SNORT_CONFIG_DIR / "Rules" / "alert_rules.rules")
+SNORT_RULES = str(SNORT_CONFIG_DIR / "Rules" / "snort3_community.rules")#"alert_rules.rules")
 ALERT_DIR = str(PFD / "Alerts")
 ALERT_FILE = "alert_json"
 ALERT_PATH = os.path.join(ALERT_DIR, f"{ALERT_FILE}.txt")

@@ -183,9 +183,11 @@ def main():
 
     signal.signal(signal.SIGTERM, _graceful_exit)
     signal.signal(signal.SIGINT,  _graceful_exit)
-
     interfaces   = get_interfaces()
+    print("Launching Tshark...", flush=True)
+    print(f"Selected interfaces: {interfaces}", flush=True)
     command = build_tshark_command(interfaces)
+    print(f"Command launched: {command}",flush=True)
 
     proc, output_file = run_tshark(command)
 

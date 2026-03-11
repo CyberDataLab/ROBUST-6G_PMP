@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 
+import os
 import subprocess
 import platform
 import sys
@@ -10,7 +11,7 @@ import argparse
 import socket
 
 from collections import OrderedDict
-from typing import Dict, List, Tuple, Optional
+from typing import Dict, Iterable, List, Tuple, Optional
 
 class cmd_parser:
     """
@@ -34,9 +35,9 @@ class cmd_parser:
         "communication_module": ["kafka", "filebeat"],
         "collection_module":    ["fluentd", "telegraf", "tshark", "falco", "info"],
         "flow_module":          ["flow_module"],
-        "db_module":            ["mongodb"],
+        "db_module":            ["mongodb", "redis"],
         "aggregation_module":   ["prometheus", "opensearch"],
-        "thingsboard_module":   ["alert_collector"],
+        "thingsboard_module":   ["alarm_collector"],
     }
 
     def __init__(self) -> None:
@@ -191,6 +192,7 @@ class cmd_parser:
             selected[m] = expanded
         return selected
 
+
 def detect_os():
     """
     Detect the host operating system and return a network mode string.
@@ -209,7 +211,7 @@ def detect_os():
         return "error"
 
 def generate_secure_password(length=20):
-    alphabet = string.ascii_letters + string.digits + "!@#%^&*"
+    alphabet = string.ascii_letters + string.digits + "!@%^&*"
     while True:
         password = ''.join(secrets.choice(alphabet) for i in range(length))
         if (any(c.islower() for c in password)
@@ -218,13 +220,13 @@ def generate_secure_password(length=20):
                 and any(c in "!@#%^&*" for c in password)):
             return password
 
-def get_existing_password(env_path: Path) -> Optional[str]:
+def get_existing_password(env_path: Path, password_tool: str) -> Optional[str]:
     if not env_path.exists():
         return None
     try:
         with open(env_path, "r", encoding="utf-8") as f:
             for line in f:
-                if line.startswith("OPENSEARCH_PASSWORD="):
+                if line.startswith(password_tool):
                     return line.strip().split("=", 1)[1]
     except Exception:
         return None
@@ -247,6 +249,73 @@ def get_host_ip():
         # Fallback only if absolutely no network is available
         return "127.0.0.1"
 
+def collect_env_vars(
+    selected: "OrderedDict[str, List[str]]",
+    tool_env_vars: Dict[str, List[str]],
+    always_env_vars: Optional[List[str]] = None
+) -> List[str]:
+    """
+    Devuelve una lista ordenada (sin duplicados) de env vars requeridas por
+    las tools activas en `selected`, más las variables comunes que siempre
+    deben existir.
+    """
+    seen = set()
+    out: List[str] = []
+
+    if always_env_vars:
+        for env_key in always_env_vars:
+            if env_key not in seen:
+                seen.add(env_key)
+                out.append(env_key)
+
+    for modules, tools in selected.items():
+        for tool in tools:
+            for env_key in tool_env_vars.get(tool, []):
+                if env_key not in seen:
+                    seen.add(env_key)
+                    out.append(env_key)
+
+    return out
+
+
+def write_dotenv(
+    env_keys: Iterable[str],
+    path: str | Path,
+    defaults: Optional[Dict[str, str]] = None,
+    header: str = ""
+) -> Path:
+    """
+    Escribe un fichero .env con las claves en `env_keys`.
+    Si `defaults` tiene valor para la clave, se usa; si no, se deja vacío.
+    """
+    env_path = Path(path)
+
+    lines: List[str] = []
+    if header:
+        lines.append(header.rstrip("\n"))
+
+    for key in env_keys:
+        raw_value = "" if defaults is None else defaults.get(key, "")
+        value = str(raw_value)
+
+        if any(c.isspace() for c in value) or any(c in value for c in ['"', "'"]):
+            value = value.replace('"', '\\"')
+            lines.append(f'{key}="{value}"')
+        else:
+            lines.append(f"{key}={value}")
+
+    if env_path.exists():
+        try:
+           os.remove(env_path)
+           print(f"File {env_path} removed")
+        except PermissionError:
+            print(f"Insuficient permissions to remove file: {env_path}")
+        except Exception as e:
+            print(f"Error removing file {env_path}: {e}")
+
+    env_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    return env_path
+
 def main():
     try:
         LFD = Path(__file__).resolve().parent 
@@ -260,36 +329,14 @@ def main():
         return
 
     network_mode = detect_os()
-    
-    # LOGIC: Define Architecture via Environment Variable
-    # In Host mode (Linux) -> Real LAN IP, NOT localhost.
-    # In Bridge mode ->  internal docker OpenSearch service name.
-    if network_mode == "host":
-        opensearch_host = get_host_ip()
-        print(f"[+] Host Network detected. Using LAN IP for OpenSearch: {opensearch_host}")
-    else:
-        opensearch_host = "opensearch-node"
-        print(f"[+] Bridge Network detected. Using internal DNS: {opensearch_host}")
-
+    container_timezone="UTC"
     parser = cmd_parser()
     args, selected = parser.parse()
+    # If a collection_module has been activated, then device_info is also included
+    if "collection_module" in selected:
+        selected['collection_module'].append("info")
 
     compose_profiles_list = parser.build_compose_profiles(selected)
-    telegraf = "0"
-    fluentd = "0"
-    falco = "0"
-    
-    if "collection_module.telegraf" in compose_profiles_list:
-        telegraf = "1"
-    if "collection_module.fluentd" in compose_profiles_list:
-        fluentd = "1"
-    if "collection_module.falco" in compose_profiles_list:
-        falco = "1"
-
-    # Only activate the info_device microservice if Prometheus is requested
-    if "aggregation_module" in compose_profiles_list:
-        compose_profiles_list.append("collection_module.info")
-
     compose_profiles = ",".join(compose_profiles_list)
     print("Selected:", selected)
     print("COMPOSE_PROFILES:", compose_profiles_list)
@@ -299,26 +346,400 @@ def main():
     PFD = Path(__file__).resolve().parent.parent 
     env_file_path = LFD / ".env"
 
-    opensearch_pass = get_existing_password(env_file_path)
-    if not opensearch_pass:
-        print("[*] Generating new secure password for OpenSearch...")
-        opensearch_pass = generate_secure_password()
+    # Kafka topics
+    tshark_base_topic = "tshark_traces"
+    fluentd_syslog_base_topic = "syslog_logs"
+    fluentd_systemd_base_topic = "systemd_logs"
+    falco_base_topic = "falco_events"
+    telegraf_base_topic = "telegraf_metrics"
+    cic_kafka_base_topic_out = "cic_flow"
+    snort_kafka_topic_out = "snort_alerts"
+    # Telegraf
+    enable_telegraf= "1"
+    telegraf_to_prometheus_port= "9273"
+    telegraf_general_interval= "30s"
+    # Fluentd
+    enable_fluentd= "1"
+    fluentd_to_prometheus_port= "24231"
+    fluentd_internal_port= "24220"
+    # Falco
+    enable_falco= "1"
+    # Info
+    device_info_port="9999"
+    # Kafka
+    kafka_lan_hostname= "kafka_robust6g-node1.lan"
+    kafka_port_external_lan= "9094"
+    kafka_bootstrap= kafka_lan_hostname + ":" + kafka_port_external_lan
+    kafka_port_internal= "29092"
+    kafka_log_retention_ms= "86400000"
+    kafka_log_retention_bytes= "1073741824"
+    kafka_log_cleanup_policy= "delete"
+    kafka_log_segment_bytes= "268435456"
+    kafka_log_roll_ms= "3600000"
+    # Filebeat
+    filebeat_bulk_max_size= "4096"
+    filebeat_compresion= "lz4"
+    # Prometheus
+    prometheus_port= "9090"
+    discovery_agent_scan_port = device_info_port
+    discovery_agent_scan_timeout= "0.2"
+    discovery_agent_refresh_interval= "30"
+    discovery_agent_port= "8100"
+    # opensearch
+    opensearch_password= get_existing_password(env_path=env_file_path,password_tool="OPENSEARCH_PASSWORD=")
+    if not opensearch_password:
+        opensearch_password = generate_secure_password()
+    # In Host mode (Linux) -> Real LAN IP, NOT localhost.
+    # In Bridge mode ->  internal docker OpenSearch service name.
+    if network_mode == "host":
+        opensearch_host = get_host_ip()
     else:
-        print("[*] Using existing OpenSearch password from .env")
+        opensearch_host = "opensearch-node"
+        print(f"[+] Bridge Network detected. Using internal DNS: {opensearch_host}")
+    opensearch_cluster_name= "robust6g-cluster"
+    opensearch_node_name= "opensearch"
+    opensearch_rest_api_port= "9200"
+    opensearch_analyser_port= "9600"
+    opensearch_dashboard_port= "5601"
+    # mongodb
+    mongo_initdb_root_username= "admin"   
+    mongo_initdb_root_password= get_existing_password(env_path=env_file_path,password_tool="MONGO_INITDB_ROOT_PASSWORD=")
+    if not mongo_initdb_root_password:
+        mongo_initdb_root_password = generate_secure_password()
+    mongo_port= "27017"
+    mongo_uri= f"mongodb://{mongo_initdb_root_username}:{mongo_initdb_root_password}@mongodb:{mongo_port}/"
+    # RedisDB
+    redis_host= "redis_robust6g"
+    redis_port= "6379"
+    redis_user= "0"
+    redis_password= "" 
+    #User and password by default, but uncomment the following lines at the future to generate
+    # a passwork and manage ACL Redis user/permissions
+    '''
+    redis_password= get_existing_password(env_path=env_file_path,password_tool="REDIS_PASSWORD=")
+    if not redis_password:
+        redis_password=generate_secure_password()
+    '''
+    redis_maxmemory_samples= "5"
+    redis_io_threads= "4"
+    redis_stream_node_max_bytes= "4096"
+    redis_stream_node_max_entries= "100"
+    redis_maxclients= "10000"
+    ktrw_kafka_auto_offset_reset= "latest"
+    ktrw_kafka_enable_auto_commit= "true"
+    ktrw_kafka_group_id= "redis-streamer"
+    ktrw_redis_max_stream_length= "1000"
+    ktrw_redis_stream_ttl_seconds= "21600"
+    ktrw_partition_assignment_strategy= "cooperative-sticky"
+    ktrw_session_timeout_ms= "10000"
+    ktrw_max_poll_interval_ms= "300000"
+    ktrw_kafka_topic_refresh_interval= "30"
+    ktrw_redis_cleanup_interval= "300"
+    ktrw_redis_retention_hours= "2"
+    ktrw_redis_emergency_retention_hours= "1"
+    ktrw_redis_memory_threshold= "0.85"
+    # Alert module
+    snort_kafka_group_id= "alert-module"
+    snort_kafka_topic_in= tshark_base_topic
+    snort_alert_tap_iface= "tap0"
+    snort_kafka_message_field= "_source"
+    snort_consumer_kafka_auto_offset_reset= "earliest"
+    snort_consumer_kafka_enable_auto_commit= "true"
+    snort_consumer_kafka_partition_assignment_strategy= "cooperative-sticky"
+    snort_consumer_kafka_enable_partition_eof= "true"
+    snort_consumer_kafka_allow_auto_create_topics= "true"
+    snort_consumer_fetch_min_bytes= "1048576"
+    snort_consumer_fetch_wait_max_ms= "50"
+    snort_consumer_queued_max_messages_kbytes= "262144"
+    snort_consumer_max_poll_interval_ms= "900000"
+    snort_consumer_session_timeout_ms= "10000"
+    snort_producer_kafka_producer_linger_ms= "5"
+    snort_producer_batch_num_messages= "10000"
+    snort_producer_kafka_producer_batch_size= "32768"
+    snort_producer_kafka_producer_compression= "zstd"
+    #NRTDR API
+    nrtdr_api_port= "8001"
+    if network_mode == "host":
+        nrtdr_api_host= get_host_ip()
+    else:
+        nrtdr_api_host="nrtdr_api"
+    nrtdr_ws_poll_interval= "0.5"
+    nrtdr_ws_batch_size= "10"
 
-    with open(env_file_path, "w", encoding="utf-8") as f:
-        f.write(f"MACHINE_ID={mid}\n")
-        f.write(f"NETWORK_MODE={network_mode}\n")
-        f.write(f"PFD={PFD}\n") 
-        f.write(f"COMPOSE_PROFILES={compose_profiles}\n")
-        f.write(f"ENABLE_TELEGRAF={telegraf}\n")
-        f.write(f"ENABLE_FLUENTD={fluentd}\n")
-        f.write(f"ENABLE_FALCO={falco}\n")
-        f.write(f"OPENSEARCH_PASSWORD={opensearch_pass}\n")
-        f.write(f"OPENSEARCH_HOST={opensearch_host}\n")
+    # Variables que siempre deben ir al .env aunque no dependan de una tool concreta
+    ALWAYS_ENV_VARS: List[str] = [
+        "MACHINE_ID",
+        "NETWORK_MODE",
+        "PFD",
+        "COMPOSE_PROFILES",
+        "TZ",
+        "KAFKA_BOOTSTRAP"
+    ]
+
+    # Herramienta -> nombres de variables que necesita
+    TOOL_ENV_VARS: Dict[str, List[str]] = {
+        # Data collection module
+        "telegraf": [
+            "ENABLE_TELEGRAF",
+            "TELEGRAF_TO_PROMETHEUS_PORT",
+            "TELEGRAF_BASE_TOPIC",
+            "TELEGRAF_GENERAL_INTERVAL",
+        ],
+        "tshark": [
+            "TSHARK_BASE_TOPIC",
+        ],
+        "fluentd": [
+            "ENABLE_FLUENTD",
+            "FLUENTD_TO_PROMETHEUS_PORT",
+            "FLUENTD_INTERNAL_PORT",
+            "FLUENTD_SYSLOG_BASE_TOPIC",
+            "FLUENTD_SYSTEMD_BASE_TOPIC",
+        ],
+        "falco": [
+            "ENABLE_FALCO",
+            "FALCO_BASE_TOPIC",
+        ],
+        "info": [
+            "DEVICE_INFO_PORT"
+        ],
+
+        # Communication bus
+        "kafka": [
+            "KAFKA_BOOTSTRAP",
+            "KAFKA_LAN_HOSTNAME",
+            "KAFKA_PORT_EXTERNAL_LAN",
+            "KAFKA_PORT_INTERNAL",
+            "KAFKA_LOG_RETENTION_MS",
+            "KAFKA_LOG_RETENTION_BYTES",
+            "KAFKA_LOG_CLEANUP_POLICY",
+            "KAFKA_LOG_SEGMENT_BYTES",
+            "KAFKA_LOG_ROLL_MS",
+        ],
+        "filebeat": [
+            "FILEBEAT_BULK_MAX_SIZE",
+            "FILEBEAT_COMPRESION",
+        ],
+
+        # Data Aggregation and Normalisation Module
+        "prometheus": [
+            "PROMETHEUS_PORT",
+            "DISCOVERY_AGENT_SCAN_PORT",
+            "DISCOVERY_AGENT_SCAN_TIMEOUT",
+            "DISCOVERY_AGENT_REFRESH_INTERVAL",
+            "DISCOVERY_AGENT_PORT",
+        ],
+
+        "opensearch": [
+            "OPENSEARCH_PASSWORD",
+            "OPENSEARCH_HOST",
+            "OPENSEARCH_CLUSTER_NAME",
+            "OPENSEARCH_NODE_NAME",
+            "OPENSEARCH_REST_API_PORT",
+            "OPENSEARCH_ANALYSER_PORT",
+            "OPENSEARCH_DASHBOARD_PORT",
+        ],
+
+        # Data base module
+        "mongodb": [
+            "MONGO_INITDB_ROOT_USERNAME",
+            "MONGO_INITDB_ROOT_PASSWORD",
+            "MONGO_PORT",
+            "MONGO_URI",
+        ],
+        "redis": [
+            "REDIS_HOST",
+            "REDIS_PORT",
+            "REDIS_USER",
+            "REDIS_PASSWORD",
+            "REDIS_MAXMEMORY_SAMPLES",
+            "REDIS_IO_THREADS",
+            "REDIS_STREAM_NODE_MAX_BYTES",
+            "REDIS_STREAM_NODE_MAX_ENTRIES",
+            "REDIS_MAXCLIENTS",
+            "KTRW_KAFKA_AUTO_OFFSET_RESET",
+            "KTRW_KAFKA_ENABLE_AUTO_COMMIT",
+            "KTRW_KAFKA_GROUP_ID",
+            "KTRW_REDIS_MAX_STREAM_LENGTH",
+            "KTRW_REDIS_STREAM_TTL_SECONDS",
+            "KTRW_PARTITION_ASSIGNMENT_STRATEGY",
+            "KTRW_SESSION_TIMEOUT_MS",
+            "KTRW_MAX_POLL_INTERVAL_MS",
+            "KTRW_KAFKA_TOPIC_REFRESH_INTERVAL",
+            "KTRW_REDIS_CLEANUP_INTERVAL",
+            "KTRW_REDIS_RETENTION_HOURS",
+            "KTRW_REDIS_EMERGENCY_RETENTION_HOURS",
+            "KTRW_REDIS_MEMORY_THRESHOLD",
+        ],
+
+        # Flow module
+        "flow_module": [
+            "CIC_KAFKA_BASE_TOPIC_OUT",
+        ],
+
+        # Alert and Notification Module
+        "alert_module": [
+            "SNORT_KAFKA_GROUP_ID",
+            "SNORT_KAFKA_TOPIC_IN",
+            "SNORT_KAFKA_TOPIC_OUT",
+            "SNORT_ALERT_TAP_IFACE",
+            "SNORT_KAFKA_MESSAGE_FIELD",
+            "SNORT_CONSUMER_KAFKA_AUTO_OFFSET_RESET",
+            "SNORT_CONSUMER_KAFKA_ENABLE_AUTO_COMMIT",
+            "SNORT_CONSUMER_KAFKA_PARTITION_ASSIGNMENT_STRATEGY",
+            "SNORT_CONSUMER_KAFKA_ENABLE_PARTITION_EOF",
+            "SNORT_CONSUMER_KAFKA_ALLOW_AUTO_CREATE_TOPICS",
+            "SNORT_CONSUMER_FETCH_MIN_BYTES",
+            "SNORT_CONSUMER_FETCH_WAIT_MAX_MS",
+            "SNORT_CONSUMER_QUEUED_MAX_MESSAGES_KBYTES",
+            "SNORT_CONSUMER_MAX_POLL_INTERVAL_MS",
+            "SNORT_CONSUMER_SESSION_TIMEOUT_MS",
+            "SNORT_PRODUCER_KAFKA_PRODUCER_LINGER_MS",
+            "SNORT_PRODUCER_BATCH_NUM_MESSAGES",
+            "SNORT_PRODUCER_KAFKA_PRODUCER_BATCH_SIZE",
+            "SNORT_PRODUCER_KAFKA_PRODUCER_COMPRESSION",
+        ],
+
+        # Near Real-time Data Retrieval API
+        "nrtdr_api": [
+            "NRTDR_API_PORT",
+            "NRTDR_API_HOST",
+            "NRTDR_WS_POLL_INTERVAL",
+            "NRTDR_WS_BATCH_SIZE",
+        ],
+
+        # Thingsboard
+        "alarm_collector": [],
+    }
+
+    # Valores por defecto del .env
+    DEFAULT_ENV: Dict[str, str] = {
+        # Siempre
+        "MACHINE_ID": mid,
+        "NETWORK_MODE": network_mode,
+        "PFD": str(PFD),
+        "COMPOSE_PROFILES": compose_profiles,
+        "TZ": container_timezone,
+
+        # Kafka topics
+        "TELEGRAF_BASE_TOPIC": telegraf_base_topic,
+        "TSHARK_BASE_TOPIC": tshark_base_topic,
+        "FLUENTD_SYSLOG_BASE_TOPIC": fluentd_syslog_base_topic,
+        "FLUENTD_SYSTEMD_BASE_TOPIC": fluentd_systemd_base_topic,
+        "FALCO_BASE_TOPIC": falco_base_topic,
+        "CIC_KAFKA_BASE_TOPIC_OUT": cic_kafka_base_topic_out,
+        "SNORT_KAFKA_TOPIC_OUT": snort_kafka_topic_out,
+
+        # Telegraf
+        "ENABLE_TELEGRAF": enable_telegraf,
+        "TELEGRAF_TO_PROMETHEUS_PORT": telegraf_to_prometheus_port,
+        "TELEGRAF_GENERAL_INTERVAL": telegraf_general_interval,
+
+        # Fluentd
+        "ENABLE_FLUENTD": enable_fluentd,
+        "FLUENTD_TO_PROMETHEUS_PORT": fluentd_to_prometheus_port,
+        "FLUENTD_INTERNAL_PORT": fluentd_internal_port,
+
+        # Falco
+        "ENABLE_FALCO": enable_falco,
+
+        #Info
+        "DEVICE_INFO_PORT":device_info_port,
+
+
+        # Kafka
+        "KAFKA_BOOTSTRAP": kafka_bootstrap,
+        "KAFKA_LAN_HOSTNAME": kafka_lan_hostname,
+        "KAFKA_PORT_EXTERNAL_LAN": kafka_port_external_lan,
+        "KAFKA_PORT_INTERNAL": kafka_port_internal,
+        "KAFKA_LOG_RETENTION_MS": kafka_log_retention_ms,
+        "KAFKA_LOG_RETENTION_BYTES": kafka_log_retention_bytes,
+        "KAFKA_LOG_CLEANUP_POLICY": kafka_log_cleanup_policy,
+        "KAFKA_LOG_SEGMENT_BYTES": kafka_log_segment_bytes,
+        "KAFKA_LOG_ROLL_MS": kafka_log_roll_ms,
+
+        # Filebeat
+        "FILEBEAT_BULK_MAX_SIZE": filebeat_bulk_max_size,
+        "FILEBEAT_COMPRESION": filebeat_compresion,
+
+        # Prometheus
+        "PROMETHEUS_PORT": prometheus_port,
+        "DISCOVERY_AGENT_SCAN_PORT": discovery_agent_scan_port,
+        "DISCOVERY_AGENT_SCAN_TIMEOUT": discovery_agent_scan_timeout,
+        "DISCOVERY_AGENT_REFRESH_INTERVAL": discovery_agent_refresh_interval,
+        "DISCOVERY_AGENT_PORT": discovery_agent_port,
+
+        # OpenSearch
+        "OPENSEARCH_PASSWORD": opensearch_password,
+        "OPENSEARCH_HOST": opensearch_host,
+        "OPENSEARCH_CLUSTER_NAME": opensearch_cluster_name,
+        "OPENSEARCH_NODE_NAME": opensearch_node_name,
+        "OPENSEARCH_REST_API_PORT": opensearch_rest_api_port,
+        "OPENSEARCH_ANALYSER_PORT": opensearch_analyser_port,
+        "OPENSEARCH_DASHBOARD_PORT": opensearch_dashboard_port,
+
+        # MongoDB
+        "MONGO_INITDB_ROOT_USERNAME": mongo_initdb_root_username,
+        "MONGO_INITDB_ROOT_PASSWORD": mongo_initdb_root_password,
+        "MONGO_PORT": mongo_port,
+        "MONGO_URI": mongo_uri,
+
+        # Redis
+        "REDIS_HOST": redis_host,
+        "REDIS_PORT": redis_port,
+        "REDIS_USER": redis_user,
+        "REDIS_PASSWORD": redis_password,
+        "REDIS_MAXMEMORY_SAMPLES": redis_maxmemory_samples,
+        "REDIS_IO_THREADS": redis_io_threads,
+        "REDIS_STREAM_NODE_MAX_BYTES": redis_stream_node_max_bytes,
+        "REDIS_STREAM_NODE_MAX_ENTRIES": redis_stream_node_max_entries,
+        "REDIS_MAXCLIENTS": redis_maxclients,
+        "KTRW_KAFKA_AUTO_OFFSET_RESET": ktrw_kafka_auto_offset_reset,
+        "KTRW_KAFKA_ENABLE_AUTO_COMMIT": ktrw_kafka_enable_auto_commit,
+        "KTRW_KAFKA_GROUP_ID": ktrw_kafka_group_id,
+        "KTRW_REDIS_MAX_STREAM_LENGTH": ktrw_redis_max_stream_length,
+        "KTRW_REDIS_STREAM_TTL_SECONDS": ktrw_redis_stream_ttl_seconds,
+        "KTRW_PARTITION_ASSIGNMENT_STRATEGY": ktrw_partition_assignment_strategy,
+        "KTRW_SESSION_TIMEOUT_MS": ktrw_session_timeout_ms,
+        "KTRW_MAX_POLL_INTERVAL_MS": ktrw_max_poll_interval_ms,
+        "KTRW_KAFKA_TOPIC_REFRESH_INTERVAL": ktrw_kafka_topic_refresh_interval,
+        "KTRW_REDIS_CLEANUP_INTERVAL": ktrw_redis_cleanup_interval,
+        "KTRW_REDIS_RETENTION_HOURS": ktrw_redis_retention_hours,
+        "KTRW_REDIS_EMERGENCY_RETENTION_HOURS": ktrw_redis_emergency_retention_hours,
+        "KTRW_REDIS_MEMORY_THRESHOLD": ktrw_redis_memory_threshold,
+
+        # Alert module
+        "SNORT_KAFKA_GROUP_ID": snort_kafka_group_id,
+        "SNORT_KAFKA_TOPIC_IN": snort_kafka_topic_in,
+        "SNORT_ALERT_TAP_IFACE": snort_alert_tap_iface,
+        "SNORT_KAFKA_MESSAGE_FIELD": snort_kafka_message_field,
+        "SNORT_CONSUMER_KAFKA_AUTO_OFFSET_RESET": snort_consumer_kafka_auto_offset_reset,
+        "SNORT_CONSUMER_KAFKA_ENABLE_AUTO_COMMIT": snort_consumer_kafka_enable_auto_commit,
+        "SNORT_CONSUMER_KAFKA_PARTITION_ASSIGNMENT_STRATEGY": snort_consumer_kafka_partition_assignment_strategy,
+        "SNORT_CONSUMER_KAFKA_ENABLE_PARTITION_EOF": snort_consumer_kafka_enable_partition_eof,
+        "SNORT_CONSUMER_KAFKA_ALLOW_AUTO_CREATE_TOPICS": snort_consumer_kafka_allow_auto_create_topics,
+        "SNORT_CONSUMER_FETCH_MIN_BYTES": snort_consumer_fetch_min_bytes,
+        "SNORT_CONSUMER_FETCH_WAIT_MAX_MS": snort_consumer_fetch_wait_max_ms,
+        "SNORT_CONSUMER_QUEUED_MAX_MESSAGES_KBYTES": snort_consumer_queued_max_messages_kbytes,
+        "SNORT_CONSUMER_MAX_POLL_INTERVAL_MS": snort_consumer_max_poll_interval_ms,
+        "SNORT_CONSUMER_SESSION_TIMEOUT_MS": snort_consumer_session_timeout_ms,
+        "SNORT_PRODUCER_KAFKA_PRODUCER_LINGER_MS": snort_producer_kafka_producer_linger_ms,
+        "SNORT_PRODUCER_BATCH_NUM_MESSAGES": snort_producer_batch_num_messages,
+        "SNORT_PRODUCER_KAFKA_PRODUCER_BATCH_SIZE": snort_producer_kafka_producer_batch_size,
+        "SNORT_PRODUCER_KAFKA_PRODUCER_COMPRESSION": snort_producer_kafka_producer_compression,
+
+        # NRTDR API
+        "NRTDR_API_PORT": nrtdr_api_port,
+        "NRTDR_API_HOST": nrtdr_api_host,
+        "NRTDR_WS_POLL_INTERVAL": nrtdr_ws_poll_interval,
+        "NRTDR_WS_BATCH_SIZE": nrtdr_ws_batch_size,
+    }
+
+    env_keys = collect_env_vars(selected=selected, tool_env_vars=TOOL_ENV_VARS, always_env_vars=ALWAYS_ENV_VARS)
+
+    written_path = write_dotenv(env_keys=env_keys, path=env_file_path, defaults=DEFAULT_ENV, header="")
 
     try:
-        subprocess.run(["docker", "compose","-f", f"{str(LFD)}/docker-compose.yml" ,"--env-file",f"{str(LFD)}/.env",  "up", "--build","-d"], check=True)
+        subprocess.run(["docker", "compose","-f", f"{str(LFD)}/docker-compose.yml" ,"--env-file",f"{str(written_path)}",  "up", "--build","-d"], check=True)
     except subprocess.CalledProcessError as e:
         print(f"Error executing docker-compose: {e}")
         return
