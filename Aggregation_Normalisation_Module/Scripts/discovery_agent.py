@@ -6,13 +6,15 @@ import ipaddress
 import threading
 import time
 import requests
+import os
 from flask import Flask, jsonify
 
 app = Flask(__name__)
 
-SCAN_PORT = int("9999")
-SCAN_TIMEOUT = 0.2
-REFRESH_INTERVAL = 30
+SCAN_PORT = int(os.getenv("DISCOVERY_AGENT_SCAN_PORT"))
+SCAN_TIMEOUT = float(os.getenv("DISCOVERY_AGENT_SCAN_TIMEOUT"))
+REFRESH_INTERVAL = int(os.getenv("DISCOVERY_AGENT_REFRESH_INTERVAL"))
+DISCOVERY_AGENT_PORT= int(os.getenv("DISCOVERY_AGENT_PORT"))
 cached_results = []
 
 def get_local_ip():
@@ -104,4 +106,4 @@ if __name__ == "__main__":
     scanner_thread = threading.Thread(target=background_scanner, daemon=True)
     scanner_thread.start()
     
-    app.run(host="0.0.0.0", port=8000)
+    app.run(host="0.0.0.0", port=DISCOVERY_AGENT_PORT)

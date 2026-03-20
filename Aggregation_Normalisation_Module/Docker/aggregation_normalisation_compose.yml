@@ -1,15 +1,20 @@
 services:
 
-  init-prometheus:
-    image: busybox:latest
-    container_name: init_prometheus
-    profiles: ["aggregation_module.prometheus"]
-    # Change the owner of the /prometheus folder to user 65534 (nobody)
-    command: sh -c "chown -R 65534:65534 /prometheus"
-    volumes:
-      - ${PFD}/Results/prometheus_data:/prometheus
-    restart: "no"
 
+
+# They will be used when all the environment variables had been activated
+  init-prometheus-config:
+    image: busybox:latest
+    container_name: init_prometheus_config
+    profiles: ["aggregation_module.prometheus"]
+    environment:
+      - DISCOVERY_AGENT_PORT=${DISCOVERY_AGENT_PORT}
+    volumes:
+      - ${PFD}/Aggregation_Normalisation_Module/Configuration_Files/Prometheus/prometheus.yml.tmpl:/tmpl/prometheus.yml.tmpl:ro
+      - ${PFD}/Aggregation_Normalisation_Module/Configuration_Files/Prometheus/generated:/out
+    command: sh -c 'sed "s|\${DISCOVERY_AGENT_PORT}|$DISCOVERY_AGENT_PORT|g" /tmpl/prometheus.yml.tmpl > /out/prometheus.yml'
+    restart: "no"
+  
   prometheus:
     image: prom/prometheus:v3.8.0
     container_name: prometheus_server_robust6g
@@ -17,24 +22,73 @@ services:
     depends_on:
       init-prometheus:
         condition: service_completed_successfully
-      discovery-agent: 
+      init-prometheus-config:
+        condition: service_completed_successfully
+      discovery-agent:
         condition: service_started
     environment:
-      - TZ=UTC
-    extra_hosts: # Write a line in /etc/hosts of the Prometheus container to link the discovery agent with the host's IP
+      - TZ=${TZ}
+    extra_hosts:
       - "discovery-agent:host-gateway"
     volumes:
-      - ${PFD}/Aggregation_Normalisation_Module/Configuration_Files/Prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+         #Mounting prometheus template with the environment variable expended
+      - ${PFD}/Aggregation_Normalisation_Module/Configuration_Files/Prometheus/prometheus.yml.tmpl:/etc/prometheus/prometheus.yml.tmpl:ro
+      - ${PFD}/Aggregation_Normalisation_Module/Configuration_Files/Prometheus/generated:/etc/prometheus/generated:ro
+
       - ${PFD}/Aggregation_Normalisation_Module/Configuration_Files/Prometheus/rules:/etc/prometheus/rules:ro
-      - ${PFD}/Results/prometheus_data:/prometheus # Current owner of prometheus_data is user 65534 (nobody)
+      - ${PFD}/Results/prometheus_data:/prometheus
     command:
-      - "--config.file=/etc/prometheus/prometheus.yml"
+      # CAMBIO: ahora apunta al generado
+      - "--config.file=/etc/prometheus/generated/prometheus.yml"
       - "--storage.tsdb.path=/prometheus"
       - "--storage.tsdb.retention.time=30d"
       - "--web.enable-lifecycle"
     ports:
-      - "9090:9090"
+      - "${PROMETHEUS_PORT}:9090"
     restart: unless-stopped
+
+##########################
+# OLD init
+##########################
+#
+#  init-prometheus:
+#    image: busybox:latest
+#    container_name: init_prometheus
+#    profiles: ["aggregation_module.prometheus"]
+#    # Change the owner of the /prometheus folder to user 65534 (nobody)
+#    command: sh -c "chown -R 65534:65534 /prometheus"
+#    volumes:
+#      - ${PFD}/Results/prometheus_data:/prometheus
+#    restart: "no"
+#
+#  prometheus:
+#    image: prom/prometheus:v3.8.0
+#    container_name: prometheus_server_robust6g
+#    profiles: ["aggregation_module.prometheus"]
+#    depends_on:
+#      init-prometheus:
+#        condition: service_completed_successfully
+#      discovery-agent: 
+#        condition: service_started
+#    environment:
+#      - TZ=UTC
+#    extra_hosts: # Write a line in /etc/hosts of the Prometheus container to link the discovery agent with the host's IP
+#      - "discovery-agent:host-gateway"
+#    volumes:
+#      - ${PFD}/Aggregation_Normalisation_Module/Configuration_Files/Prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+#      - ${PFD}/Aggregation_Normalisation_Module/Configuration_Files/Prometheus/rules:/etc/prometheus/rules:ro
+#      - ${PFD}/Results/prometheus_data:/prometheus # Current owner of prometheus_data is user 65534 (nobody)
+#    command:
+#      - "--config.file=/etc/prometheus/prometheus.yml"
+#      - "--storage.tsdb.path=/prometheus"
+#      - "--storage.tsdb.retention.time=30d"
+#      - "--web.enable-lifecycle"
+#    ports:
+#      - "9090:9090"
+#    restart: unless-stopped
+##########################
+# OLD end
+##########################
 
   discovery-agent:
     image: discovery_agent_robust6g:latest
@@ -44,9 +98,10 @@ services:
     container_name: discovery_agent_robust6g
     profiles: ["aggregation_module.prometheus"] #Same profile because Prometheus needs this microservice
     environment:
-      - SCAN_PORT="9999"
-      - SCAN_TIMEOUT="0.2"
-      - TZ=UTC
+      - DISCOVERY_AGENT_SCAN_PORT=${DISCOVERY_AGENT_SCAN_PORT}
+      - DISCOVERY_AGENT_SCAN_TIMEOUT=${DISCOVERY_AGENT_SCAN_TIMEOUT}
+      - TZ=${TZ}
+      - DISCOVERY_AGENT_PORT=${DISCOVERY_AGENT_PORT}
     network_mode: "${NETWORK_MODE}"
     volumes:
       - ${PFD}/Aggregation_Normalisation_Module/Scripts:/opt/discovery
@@ -70,8 +125,8 @@ services:
       init-opensearch:
         condition: service_completed_successfully
     environment:
-      - cluster.name=robust6g-cluster
-      - node.name=opensearch
+      - cluster.name=${OPENSEARCH_CLUSTER_NAME}
+      - node.name=${OPENSEARCH_NODE_NAME}
       - discovery.type=single-node
       - bootstrap.memory_lock=true
       - "OPENSEARCH_JAVA_OPTS=-Xms512m -Xmx512m"
@@ -87,8 +142,8 @@ services:
     volumes:
       - ${PFD}/Results/opensearch_data:/usr/share/opensearch/data
     ports:
-      - "9200:9200"
-      - "9600:9600"
+      - "${OPENSEARCH_REST_API_PORT}:9200"
+      - "${OPENSEARCH_ANALYSER_PORT}:9600"
     restart: unless-stopped
 
   opensearch-dashboards:
@@ -96,9 +151,9 @@ services:
     container_name: opensearch_dashboards_robust6g
     profiles: ["aggregation_module.opensearch"]
     ports:
-      - "5601:5601"
+      - "${OPENSEARCH_DASHBOARD_PORT}:5601"
     environment:
-      - 'OPENSEARCH_HOSTS=["https://${OPENSEARCH_HOST}:9200"]'
+      - 'OPENSEARCH_HOSTS=["https://${OPENSEARCH_HOST}:${OPENSEARCH_REST_API_PORT}"]'
       - OPENSEARCH_USERNAME=admin
       - OPENSEARCH_PASSWORD=${OPENSEARCH_PASSWORD}
     network_mode: "${NETWORK_MODE}"
@@ -116,9 +171,16 @@ services:
       - "LS_JAVA_OPTS=-Xmx256m -Xms256m"
       - OPENSEARCH_PASSWORD=${OPENSEARCH_PASSWORD}
       - OPENSEARCH_HOST=${OPENSEARCH_HOST}
+      - OPENSEARCH_REST_API_PORT=${OPENSEARCH_REST_API_PORT:-9200}
+      - TELEGRAF_BASE_TOPIC=${TELEGRAF_BASE_TOPIC}
+      - FLUENTD_SYSLOG_BASE_TOPIC=${FLUENTD_SYSLOG_BASE_TOPIC}
+      - FLUENTD_SYSTEMD_BASE_TOPIC=${FLUENTD_SYSTEMD_BASE_TOPIC}
+      - FALCO_BASE_TOPIC=${FALCO_BASE_TOPIC}
+      - KAFKA_BOOTSTRAP=${KAFKA_BOOTSTRAP}
     network_mode: "${NETWORK_MODE}"
     extra_hosts:
-      - "kafka_robust6g-node1.lan:host-gateway"
+      #- "kafka_robust6g-node1.lan:host-gateway"
+      - "${KAFKA_LAN_HOSTNAME}:host-gateway"
     depends_on:
       - opensearch
     restart: unless-stopped
