@@ -22,9 +22,9 @@ ALERT_FILE = "alert_json"
 ALERT_PATH = os.path.join(ALERT_DIR, f"{ALERT_FILE}.txt")
 
 # ====== KAFKA CONFIG ======
-KAFKA_GROUP_ID = os.getenv("KAFKA_GROUP_ID", "alert-module-v1")
-KAFKA_TOPIC_IN = os.getenv("KAFKA_TOPIC_IN", "tshark_traces")
-KAFKA_TOPIC_OUT = os.getenv("KAFKA_TOPIC_OUT", "snort_alerts")
+KAFKA_GROUP_ID = os.getenv("SNORT_KAFKA_GROUP_ID", "alert-module-v1")
+KAFKA_TOPIC_IN = os.getenv("SNORT_KAFKA_TOPIC_IN", "tshark_traces")
+KAFKA_TOPIC_OUT = os.getenv("SNORT_KAFKA_TOPIC_OUT", "snort_alerts")
 
 # === SNORT CONFIG ===
 SNORT_BASE_CMD = [
@@ -39,7 +39,7 @@ SNORT_BASE_CMD = [
 ]
 
 # ====== CONSTANTS TUN/TAP ======
-TAP_IFACE = os.getenv("ALERT_TAP_IFACE", "tap0")
+TAP_IFACE = os.getenv("SNORT_ALERT_TAP_IFACE", "tap0")
 TUNSETIFF = 0x400454ca
 IFF_TAP = 0x0002
 IFF_NO_PI = 0x1000

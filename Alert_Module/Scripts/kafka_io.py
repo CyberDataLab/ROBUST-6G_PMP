@@ -33,22 +33,29 @@ def get_bootstrap(override: Optional[str] = None) -> str:
         return override
     return os.getenv("KAFKA_BOOTSTRAP", "kafka_robust6g-node1.lan:9094")
 
-DEFAULT_TOPIC_IN = os.getenv("KAFKA_TOPIC_IN", "tshark_traces")
-DEFAULT_TOPIC_OUT = os.getenv("KAFKA_TOPIC_OUT", "snort_alerts")
-DEFAULT_GROUP_ID = os.getenv("KAFKA_GROUP_ID", "net-traces-consumer")
-DEFAULT_MESSAGE_FIELD = os.getenv("KAFKA_MESSAGE_FIELD", "_source")
+SNORT_KAFKA_TOPIC_IN = os.getenv("SNORT_KAFKA_TOPIC_IN", "tshark_traces")
+SNORT_KAFKA_TOPIC_OUT = os.getenv("SNORT_KAFKA_TOPIC_OUT", "snort_alerts")
+SNORT_KAFKA_GROUP_ID = os.getenv("SNORT_KAFKA_GROUP_ID", "net-traces-consumer")
+SNORT_KAFKA_MESSAGE_FIELD = os.getenv("SNORT_KAFKA_MESSAGE_FIELD", "_source")
 
-# Consumer behavior
-DEFAULT_AUTO_OFFSET_RESET = os.getenv("KAFKA_AUTO_OFFSET_RESET", "earliest")  # earliest/latest/none
-DEFAULT_ENABLE_AUTO_COMMIT = os.getenv("KAFKA_ENABLE_AUTO_COMMIT", "true").lower() == "true"
-DEFAULT_ASSIGNMENT_STRATEGY = os.getenv("KAFKA_PARTITION_ASSIGNMENT_STRATEGY", "cooperative-sticky")
-DEFAULT_ENABLE_PARTITION_EOF = os.getenv("KAFKA_ENABLE_PARTITION_EOF", "true").lower() == "true"
-DEFAULT_ALLOW_AUTO_CREATE_TOPICS = os.getenv("KAFKA_ALLOW_AUTO_CREATE_TOPICS", "true").lower() == "true"
+# Consumer
+SNORT_CONSUMER_KAFKA_AUTO_OFFSET_RESET = os.getenv("SNORT_CONSUMER_KAFKA_AUTO_OFFSET_RESET", "earliest")  # earliest/latest/none
+SNORT_CONSUMER_KAFKA_ENABLE_AUTO_COMMIT = os.getenv("SNORT_CONSUMER_KAFKA_ENABLE_AUTO_COMMIT", "true").lower() == "true"
+SNORT_CONSUMER_KAFKA_PARTITION_ASSIGNMENT_STRATEGY = os.getenv("SNORT_CONSUMER_KAFKA_PARTITION_ASSIGNMENT_STRATEGY", "cooperative-sticky")
+SNORT_CONSUMER_KAFKA_ENABLE_PARTITION_EOF = os.getenv("SNORT_CONSUMER_KAFKA_ENABLE_PARTITION_EOF", "true").lower() == "true"
+SNORT_CONSUMER_KAFKA_ALLOW_AUTO_CREATE_TOPICS = os.getenv("SNORT_CONSUMER_KAFKA_ALLOW_AUTO_CREATE_TOPICS", "true").lower() == "true"
+SNORT_CONSUMER_FETCH_MIN_BYTES = int(os.getenv("SNORT_CONSUMER_FETCH_MIN_BYTES", "1048576"))
+SNORT_CONSUMER_FETCH_WAIT_MAX_MS = int(os.getenv("SNORT_CONSUMER_FETCH_WAIT_MAX_MS","50"))
+SNORT_CONSUMER_QUEUED_MAX_MESSAGES_KBYTES = int(os.getenv("SNORT_CONSUMER_QUEUED_MAX_MESSAGES_KBYTES","262144"))
+SNORT_CONSUMER_MAX_POLL_INTERVAL_MS = int(os.getenv("SNORT_CONSUMER_MAX_POLL_INTERVAL_MS","900000"))
+SNORT_CONSUMER_SESSION_TIMEOUT_MS = int(os.getenv("SNORT_CONSUMER_SESSION_TIMEOUT_MS","10000"))
 
-# Producer behavior
-DEFAULT_LINGER_MS = int(os.getenv("KAFKA_PRODUCER_LINGER_MS", "5"))
-DEFAULT_BATCH_SIZE = int(os.getenv("KAFKA_PRODUCER_BATCH_SIZE", "32768"))  # ~32 KB
-DEFAULT_COMPRESSION = os.getenv("KAFKA_PRODUCER_COMPRESSION", "zstd")  # zstd, lz4, gzip, snappy, none
+
+# Producer
+KAFKA_PRODUCER_LINGER_MS = int(os.getenv("KAFKA_PRODUCER_LINGER_MS", "5"))
+SNORT_PRODUCER_BATCH_NUM_MESSAGES = int(os.getenv("SNORT_PRODUCER_BATCH_NUM_MESSAGES","10000"))
+KAFKA_PRODUCER_BATCH_SIZE = int(os.getenv("KAFKA_PRODUCER_BATCH_SIZE", "32768"))  # ~32 KB
+KAFKA_PRODUCER_COMPRESSION = os.getenv("KAFKA_PRODUCER_COMPRESSION", "zstd")  # zstd, lz4, gzip, snappy, none
 
 
 def _kafka_consumer_config(bootstrap: Optional[str], group_id: Optional[str], debug: Optional[str] = None) -> dict:
@@ -57,18 +64,18 @@ def _kafka_consumer_config(bootstrap: Optional[str], group_id: Optional[str], de
     """
     cfg = {
         "bootstrap.servers": get_bootstrap(bootstrap),
-        "group.id": group_id or DEFAULT_GROUP_ID,
-        "enable.auto.commit": DEFAULT_ENABLE_AUTO_COMMIT,
-        "auto.offset.reset": DEFAULT_AUTO_OFFSET_RESET,
-        "allow.auto.create.topics": DEFAULT_ALLOW_AUTO_CREATE_TOPICS,
-        "enable.partition.eof": DEFAULT_ENABLE_PARTITION_EOF,
-        "partition.assignment.strategy": DEFAULT_ASSIGNMENT_STRATEGY,
+        "group.id": group_id or SNORT_KAFKA_GROUP_ID,
+        "enable.auto.commit": SNORT_CONSUMER_KAFKA_ENABLE_AUTO_COMMIT,
+        "auto.offset.reset": SNORT_CONSUMER_KAFKA_AUTO_OFFSET_RESET,
+        "allow.auto.create.topics": SNORT_CONSUMER_KAFKA_ALLOW_AUTO_CREATE_TOPICS,
+        "enable.partition.eof": SNORT_CONSUMER_KAFKA_ENABLE_PARTITION_EOF,
+        "partition.assignment.strategy": SNORT_CONSUMER_KAFKA_PARTITION_ASSIGNMENT_STRATEGY,
 
-        "fetch.min.bytes": 1048576,            # 1 MiB before returning
-        "fetch.wait.max.ms": 50,               # wait up to 50 ms to fill batch
-        "queued.max.messages.kbytes": 262144,  # 256 MiB  of internal queue
-        "max.poll.interval.ms": 900000,        # 15 min for heavy processing
-        "session.timeout.ms": 10000,
+        "fetch.min.bytes": SNORT_CONSUMER_FETCH_MIN_BYTES,            # 1 MiB before returning
+        "fetch.wait.max.ms": SNORT_CONSUMER_FETCH_WAIT_MAX_MS,               # wait up to 50 ms to fill batch
+        "queued.max.messages.kbytes": SNORT_CONSUMER_QUEUED_MAX_MESSAGES_KBYTES,  # 256 MiB  of internal queue
+        "max.poll.interval.ms": SNORT_CONSUMER_MAX_POLL_INTERVAL_MS,        # 15 min for heavy processing
+        "session.timeout.ms": SNORT_CONSUMER_SESSION_TIMEOUT_MS,
         "socket.keepalive.enable": True,
     }
     if debug:
@@ -79,10 +86,10 @@ def _kafka_consumer_config(bootstrap: Optional[str], group_id: Optional[str], de
 def _kafka_producer_config(bootstrap: Optional[str], debug: Optional[str] = None) -> dict:
     cfg = {
         "bootstrap.servers": get_bootstrap(bootstrap),
-        "linger.ms": DEFAULT_LINGER_MS,
-        "batch.num.messages": 10000,
-        "batch.size": DEFAULT_BATCH_SIZE,
-        "compression.type": DEFAULT_COMPRESSION,
+        "linger.ms": KAFKA_PRODUCER_LINGER_MS,
+        "batch.num.messages": SNORT_PRODUCER_BATCH_NUM_MESSAGES,
+        "batch.size": KAFKA_PRODUCER_BATCH_SIZE,
+        "compression.type": KAFKA_PRODUCER_COMPRESSION,
         "socket.keepalive.enable": True,
     }
     if debug:
@@ -97,8 +104,8 @@ class KafkaLineConsumer:
     """
     def __init__(
         self,
-        topic: str = DEFAULT_TOPIC_IN,
-        message_field: str = DEFAULT_MESSAGE_FIELD,
+        topic: str = SNORT_KAFKA_TOPIC_IN,
+        message_field: str = SNORT_KAFKA_MESSAGE_FIELD,
         poll_timeout: float = 1.0,
         group_id: Optional[str] = None,
         bootstrap: Optional[str] = None,
@@ -206,7 +213,7 @@ class KafkaLineConsumer:
                 if msg.error():
                     err = msg.error()
                     if err.code() == KafkaError._PARTITION_EOF:
-                        if DEFAULT_ENABLE_PARTITION_EOF:
+                        if SNORT_CONSUMER_KAFKA_ENABLE_PARTITION_EOF:
                             print(f"ℹ️  EOF {msg.topic()}[{msg.partition()}] offset {msg.offset()}", flush=True)
                         continue
                     print(f"⚠️  Error consumer: {err}", flush=True)
@@ -237,7 +244,7 @@ class KafkaLineConsumer:
 
 class KafkaAlertProducer:
     """Producer for publishing lines."""
-    def __init__(self, topic: str = DEFAULT_TOPIC_OUT, bootstrap: Optional[str] = None, debug: Optional[str] = None):
+    def __init__(self, topic: str = SNORT_KAFKA_TOPIC_OUT, bootstrap: Optional[str] = None, debug: Optional[str] = None):
         self.topic = topic
         cfg = _kafka_producer_config(bootstrap, debug)
         self._producer = _KafkaProducer(cfg)
