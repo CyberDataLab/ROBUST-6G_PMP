@@ -7,7 +7,7 @@ import signal
 import subprocess
 
 WATCH_DIR = "/fluentd/log/out"
-SIZE_LIMIT = 20 * 1024 * 1024  # 20MB
+SIZE_LIMIT = int(os.getenv("FLUENTD_FILE_SIZE_LIMIT"))
 PATTERNS = [
     r"syslog_output\.log\.\d{8}\.log",
     r"systemd_output\.log\.\d{8}\.log"

@@ -12,7 +12,7 @@ TRACES_DIR    = "/data/traces"
 LOG_PATH      = os.path.join(TRACES_DIR, "infile.ndjson")
 ROTATED_PATH  = os.path.join(TRACES_DIR, "infile.ndjson.backup")
 
-SIZE_LIMIT    = 30 * 1024 * 1024 # 30 MiB
+TSHARK_SIZE_LIMIT_ROTATION    = int(os.getenv("TSHARK_SIZE_LIMIT_ROTATION"))
 
 
 def get_interfaces():
@@ -144,7 +144,7 @@ def monitor_and_rotate(command: Union[str, list, tuple],
             size = 0
             open(LOG_PATH, "a", encoding="utf-8").close()
 
-        if size >= SIZE_LIMIT:
+        if size >= TSHARK_SIZE_LIMIT_ROTATION:
             _kill_process_group(proc, term_timeout=5)
             try:
                 output_file.flush()

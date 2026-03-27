@@ -358,12 +358,17 @@ def main():
     enable_telegraf= "1"
     telegraf_to_prometheus_port= "9273"
     telegraf_general_interval= "30s"
+    #Tshark
+    tshark_size_limit_rotation=str(30 * 1024 * 1024) #30MiB
     # Fluentd
     enable_fluentd= "1"
     fluentd_to_prometheus_port= "24231"
     fluentd_internal_port= "24220"
+    fluentd_file_size_limit=str(20 * 1024 * 1024) #20MiB
     # Falco
     enable_falco= "1"
+    falco_skip_driver_loader=1
+    falco_exporter_port="9376"
     # Info
     device_info_port="9999"
     # Kafka
@@ -487,17 +492,21 @@ def main():
         ],
         "tshark": [
             "TSHARK_BASE_TOPIC",
+            "TSHARK_SIZE_LIMIT_ROTATION",
         ],
         "fluentd": [
             "ENABLE_FLUENTD",
             "FLUENTD_TO_PROMETHEUS_PORT",
             "FLUENTD_INTERNAL_PORT",
+            "FLUENTD_FILE_SIZE_LIMIT",
             "FLUENTD_SYSLOG_BASE_TOPIC",
             "FLUENTD_SYSTEMD_BASE_TOPIC",
         ],
         "falco": [
             "ENABLE_FALCO",
             "FALCO_BASE_TOPIC",
+            "FALCO_SKIP_DRIVER_LOADER",
+            "FALCO_EXPORTER_PORT"
         ],
         "info": [
             "DEVICE_INFO_PORT"
@@ -633,15 +642,20 @@ def main():
         "ENABLE_TELEGRAF": enable_telegraf,
         "TELEGRAF_TO_PROMETHEUS_PORT": telegraf_to_prometheus_port,
         "TELEGRAF_GENERAL_INTERVAL": telegraf_general_interval,
+        
+        #Tshark
+        "TSHARK_SIZE_LIMIT_ROTATION": tshark_size_limit_rotation,
 
         # Fluentd
         "ENABLE_FLUENTD": enable_fluentd,
         "FLUENTD_TO_PROMETHEUS_PORT": fluentd_to_prometheus_port,
         "FLUENTD_INTERNAL_PORT": fluentd_internal_port,
+        "FLUENTD_FILE_SIZE_LIMIT": fluentd_file_size_limit,
 
         # Falco
         "ENABLE_FALCO": enable_falco,
-
+        "FALCO_SKIP_DRIVER_LOADER": falco_skip_driver_loader,
+        "FALCO_EXPORTER_PORT": falco_exporter_port,
         #Info
         "DEVICE_INFO_PORT":device_info_port,
 
