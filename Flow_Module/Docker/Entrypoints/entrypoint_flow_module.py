@@ -399,7 +399,7 @@ def sanitize_packet_timestamp(packet_dict):
 
 def main():
 
-    mongo_uri = os.getenv("MONGO_URI", "mongodb://admin:admin123@mongodb:27017/")
+    mongo_uri = os.getenv("MONGO_URI")
     client = MongoClient(mongo_uri)
     db = client["flow_db"]
     flow_collection = db["flows"]
