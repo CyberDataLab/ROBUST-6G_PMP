@@ -27,28 +27,27 @@ def get_bootstrap(override: Optional[str] = None) -> str:
     Resolution order:
     1) explicit argument (override),
     2) KAFKA_BOOTSTRAP environment variable,
-    3) default "kafka_robust6g-node1.lan:9094"
     """
     if override:
         return override
-    return os.getenv("KAFKA_BOOTSTRAP", "kafka_robust6g-node1.lan:9094")
+    return os.getenv("KAFKA_BOOTSTRAP")
 
-DEFAULT_TOPIC_IN = os.getenv("KAFKA_TOPIC_IN", "tshark_traces")
-DEFAULT_TOPIC_OUT = os.getenv("KAFKA_TOPIC_OUT", "cic_flow")
-DEFAULT_GROUP_ID = os.getenv("KAFKA_GROUP_ID", "net-traces-consumer")
-DEFAULT_MESSAGE_FIELD = os.getenv("KAFKA_MESSAGE_FIELD", "_source")
+TSHARK_BASE_TOPIC = os.getenv("TSHARK_BASE_TOPIC")
+CIC_KAFKA_BASE_TOPIC_OUT = os.getenv("CIC_KAFKA_BASE_TOPIC_OUT")
+FLOW_KAFKA_GROUP = os.getenv("FLOW_KAFKA_GROUP")
+DEFAULT_MESSAGE_FIELD = "_source" # It is not an external environment variable!
 
 # Consumer behavior
-DEFAULT_AUTO_OFFSET_RESET = os.getenv("KAFKA_AUTO_OFFSET_RESET", "earliest")  # earliest/latest/none
-DEFAULT_ENABLE_AUTO_COMMIT = os.getenv("KAFKA_ENABLE_AUTO_COMMIT", "true").lower() == "true"
-DEFAULT_ASSIGNMENT_STRATEGY = os.getenv("KAFKA_PARTITION_ASSIGNMENT_STRATEGY", "cooperative-sticky")
-DEFAULT_ENABLE_PARTITION_EOF = os.getenv("KAFKA_ENABLE_PARTITION_EOF", "true").lower() == "true"
-DEFAULT_ALLOW_AUTO_CREATE_TOPICS = os.getenv("KAFKA_ALLOW_AUTO_CREATE_TOPICS", "true").lower() == "true"
+FLOW_KAFKA_CONSUMER_AUTO_OFFSET_RESET = os.getenv("FLOW_KAFKA_CONSUMER_AUTO_OFFSET_RESET")
+FLOW_KAFKA_CONSUMER_ENABLE_AUTO_COMMIT = os.getenv("FLOW_KAFKA_CONSUMER_ENABLE_AUTO_COMMIT").lower() == "true"
+FLOW_KAFKA_CONSUMER_PARTITION_ASSIGNMENT_STRATEGY = os.getenv("FLOW_KAFKA_CONSUMER_PARTITION_ASSIGNMENT_STRATEGY")
+FLOW_KAFKA_CONSUMER_ENABLE_PARTITION_EOF = os.getenv("FLOW_KAFKA_CONSUMER_ENABLE_PARTITION_EOF").lower() == "true"
+FLOW_KAFKA_CONSUMER_ALLOW_AUTO_CREATE_TOPICS = os.getenv("FLOW_KAFKA_CONSUMER_ALLOW_AUTO_CREATE_TOPICS").lower() == "true"
 
 # Producer behavior
-DEFAULT_LINGER_MS = int(os.getenv("KAFKA_PRODUCER_LINGER_MS", "5"))
-DEFAULT_BATCH_SIZE = int(os.getenv("KAFKA_PRODUCER_BATCH_SIZE", "32768"))  # ~32 KB
-DEFAULT_COMPRESSION = os.getenv("KAFKA_PRODUCER_COMPRESSION", "zstd")  # zstd, lz4, gzip, snappy, none
+FLOW_KAFKA_PRODUCER_LINGER_MS = int(os.getenv("FLOW_KAFKA_PRODUCER_LINGER_MS"))
+FLOW_KAFKA_PRODUCER_BATCH_SIZE = int(os.getenv("FLOW_KAFKA_PRODUCER_BATCH_SIZE"))
+FLOW_KAFKA_PRODUCER_COMPRESSION = os.getenv("FLOW_KAFKA_PRODUCER_COMPRESSION")
 
 
 def _kafka_consumer_config(bootstrap: Optional[str], group_id: Optional[str], debug: Optional[str] = None) -> dict:
@@ -57,12 +56,12 @@ def _kafka_consumer_config(bootstrap: Optional[str], group_id: Optional[str], de
     """
     cfg = {
         "bootstrap.servers": get_bootstrap(bootstrap),
-        "group.id": group_id or DEFAULT_GROUP_ID,
-        "enable.auto.commit": DEFAULT_ENABLE_AUTO_COMMIT,
-        "auto.offset.reset": DEFAULT_AUTO_OFFSET_RESET,
-        "allow.auto.create.topics": DEFAULT_ALLOW_AUTO_CREATE_TOPICS,
-        "enable.partition.eof": DEFAULT_ENABLE_PARTITION_EOF,
-        "partition.assignment.strategy": DEFAULT_ASSIGNMENT_STRATEGY,
+        "group.id": group_id or FLOW_KAFKA_GROUP,
+        "enable.auto.commit": FLOW_KAFKA_CONSUMER_ENABLE_AUTO_COMMIT,
+        "auto.offset.reset": FLOW_KAFKA_CONSUMER_AUTO_OFFSET_RESET,
+        "allow.auto.create.topics": FLOW_KAFKA_CONSUMER_ALLOW_AUTO_CREATE_TOPICS,
+        "enable.partition.eof": FLOW_KAFKA_CONSUMER_ENABLE_PARTITION_EOF,
+        "partition.assignment.strategy": FLOW_KAFKA_CONSUMER_PARTITION_ASSIGNMENT_STRATEGY,
 
         "fetch.min.bytes": 1048576,            # 1 MiB before returning
         "fetch.wait.max.ms": 50,               # wait up to 50 ms to fill batch
@@ -79,10 +78,10 @@ def _kafka_consumer_config(bootstrap: Optional[str], group_id: Optional[str], de
 def _kafka_producer_config(bootstrap: Optional[str], debug: Optional[str] = None) -> dict:
     cfg = {
         "bootstrap.servers": get_bootstrap(bootstrap),
-        "linger.ms": DEFAULT_LINGER_MS,
+        "linger.ms": FLOW_KAFKA_PRODUCER_LINGER_MS,
         "batch.num.messages": 10000,
-        "batch.size": DEFAULT_BATCH_SIZE,
-        "compression.type": DEFAULT_COMPRESSION,
+        "batch.size": FLOW_KAFKA_PRODUCER_BATCH_SIZE,
+        "compression.type": FLOW_KAFKA_PRODUCER_COMPRESSION,
         "socket.keepalive.enable": True,
     }
     if debug:
@@ -97,7 +96,7 @@ class KafkaLineConsumer:
     """
     def __init__(
         self,
-        topic: str = DEFAULT_TOPIC_IN,
+        topic: str = TSHARK_BASE_TOPIC,
         message_field: str = DEFAULT_MESSAGE_FIELD,
         poll_timeout: float = 1.0,
         group_id: Optional[str] = None,
@@ -207,7 +206,7 @@ class KafkaLineConsumer:
                 if msg.error():
                     err = msg.error()
                     if err.code() == KafkaError._PARTITION_EOF:
-                        if DEFAULT_ENABLE_PARTITION_EOF:
+                        if FLOW_KAFKA_CONSUMER_ENABLE_PARTITION_EOF:
                             print(f"ℹ️  EOF {msg.topic()}[{msg.partition()}] offset {msg.offset()}", flush=True)
                         continue
                     print(f"⚠️  Error consumer: {err}", flush=True)
@@ -238,7 +237,7 @@ class KafkaLineConsumer:
 
 class KafkaCSVProducer:
     """Producer for publishing lines."""
-    def __init__(self, topic: str = DEFAULT_TOPIC_OUT, bootstrap: Optional[str] = None, debug: Optional[str] = None):
+    def __init__(self, topic: str = CIC_KAFKA_BASE_TOPIC_OUT, bootstrap: Optional[str] = None, debug: Optional[str] = None):
         self.topic = topic
         cfg = _kafka_producer_config(bootstrap, debug)
         self._producer = _KafkaProducer(cfg)

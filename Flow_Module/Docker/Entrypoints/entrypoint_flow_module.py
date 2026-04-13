@@ -12,9 +12,9 @@ import datetime as dt
 import hashlib
 
 # === KAFKA CONFIG ===
-KAFKA_GROUP_ID = os.getenv("KAFKA_GROUP_ID", "flow-module-v1")
-KAFKA_TOPIC_IN = os.getenv("KAFKA_TOPIC_IN", "tshark_traces")
-KAFKA_TOPIC_OUT = os.getenv("KAFKA_TOPIC_OUT", "cic_flow")
+FLOW_KAFKA_GROUP = os.getenv("FLOW_KAFKA_GROUP")
+TSHARK_BASE_TOPIC = os.getenv("TSHARK_BASE_TOPIC")
+CIC_KAFKA_BASE_TOPIC_OUT = os.getenv("CIC_KAFKA_BASE_TOPIC_OUT")
 
 # === INTERNAL CONFIG ===
 FFD = Path(__file__).resolve().parent  # Flow_Module Folder Directory
@@ -24,13 +24,13 @@ CIC_LAUNCHER = str(FFD / "Preinstall" / "CICFlowMeter" / "launch_cfm.sh")
 J2P_PATH = str(FFD / "Scripts" / "Parsing" / "JSON2PCAP" / "json2pcap.py")
 
 # === ROTATION ===
-PCAP_ROTATE_SIZE_MB = 100 * 1024     # 100 KB
-CIC_ROTATE_SIZE_MB = 50 * 1024           # 50 KB
-ROTATE_TIME_SEC = 0.5
+FLOW_PCAP_ROTATE_SIZE_MB = int(os.getenv("FLOW_PCAP_ROTATE_SIZE_MB"))
+FLOW_CIC_ROTATE_SIZE_MB = int(os.getenv("FLOW_CIC_ROTATE_SIZE_MB"))
+FLOW_ROTATE_TIME_SEC = float(os.getenv("FLOW_ROTATE_TIME_SEC"))
 # === WRITER CONTROL ===
-PACKET_QUEUE_MAX = 100000
-WRITER_FLUSH_EVERY = 100                 # flush cada N
-WATCHDOG_STALL_SECS = 120                # watchdog de inactividad
+FLOW_PACKET_QUEUE_MAX = int(os.getenv("FLOW_PACKET_QUEUE_MAX"))
+FLOW_WRITER_FLUSH_EVERY = int(os.getenv("FLOW_WRITER_FLUSH_EVERY"))
+FLOW_WATCHDOG_STALL_SECS = int(os.getenv("FLOW_WATCHDOG_STALL_SECS"))
 
 
 class CICWorker:
@@ -104,12 +104,12 @@ class CICWorker:
 
             print(f"📊 {len(data)} flows added to {self.global_csv}")
 
-        '''
+        
             # Uncomment if you want to publish on Kafka.
             if data:
                 self.c2k_producer.produce_lines(data)
 
-        '''
+        
 
         # Read flows and upload them to MongoDB
         if not os.path.exists(self.tmp_csv):
@@ -259,7 +259,7 @@ class PacketWriter:
         self.cic_worker = CICWorker(cic_results, cic_rotate_size_mb, c2k_producer, db_collection)
         os.makedirs(output_dir, exist_ok=True)
 
-        self.q = Queue(maxsize=PACKET_QUEUE_MAX)
+        self.q = Queue(maxsize=FLOW_PACKET_QUEUE_MAX)
         self._last_write_ts = time.time()
         self._last_file_ts = time.time()
         self._written_since_flush = 0
@@ -286,7 +286,7 @@ class PacketWriter:
         """
         while self._running:
             # Rotation per time
-            if time.time() - self._last_file_ts >= ROTATE_TIME_SEC:
+            if time.time() - self._last_file_ts >= FLOW_ROTATE_TIME_SEC:
                 self._new_file()
                 self._last_file_ts = time.time()
 
@@ -299,7 +299,7 @@ class PacketWriter:
                 self.j2p_worker.write_packet(packet_dict)
                 self._written_since_flush += 1
 
-                if self._written_since_flush >= WRITER_FLUSH_EVERY:
+                if self._written_since_flush >= FLOW_WRITER_FLUSH_EVERY:
                     try:
                         self.j2p_worker.proc.stdin.flush()
                     except Exception:
@@ -405,7 +405,7 @@ def main():
     flow_collection = db["flows"]
 
     producer = KafkaCSVProducer(
-        topic=KAFKA_TOPIC_OUT,
+        topic=CIC_KAFKA_BASE_TOPIC_OUT,
         bootstrap=get_bootstrap()
     )
 
@@ -413,16 +413,16 @@ def main():
         output_dir=OUTPUT_DIR,
         cic_results=CIC_Results,
         j2p_path=J2P_PATH,
-        rotate_size_mb=PCAP_ROTATE_SIZE_MB,
-        cic_rotate_size_mb=CIC_ROTATE_SIZE_MB,
+        rotate_size_mb=FLOW_PCAP_ROTATE_SIZE_MB,
+        cic_rotate_size_mb=FLOW_CIC_ROTATE_SIZE_MB,
         c2k_producer=producer,
         db_collection=flow_collection
     )
 
     consumer = KafkaLineConsumer(
-        topic=KAFKA_TOPIC_IN,
+        topic=TSHARK_BASE_TOPIC,
         message_field="_source",
-        group_id=KAFKA_GROUP_ID,
+        group_id=FLOW_KAFKA_GROUP,
         bootstrap=get_bootstrap()
     )
 

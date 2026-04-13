@@ -462,6 +462,25 @@ def main():
     snort_producer_batch_num_messages= "10000"
     snort_producer_kafka_producer_batch_size= "32768"
     snort_producer_kafka_producer_compression= "zstd"
+    #Flow Module
+    flow_kafka_group="flow-module"
+    flow_pcap_rotate_size_mb=str(100 * 1024) # 100 KiB
+    flow_cic_rotate_size_mb=str(50 * 1024) # 50 KiB
+    flow_rotate_time_sec="0.5" # Half a second
+    flow_packet_queue_max="100000"
+    flow_writer_flush_every="100" # Seconds
+    flow_watchdog_stall_secs="120" # Inactivity Seconds
+
+    flow_kafka_consumer_auto_offset_reset="earliest" # earliest/latest/none
+    flow_kafka_consumer_enable_auto_commit="true"
+    flow_kafka_consumer_partition_assignment_strategy="cooperative-sticky"
+    flow_kafka_consumer_enable_partition_eof="true"
+    flow_kafka_consumer_allow_auto_create_topics="true"
+    flow_kafka_producer_linger_ms="5"
+    flow_kafka_producer_batch_size=str(32* 1024) # 32 KiB
+    flow_kafka_producer_compression="zstd" # zstd, lz4, gzip, snappy, none
+
+
     #NRTDR API
     nrtdr_api_port= "8001"
     if network_mode == "host":
@@ -583,6 +602,23 @@ def main():
         # Flow module
         "flow_module": [
             "CIC_KAFKA_BASE_TOPIC_OUT",
+            "FLOW_KAFKA_GROUP",
+            "FLOW_PCAP_ROTATE_SIZE_MB",
+            "FLOW_CIC_ROTATE_SIZE_MB",
+            "FLOW_ROTATE_TIME_SEC",
+            "FLOW_PACKET_QUEUE_MAX",
+            "FLOW_WRITER_FLUSH_EVERY",
+            "FLOW_WATCHDOG_STALL_SECS",
+
+            "FLOW_KAFKA_CONSUMER_AUTO_OFFSET_RESET",
+            "FLOW_KAFKA_CONSUMER_ENABLE_AUTO_COMMIT",
+            "FLOW_KAFKA_CONSUMER_PARTITION_ASSIGNMENT_STRATEGY",
+            "FLOW_KAFKA_CONSUMER_ENABLE_PARTITION_EOF",
+            "FLOW_KAFKA_CONSUMER_ALLOW_AUTO_CREATE_TOPICS",
+            "FLOW_KAFKA_PRODUCER_LINGER_MS",
+            "FLOW_KAFKA_PRODUCER_BATCH_SIZE",
+            "FLOW_KAFKA_PRODUCER_COMPRESSION",
+
         ],
 
         # Alert and Notification Module
@@ -658,7 +694,6 @@ def main():
         "FALCO_EXPORTER_PORT": falco_exporter_port,
         #Info
         "DEVICE_INFO_PORT":device_info_port,
-
 
         # Kafka
         "KAFKA_BOOTSTRAP": kafka_bootstrap,
@@ -740,6 +775,23 @@ def main():
         "SNORT_PRODUCER_BATCH_NUM_MESSAGES": snort_producer_batch_num_messages,
         "SNORT_PRODUCER_KAFKA_PRODUCER_BATCH_SIZE": snort_producer_kafka_producer_batch_size,
         "SNORT_PRODUCER_KAFKA_PRODUCER_COMPRESSION": snort_producer_kafka_producer_compression,
+        
+        #Flow Module
+        "FLOW_KAFKA_GROUP": flow_kafka_group,
+        "FLOW_PCAP_ROTATE_SIZE_MB" : flow_pcap_rotate_size_mb,
+        "FLOW_CIC_ROTATE_SIZE_MB" : flow_cic_rotate_size_mb,
+        "FLOW_ROTATE_TIME_SEC" : flow_rotate_time_sec,
+        "FLOW_PACKET_QUEUE_MAX" : flow_packet_queue_max,
+        "FLOW_WRITER_FLUSH_EVERY" : flow_writer_flush_every,
+        "FLOW_WATCHDOG_STALL_SECS" : flow_watchdog_stall_secs,
+        "FLOW_KAFKA_CONSUMER_AUTO_OFFSET_RESET" : flow_kafka_consumer_auto_offset_reset,
+        "FLOW_KAFKA_CONSUMER_ENABLE_AUTO_COMMIT" : flow_kafka_consumer_enable_auto_commit,
+        "FLOW_KAFKA_CONSUMER_PARTITION_ASSIGNMENT_STRATEGY" : flow_kafka_consumer_partition_assignment_strategy,
+        "FLOW_KAFKA_CONSUMER_ENABLE_PARTITION_EOF" : flow_kafka_consumer_enable_partition_eof,
+        "FLOW_KAFKA_CONSUMER_ALLOW_AUTO_CREATE_TOPICS" : flow_kafka_consumer_allow_auto_create_topics,
+        "FLOW_KAFKA_PRODUCER_LINGER_MS" : flow_kafka_producer_linger_ms,
+        "FLOW_KAFKA_PRODUCER_BATCH_SIZE" : flow_kafka_producer_batch_size,
+        "FLOW_KAFKA_PRODUCER_COMPRESSION" : flow_kafka_producer_compression,
 
         # NRTDR API
         "NRTDR_API_PORT": nrtdr_api_port,
