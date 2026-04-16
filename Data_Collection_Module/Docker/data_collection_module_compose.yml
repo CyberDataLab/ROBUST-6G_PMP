@@ -16,16 +16,16 @@ services:
     environment:
       - TZ=${TZ}
       - MACHINE_ID=${MACHINE_ID}
-      - FLUENTD_TO_PROMETHEUS_PORT=${FLUENTD_TO_PROMETHEUS_PORT}
-      - FLUENTD_INTERNAL_PORT=${FLUENTD_INTERNAL_PORT}
+      - FLUENTD_TO_PROMETHEUS_PORT=${FLUENTD_TO_PROMETHEUS_PORT:-24231}
+      - FLUENTD_INTERNAL_PORT=${FLUENTD_INTERNAL_PORT:-24220}
       - FLUENTD_FILE_SIZE_LIMIT=${FLUENTD_FILE_SIZE_LIMIT}
     volumes:
       - /var/log:/var/log:ro
       - /var/log/journal:/var/log/journal:ro
       - ${PFD}/Results/fluentd_logs:/fluentd/log/out
     ports:
-      - "${FLUENTD_TO_PROMETHEUS_PORT}:24231" #Prometheus scrapping
-      - "${FLUENTD_INTERNAL_PORT}:24220" # This is a test to access via web using localhost:24220/api/plugins.json
+      - "${FLUENTD_TO_PROMETHEUS_PORT:-24231}:24231" #Prometheus scrapping
+      - "${FLUENTD_INTERNAL_PORT:-24220}:24220" # This is a test to access via web using localhost:24220/api/plugins.json
     restart: unless-stopped
   
   telegraf:
@@ -39,14 +39,14 @@ services:
       kafka_robust6g:
         condition: service_healthy
     environment:
-      - TZ=UTC
+      - TZ=${TZ}
       - TELEGRAF_GENERAL_INTERVAL=${TELEGRAF_GENERAL_INTERVAL}
       - MACHINE_ID=${MACHINE_ID}
       - KAFKA_BOOTSTRAP=${KAFKA_BOOTSTRAP}
       - TELEGRAF_BASE_TOPIC=${TELEGRAF_BASE_TOPIC}
-      - TELEGRAF_TO_PROMETHEUS_PORT=${TELEGRAF_TO_PROMETHEUS_PORT}
+      - TELEGRAF_TO_PROMETHEUS_PORT=${TELEGRAF_TO_PROMETHEUS_PORT:-9273}
     extra_hosts:
-      - "${KAFKA_LAN_HOSTNAME}:host-gateway"
+      - "${KAFKA_LAN_HOSTNAME:-kafka-host}:host-gateway"
     volumes:
       - /proc:/host/proc:ro
       - /sys:/host/sys:ro
@@ -54,7 +54,7 @@ services:
       - /var:/host/var:ro
       - ${PFD}/Data_Collection_Module/Configuration_Files/telegraf.conf:/etc/telegraf/telegraf.conf:ro
     ports:
-        - ${TELEGRAF_TO_PROMETHEUS_PORT}:${TELEGRAF_TO_PROMETHEUS_PORT}
+        - ${TELEGRAF_TO_PROMETHEUS_PORT:-9273}:${TELEGRAF_TO_PROMETHEUS_PORT:-9273}
     restart: unless-stopped
 
   tshark:
@@ -93,11 +93,11 @@ services:
     depends_on:
       - kafka_robust6g
     environment:
-      - TZ=UTC
+      - TZ=${TZ}
       - MACHINE_ID=${MACHINE_ID}
       - SKIP_DRIVER_LOADER=${FALCO_SKIP_DRIVER_LOADER}
     extra_hosts:
-      - "${KAFKA_LAN_HOSTNAME}:host-gateway"
+      - "${KAFKA_LAN_HOSTNAME:-kafka-host}:host-gateway"
     network_mode: "${NETWORK_MODE}"
     cap_add:
       - SYS_PTRACE
@@ -128,7 +128,7 @@ services:
     volumes:
       - /var/run/falco:/var/run/falco
     ports:
-      - "${FALCO_EXPORTER_PORT}:9376"
+      - "${FALCO_EXPORTER_PORT:-9376}:9376"
     restart: unless-stopped
 
 # Autodiscovery using HTTP-SD. Prometheus will read the information to identify dinamically this device.
@@ -140,16 +140,16 @@ services:
     container_name: device_info_robust6g
     profiles: ["collection_module.info"]
     environment:
-      - TZ=UTC
+      - TZ=${TZ}
       - MACHINE_ID=${MACHINE_ID}
       - ENABLE_TELEGRAF=${ENABLE_TELEGRAF}
       - ENABLE_FLUENTD=${ENABLE_FLUENTD}
       - ENABLE_FALCO=${ENABLE_FALCO}
-      - TELEGRAF_TO_PROMETHEUS_PORT=${TELEGRAF_TO_PROMETHEUS_PORT}
-      - FLUENTD_TO_PROMETHEUS_PORT=${FLUENTD_TO_PROMETHEUS_PORT}
-      - FALCO_EXPORTER_PORT=${FALCO_EXPORTER_PORT}
+      - TELEGRAF_TO_PROMETHEUS_PORT=${TELEGRAF_TO_PROMETHEUS_PORT:-9273}
+      - FLUENTD_TO_PROMETHEUS_PORT=${FLUENTD_TO_PROMETHEUS_PORT:-24231}
+      - FALCO_EXPORTER_PORT=${FALCO_EXPORTER_PORT:-9376}
       - DEVICE_INFO_PORT=${DEVICE_INFO_PORT}
     ports:
-      - "${DEVICE_INFO_PORT}:${DEVICE_INFO_PORT}"
+      - "${DEVICE_INFO_PORT:-9999}:${DEVICE_INFO_PORT:-9999}"
     restart: unless-stopped
 

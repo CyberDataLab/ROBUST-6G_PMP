@@ -8,7 +8,7 @@ filebeat.inputs:
         # It does not work with [0-9]{8} sentence, it only works with several [0-9] sentences
     tags: ["syslog_logs"]
     fields:
-      kafka_topic: "${FLUENTD_SYSLOG_BASE_TOPIC}" 
+      kafka_topic: "${FLUENTD_SYSLOG_BASE_TOPIC:syslog_logs}" 
     fields_under_root: true
 
   - type: filestream #log
@@ -19,7 +19,7 @@ filebeat.inputs:
         # Example: /fluentd/log/systemd_output.log.20250124.log
     tags: ["systemd_logs"]
     fields:
-      kafka_topic: "${FLUENTD_SYSTEMD_BASE_TOPIC}" 
+      kafka_topic: "${FLUENTD_SYSTEMD_BASE_TOPIC:systemd_logs}" 
     fields_under_root: true
 
   - type: filestream #log
@@ -29,7 +29,7 @@ filebeat.inputs:
       - "/tshark/traces/infile.ndjson"
     tags: ["tshark_ndjson_traces"]
     fields:
-      kafka_topic: "${TSHARK_BASE_TOPIC}" 
+      kafka_topic: "${TSHARK_BASE_TOPIC:tshark_traces}" 
     fields_under_root: true
     parsers:
       - ndjson:
@@ -46,14 +46,14 @@ filebeat.inputs:
       - "/falco/logs/falco_events.json"
     tags: ["falco_events"]
     fields:
-      kafka_topic: "${FALCO_BASE_TOPIC}" # Primero "${FALCO_BASE_TOPIC}" solo y luego cuando meta más cambios esto "${FALCO_BASE_TOPIC}_${MACHINE_ID}"
+      kafka_topic: "${FALCO_BASE_TOPIC:falco_events}" # Primero "${FALCO_BASE_TOPIC}" solo y luego cuando meta más cambios esto "${FALCO_BASE_TOPIC}_${MACHINE_ID}"
     fields_under_root: true
 
 output.kafka:
   hosts: ["${KAFKA_BOOTSTRAP}"]
   topic: '%{[kafka_topic]}'
-  compression: "${FILEBEAT_COMPRESION}"#lz4
-  required_acks: 1
+  compression: "${FILEBEAT_COMPRESION}" #lz4
+  required_acks: "1"
   partition.round_robin.reachable_only: true
   bulk_max_size: "${FILEBEAT_BULK_MAX_SIZE}"
 # Filebeat logs by stdout

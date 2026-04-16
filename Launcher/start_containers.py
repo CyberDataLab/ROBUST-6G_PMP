@@ -13,6 +13,30 @@ import socket
 from collections import OrderedDict
 from typing import Dict, Iterable, List, Tuple, Optional
 
+MODULE_COMPOSE_FILES: Dict[str, List[str]] = {
+    "communication_module": [
+        "Communication_Bus/Docker/communication_bus_compose.yml",
+    ],
+    "alert_module": [
+        "Alert_Module/Docker/alert_module_compose.yml",
+    ],
+    "collection_module": [
+        "Data_Collection_Module/Docker/data_collection_module_compose.yml",
+    ],
+    "flow_module": [
+        "Flow_Module/Docker/flow_module_compose.yml",
+    ],
+    "db_module": [
+        "Databases_module/Docker/db_module_compose.yml",
+    ],
+    "aggregation_module": [
+        "Aggregation_Normalisation_Module/Docker/aggregation_normalisation_compose.yml",
+    ],
+    "thingsboard_module": [
+        "ThingsBoard_Collector_Module/Docker/thingsboard_collector_compose.yml",
+    ],
+}
+
 class cmd_parser:
     """
     Parse CLI arguments to select docker-compose modules (files/stacks) and
@@ -316,6 +340,28 @@ def write_dotenv(
     env_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
     return env_path
 
+def build_selected_compose_files(
+    selected: "OrderedDict[str, List[str]]",
+    base_dir: Path,
+    module_compose_files: Dict[str, List[str]]
+) -> List[str]:
+    """
+    Build an ordered, de-duplicated list of docker compose files for the selected modules.
+    """
+
+    seen = set()
+    compose_files: List[str] = []
+
+    for module in selected.keys():
+        for rel_path in module_compose_files.get(module, []):
+            abs_path = str((base_dir / rel_path).resolve())
+            if abs_path not in seen:
+                seen.add(abs_path)
+                compose_files.append(abs_path)
+
+    return compose_files
+
+
 def main():
     try:
         LFD = Path(__file__).resolve().parent 
@@ -333,7 +379,7 @@ def main():
     parser = cmd_parser()
     args, selected = parser.parse()
     # If a collection_module has been activated, then device_info is also included
-    if "collection_module" in selected:
+    if "collection_module" in selected and "info" not in selected["collection_module"]:
         selected['collection_module'].append("info")
 
     compose_profiles_list = parser.build_compose_profiles(selected)
@@ -489,6 +535,11 @@ def main():
         nrtdr_api_host="nrtdr_api"
     nrtdr_ws_poll_interval= "0.5"
     nrtdr_ws_batch_size= "10"
+
+    # Thingsboard alarm collector
+    tb_username="tenant@thingsboard.org"
+    tb_password="tenant"
+    tb_use_https="false"
 
     # Variables que siempre deben ir al .env aunque no dependan de una tool concreta
     ALWAYS_ENV_VARS: List[str] = [
@@ -653,7 +704,11 @@ def main():
         ],
 
         # Thingsboard
-        "alarm_collector": [],
+        "alarm_collector": [
+            "TB_USERNAME",
+            "TB_PASSWORD",
+            "TB_USE_HTTPS",
+        ],
     }
 
     # Valores por defecto del .env
@@ -798,14 +853,45 @@ def main():
         "NRTDR_API_HOST": nrtdr_api_host,
         "NRTDR_WS_POLL_INTERVAL": nrtdr_ws_poll_interval,
         "NRTDR_WS_BATCH_SIZE": nrtdr_ws_batch_size,
+
+        # Thingsboard alarm collector
+        "TB_USERNAME" : tb_username,
+        "TB_PASSWORD" : tb_password,
+        "TB_USE_HTTPS" : tb_use_https,
+
     }
 
     env_keys = collect_env_vars(selected=selected, tool_env_vars=TOOL_ENV_VARS, always_env_vars=ALWAYS_ENV_VARS)
 
     written_path = write_dotenv(env_keys=env_keys, path=env_file_path, defaults=DEFAULT_ENV, header="")
 
+
+
+    selected_compose_files = build_selected_compose_files(
+        selected=selected,
+        base_dir=PFD,
+        module_compose_files=MODULE_COMPOSE_FILES
+    )
+
+    if not selected_compose_files:
+        print("No docker compose files resolved for the selected modules.")
+        return
+
+    print("Compose files:", selected_compose_files)
+
+    compose_cmd = ["docker", "compose"]
+
+    for compose_file in selected_compose_files:
+        compose_cmd.extend(["-f", compose_file])
+
+    compose_cmd.extend([
+        "--project-directory", str(PFD),
+        "--env-file", str(written_path),
+        "up", "--build", "-d"
+    ])
+
     try:
-        subprocess.run(["docker", "compose","-f", f"{str(LFD)}/docker-compose.yml" ,"--env-file",f"{str(written_path)}",  "up", "--build","-d"], check=True)
+        subprocess.run(compose_cmd, check=True)
     except subprocess.CalledProcessError as e:
         print(f"Error executing docker-compose: {e}")
         return

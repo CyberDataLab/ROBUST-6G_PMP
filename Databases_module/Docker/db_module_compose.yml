@@ -11,7 +11,7 @@ services:
     volumes:
       - ${PFD}/Results/mongo_data:/data/db
     ports:
-      - "${MONGO_PORT}:${MONGO_PORT}"
+      - "${MONGO_PORT:-27017}:${MONGO_PORT:-27017}"
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "mongo", "--eval", "db.adminCommand('ping')"]
@@ -37,7 +37,7 @@ services:
       - ${PFD}/Databases_module/Configuration_files/Redis/redis.conf:/usr/local/etc/redis/redis.conf:ro
       - ${PFD}/Results/Redis_data:/data
     ports:
-      - "${REDIS_PORT}:6379"
+      - "${REDIS_PORT:-6379}:6379"
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "redis-cli", "ping"] # default port is 6379
@@ -71,7 +71,7 @@ services:
       - KTRW_KAFKA_ENABLE_AUTO_COMMIT=${KTRW_KAFKA_ENABLE_AUTO_COMMIT}
       # Redis Configuration
       - REDIS_HOST=${REDIS_HOST}
-      - REDIS_PORT=${REDIS_PORT}
+      - REDIS_PORT=${REDIS_PORT:-6379}
       - REDIS_USER=${REDIS_USER}
       - REDIS_PASSWORD=${REDIS_PASSWORD}
       # Stream Configuration
@@ -94,7 +94,7 @@ services:
       - CIC_KAFKA_BASE_TOPIC_OUT=${CIC_KAFKA_BASE_TOPIC_OUT}
     restart: unless-stopped
     extra_hosts:
-      - "${KAFKA_LAN_HOSTNAME}:host-gateway"
+      - "${KAFKA_LAN_HOSTNAME:-kafka-host}:host-gateway"
     deploy:
       resources:
         limits:

@@ -38,7 +38,7 @@ services:
     # If host.docker.internal is used in Linux:
     extra_hosts:
       - "host.docker.internal:host-gateway"
-      - "${KAFKA_LAN_HOSTNAME}:host-gateway"
+      - "${KAFKA_LAN_HOSTNAME:-kafka-host}:host-gateway"
     cap_add:
       - NET_ADMIN
       - NET_RAW

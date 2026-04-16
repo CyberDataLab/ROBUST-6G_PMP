@@ -20,8 +20,8 @@ services:
       # host.docker.internal:9092 -> same host, but other network
       # kafka_robust6g-node1.lan:9094 -> other host
       - KAFKA_CONTROLLER_QUORUM_VOTERS=1@kafka_robust6g:9093
-      - KAFKA_LISTENERS=BROKER://0.0.0.0:${KAFKA_PORT_INTERNAL},EXTERNAL_DOCKER://0.0.0.0:9092,EXTERNAL_LAN://0.0.0.0:${KAFKA_PORT_EXTERNAL_LAN},CONTROLLER://:9093
-      - KAFKA_ADVERTISED_LISTENERS=BROKER://kafka_robust6g:${KAFKA_PORT_INTERNAL},EXTERNAL_DOCKER://host.docker.internal:9092,EXTERNAL_LAN://${KAFKA_LAN_HOSTNAME}:${KAFKA_PORT_EXTERNAL_LAN},CONTROLLER://kafka_robust6g:9093
+      - KAFKA_LISTENERS=BROKER://0.0.0.0:${KAFKA_PORT_INTERNAL:-29092},EXTERNAL_DOCKER://0.0.0.0:9092,EXTERNAL_LAN://0.0.0.0:${KAFKA_PORT_EXTERNAL_LAN:-9094},CONTROLLER://:9093
+      - KAFKA_ADVERTISED_LISTENERS=BROKER://kafka_robust6g:${KAFKA_PORT_INTERNAL:-29092},EXTERNAL_DOCKER://host.docker.internal:9092,EXTERNAL_LAN://${KAFKA_LAN_HOSTNAME:-kafka-host}:${KAFKA_PORT_EXTERNAL_LAN:-9094},CONTROLLER://kafka_robust6g:9093
       - KAFKA_LISTENER_SECURITY_PROTOCOL_MAP=BROKER:PLAINTEXT,EXTERNAL_DOCKER:PLAINTEXT,EXTERNAL_LAN:PLAINTEXT,CONTROLLER:PLAINTEXT
       - KAFKA_INTER_BROKER_LISTENER_NAME=BROKER
       - KAFKA_CONTROLLER_LISTENER_NAMES=CONTROLLER
@@ -39,15 +39,12 @@ services:
       - KAFKA_LOG_SEGMENT_BYTES=${KAFKA_LOG_SEGMENT_BYTES}       # 256 MiB: rotates more frequently
       - KAFKA_LOG_ROLL_MS=${KAFKA_LOG_ROLL_MS}               # rotated by time if there is little traffic
 
-    #FIXME
-    #  - "${KAFKA_PORT_INTERNAL}:29092"
-    #  - "${KAFKA_PORT_EXTERNAL_LAN}:9094"
     ports:
-      - "${KAFKA_PORT_INTERNAL}:${KAFKA_PORT_INTERNAL}"
+      - "${KAFKA_PORT_INTERNAL:-29092}:${KAFKA_PORT_INTERNAL:-29092}"
       - "9092:9092"
-      - "${KAFKA_PORT_EXTERNAL_LAN}:${KAFKA_PORT_EXTERNAL_LAN}" # The only case in which the external port is both inside the container and exposed on the host so that it can receive data
+      - "${KAFKA_PORT_EXTERNAL_LAN:-9094}:${KAFKA_PORT_EXTERNAL_LAN:-9094}" # The only case in which the external port is both inside the container and exposed on the host so that it can receive data
     extra_hosts:
-      - "${KAFKA_LAN_HOSTNAME}:host-gateway"
+      - "${KAFKA_LAN_HOSTNAME:-kafka-host}:host-gateway"
 
   filebeat:
     image: elastic/filebeat:8.16.2
@@ -65,7 +62,7 @@ services:
       - FILEBEAT_COMPRESION=${FILEBEAT_COMPRESION}
       - FILEBEAT_BULK_MAX_SIZE=${FILEBEAT_BULK_MAX_SIZE}
     extra_hosts:
-      - "${KAFKA_LAN_HOSTNAME}:host-gateway"
+      - "${KAFKA_LAN_HOSTNAME:-kafka-host}:host-gateway"
     volumes:
       - ${PFD}/Communication_Bus/Configuration_Files/filebeat.yml:/usr/share/filebeat/filebeat.yml:ro
       - ${PFD}/Results/fluentd_logs:/fluentd/log:ro

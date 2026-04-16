@@ -8,11 +8,11 @@ services:
     container_name: init_prometheus_config
     profiles: ["aggregation_module.prometheus"]
     environment:
-      - DISCOVERY_AGENT_PORT=${DISCOVERY_AGENT_PORT}
+      - DISCOVERY_AGENT_PORT=${DISCOVERY_AGENT_PORT:-8100}
     volumes:
       - ${PFD}/Aggregation_Normalisation_Module/Configuration_Files/Prometheus/prometheus.yml.tmpl:/tmpl/prometheus.yml.tmpl:ro
       - ${PFD}/Aggregation_Normalisation_Module/Configuration_Files/Prometheus/generated:/out
-    command: sh -c 'sed "s|\${DISCOVERY_AGENT_PORT}|$DISCOVERY_AGENT_PORT|g" /tmpl/prometheus.yml.tmpl > /out/prometheus.yml'
+    command: sh -c 'sed "s|\${DISCOVERY_AGENT_PORT:-8100}|$DISCOVERY_AGENT_PORT|g" /tmpl/prometheus.yml.tmpl > /out/prometheus.yml'
     restart: "no"
   
   prometheus:
@@ -34,7 +34,6 @@ services:
          #Mounting prometheus template with the environment variable expended
       - ${PFD}/Aggregation_Normalisation_Module/Configuration_Files/Prometheus/prometheus.yml.tmpl:/etc/prometheus/prometheus.yml.tmpl:ro
       - ${PFD}/Aggregation_Normalisation_Module/Configuration_Files/Prometheus/generated:/etc/prometheus/generated:ro
-
       - ${PFD}/Aggregation_Normalisation_Module/Configuration_Files/Prometheus/rules:/etc/prometheus/rules:ro
       - ${PFD}/Results/prometheus_data:/prometheus
     command:
@@ -44,7 +43,7 @@ services:
       - "--storage.tsdb.retention.time=30d"
       - "--web.enable-lifecycle"
     ports:
-      - "${PROMETHEUS_PORT}:${PROMETHEUS_PORT}"
+      - "${PROMETHEUS_PORT:-9090}:${PROMETHEUS_PORT:-9090}"
     restart: unless-stopped
 
 ##########################
@@ -98,10 +97,10 @@ services:
     container_name: discovery_agent_robust6g
     profiles: ["aggregation_module.prometheus"] #Same profile because Prometheus needs this microservice
     environment:
-      - DISCOVERY_AGENT_SCAN_PORT=${DISCOVERY_AGENT_SCAN_PORT}
+      - DISCOVERY_AGENT_SCAN_PORT=${DISCOVERY_AGENT_SCAN_PORT:-9999}
       - DISCOVERY_AGENT_SCAN_TIMEOUT=${DISCOVERY_AGENT_SCAN_TIMEOUT}
       - TZ=${TZ}
-      - DISCOVERY_AGENT_PORT=${DISCOVERY_AGENT_PORT}
+      - DISCOVERY_AGENT_PORT=${DISCOVERY_AGENT_PORT:-8100}
     network_mode: "${NETWORK_MODE}"
     volumes:
       - ${PFD}/Aggregation_Normalisation_Module/Scripts:/opt/discovery
@@ -142,8 +141,8 @@ services:
     volumes:
       - ${PFD}/Results/opensearch_data:/usr/share/opensearch/data
     ports:
-      - "${OPENSEARCH_REST_API_PORT}:9200"
-      - "${OPENSEARCH_ANALYSER_PORT}:9600"
+      - "${OPENSEARCH_REST_API_PORT:-9200}:9200"
+      - "${OPENSEARCH_ANALYSER_PORT:-9600}:9600"
     restart: unless-stopped
 
   opensearch-dashboards:
@@ -151,11 +150,11 @@ services:
     container_name: opensearch_dashboards_robust6g
     profiles: ["aggregation_module.opensearch"]
     ports:
-      - "${OPENSEARCH_DASHBOARD_PORT}:5601"
+      - "${OPENSEARCH_DASHBOARD_PORT:-5601}:5601"
     environment:
-      - 'OPENSEARCH_HOSTS=["https://${OPENSEARCH_HOST}:${OPENSEARCH_REST_API_PORT}"]'
+      - 'OPENSEARCH_HOSTS=["https://${OPENSEARCH_HOST:-opensearch-host}:${OPENSEARCH_REST_API_PORT:-9200}"]'
       - OPENSEARCH_USERNAME=admin
-      - OPENSEARCH_PASSWORD=${OPENSEARCH_PASSWORD}
+      - OPENSEARCH_PASSWORD=${OPENSEARCH_PASSWORD:-}
     network_mode: "${NETWORK_MODE}"
     depends_on:
       - opensearch
@@ -170,7 +169,7 @@ services:
     environment:
       - "LS_JAVA_OPTS=-Xmx256m -Xms256m"
       - OPENSEARCH_PASSWORD=${OPENSEARCH_PASSWORD}
-      - OPENSEARCH_HOST=${OPENSEARCH_HOST}
+      - OPENSEARCH_HOST=${OPENSEARCH_HOST:-opensearch-host}
       - OPENSEARCH_REST_API_PORT=${OPENSEARCH_REST_API_PORT:-9200}
       - TELEGRAF_BASE_TOPIC=${TELEGRAF_BASE_TOPIC}
       - FLUENTD_SYSLOG_BASE_TOPIC=${FLUENTD_SYSLOG_BASE_TOPIC}
@@ -179,8 +178,10 @@ services:
       - KAFKA_BOOTSTRAP=${KAFKA_BOOTSTRAP}
     network_mode: "${NETWORK_MODE}"
     extra_hosts:
-      #- "kafka_robust6g-node1.lan:host-gateway"
-      - "${KAFKA_LAN_HOSTNAME}:host-gateway"
+      # The default value is not valid. "kafka-host" is used as a placeholder for the Kafka address,
+      # which should be specified using its FQDN. Docker does not support empty default values for some of its functions,
+      # and hard-coding a default FQDN is not recommended.
+      - "${KAFKA_LAN_HOSTNAME:-kafka-host}:host-gateway"
     depends_on:
       - opensearch
     restart: unless-stopped
