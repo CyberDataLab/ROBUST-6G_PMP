@@ -12,6 +12,7 @@ import socket
 
 from collections import OrderedDict
 from typing import Dict, Iterable, List, Tuple, Optional
+from urllib.parse import quote_plus
 
 MODULE_COMPOSE_FILES: Dict[str, List[str]] = {
     "communication_module": [
@@ -458,7 +459,7 @@ def main():
     if not mongo_initdb_root_password:
         mongo_initdb_root_password = generate_secure_password()
     mongo_port= "27017"
-    mongo_uri= f"mongodb://{mongo_initdb_root_username}:{mongo_initdb_root_password}@mongodb:{mongo_port}/"
+    mongo_uri= f"mongodb://{mongo_initdb_root_username}:{quote_plus(mongo_initdb_root_password)}@mongodb:{mongo_port}/?authSource=admin"
     # RedisDB
     redis_host= "redis_robust6g"
     redis_port= "6379"

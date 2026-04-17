@@ -26,7 +26,7 @@ HOME_NET = 'any'
 -- set up the external network addresses.
 -- (leave as "any" in most situations)
 EXTERNAL_NET = 'any'
-
+RULE_PATH = '/home/Alert_Module/Snort_configuration/lua'
 include 'snort_defaults.lua'
 
 ---------------------------------------------------------------------------
@@ -89,8 +89,8 @@ http2_inspect = { }
 -- decoder = {checksum.mode = "none"}
 
 -- see file_magic.rules for file id rules
-file_id = { rules_file = 'file_magic.rules' }
-file_policy = { }
+--file_id = { rules_file = 'file_magic.rules' }
+--file_policy = { }
 
 js_norm = default_js_norm
 
@@ -184,7 +184,7 @@ classifications = default_classifications
 ips =
 {
     -- use this to enable decoder and inspector alerts
-    --enable_builtin_rules = true,
+    enable_builtin_rules = false,
 
     -- use include for rules files; be sure to set your path
     -- note that rules files can include other rules files

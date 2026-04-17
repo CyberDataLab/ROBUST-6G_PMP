@@ -7,6 +7,7 @@ import threading
 import time
 import fcntl
 import struct
+from urllib.parse import quote_plus
 
 from kafka_io import KafkaLineConsumer, KafkaAlertProducer, get_bootstrap
 from pymongo import MongoClient, errors
@@ -317,8 +318,10 @@ def main():
     Ensures graceful cleanup of resources on exit.
     """
 
-    mongo_uri = os.getenv("MONGO_URI", "mongodb://admin:admin123@mongodb:27017/")
+    mongo_uri = os.getenv("MONGO_URI") or f"mongodb://{os.getenv('MONGO_INITDB_ROOT_USERNAME')}:{quote_plus(os.getenv('MONGO_INITDB_ROOT_PASSWORD'))}@mongodb:{os.getenv('MONGO_PORT')}/?authSource=admin"
+
     try:
+        print(mongo_uri)
         client = MongoClient(mongo_uri)
         db = client["snort_db"]
         alerts_collection = db["alerts"]

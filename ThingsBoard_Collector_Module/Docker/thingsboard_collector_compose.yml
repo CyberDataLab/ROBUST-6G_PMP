@@ -6,15 +6,15 @@ services:
       context: ${PFD}
       dockerfile: ThingsBoard_Collector_Module/Docker/Dockerfiles/thingsboard_collector.dockerfile
     container_name: thingsboard_collector_robust6g
-    profiles: ["thingsboard_module.alert_collector"]
+    profiles: ["thingsboard_module.alarm_collector"]
     network_mode: "host" #Network_mode with bridge needs the port mapping
     depends_on:
       kafka_robust6g:
         condition: service_healthy
     environment:
       - TZ=UTC
-      - KAFKA_BOOTSTRAP=kafka_robust6g-node1.lan:9094
-      - TB_USERNAME=tenant@thingsboard.org
-      - TB_PASSWORD=tenant
-      - TB_USE_HTTPS=false  # Set to true if ThingsBoard uses HTTPS
+      - KAFKA_BOOTSTRAP=${KAFKA_BOOTSTRAP}
+      - TB_USERNAME=${TB_USERNAME}
+      - TB_PASSWORD=${TB_PASSWORD}
+      - TB_USE_HTTPS=${TB_USE_HTTPS}  # Set to true if ThingsBoard uses HTTPS
     restart: unless-stopped

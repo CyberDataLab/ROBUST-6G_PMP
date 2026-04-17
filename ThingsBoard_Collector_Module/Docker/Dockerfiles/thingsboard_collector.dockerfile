@@ -24,7 +24,7 @@ USER tbcollector
 # API port exposed
 EXPOSE 5000
 
-HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
+HEALTHCHECK --interval=30s --timeout=10s --start-period=15s --retries=3 \
     CMD python3 -c "import requests; requests.get('http://localhost:5000/health', timeout=2).raise_for_status()"
 
 ENTRYPOINT ["python3", "/app/api_server.py"]
