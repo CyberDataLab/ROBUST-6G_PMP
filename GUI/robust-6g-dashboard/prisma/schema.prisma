@@ -1,0 +1,84 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model Organization {
+  id                  String        @id @default(cuid())
+  name                String
+  slug                String        @unique
+  allowedEmailDomains String[]
+  users               User[]
+  dashboards          Dashboard[]
+  reports             Report[]
+  createdAt           DateTime      @default(now())
+  updatedAt           DateTime      @updatedAt
+}
+
+model User {
+  id             String       @id @default(cuid())
+  name           String
+  email          String       @unique
+  passwordHash   String
+  role           Role
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id])
+  dashboards     Dashboard[]
+  auditLogs      AuditLog[]
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+}
+
+model Dashboard {
+  id             String          @id @default(cuid())
+  name           String
+  externalId     String
+  status         DashboardStatus
+  iframeUrl      String?
+  data           Json?
+  lastSyncAt     DateTime?
+  organizationId String
+  organization   Organization    @relation(fields: [organizationId], references: [id])
+  userId         String?
+  user           User?           @relation(fields: [userId], references: [id])
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+
+  @@unique([externalId, organizationId])
+}
+
+model Report {
+  id             String       @id @default(cuid())
+  title          String
+  description    String?
+  data           Json?
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id])
+  createdAt      DateTime     @default(now())
+}
+
+model AuditLog {
+  id             String   @id @default(cuid())
+  actorUserId    String
+  actor          User     @relation(fields: [actorUserId], references: [id])
+  action         String
+  targetType     String
+  targetId       String?
+  organizationId String
+  metadata       Json?
+  createdAt      DateTime @default(now())
+}
+
+enum Role {
+  ADMIN
+  ANALYST
+}
+
+enum DashboardStatus {
+  ACTIVE
+  INACTIVE
+  ERROR
+}

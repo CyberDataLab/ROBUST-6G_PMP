@@ -1,0 +1,8 @@
+ignoredBuiltDependencies:
+  - prisma
+  - sharp
+
+onlyBuiltDependencies:
+  - '@prisma/engines'
+  - bcrypt
+  - esbuild

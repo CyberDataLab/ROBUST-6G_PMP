@@ -1,0 +1,44 @@
+{
+  "name": "robust-6g-dashboard",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "eslint ."
+  },
+  "prisma": {
+    "seed": "npx tsx prisma/seed.ts"
+  },
+  "dependencies": {
+    "@auth/prisma-adapter": "^2.11.1",
+    "@prisma/adapter-pg": "^7.4.1",
+    "@prisma/client": "^7.4.1",
+    "@tanstack/react-query": "^5.90.21",
+    "bcrypt": "^6.0.0",
+    "class-variance-authority": "^0.7.1",
+    "clsx": "^2.1.1",
+    "dotenv": "^17.3.1",
+    "lucide-react": "^0.575.0",
+    "next": "latest",
+    "next-auth": "5.0.0-beta.30",
+    "pg": "^8.19.0",
+    "react": "latest",
+    "react-dom": "latest",
+    "tailwind-merge": "^3.5.0",
+    "tailwindcss": "^2.x",
+    "typescript": "^4.x",
+    "zod": "^4.3.6"
+  },
+  "devDependencies": {
+    "@types/bcrypt": "^6.0.0",
+    "@types/node": "^16.x",
+    "@types/pg": "^8.16.0",
+    "@types/react": "^17.x",
+    "eslint": "^7.x",
+    "eslint-config-next": "^12.x",
+    "prisma": "^7.x",
+    "tsx": "^4.21.0"
+  }
+}
