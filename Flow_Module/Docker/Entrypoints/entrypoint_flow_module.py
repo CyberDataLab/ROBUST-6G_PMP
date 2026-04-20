@@ -3,6 +3,7 @@ import os
 from pathlib import Path
 import subprocess
 import threading
+from urllib.parse import quote_plus
 from Scripts.kafka_io import KafkaLineConsumer, KafkaCSVProducer, get_bootstrap
 from queue import Queue, Empty, Full
 import time
@@ -399,7 +400,7 @@ def sanitize_packet_timestamp(packet_dict):
 
 def main():
 
-    mongo_uri = os.getenv("MONGO_URI")
+    mongo_uri =     mongo_uri = os.getenv("MONGO_URI") or f"mongodb://{os.getenv('MONGO_INITDB_ROOT_USERNAME')}:{quote_plus(os.getenv('MONGO_INITDB_ROOT_PASSWORD'))}@mongodb:{os.getenv('MONGO_PORT')}/?authSource=admin"
     client = MongoClient(mongo_uri)
     db = client["flow_db"]
     flow_collection = db["flows"]
