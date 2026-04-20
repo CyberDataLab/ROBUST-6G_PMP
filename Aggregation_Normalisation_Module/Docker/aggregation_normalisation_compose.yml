@@ -1,8 +1,15 @@
 services:
 
+  init-prometheus:
+    image: busybox:latest
+    container_name: init_prometheus
+    profiles: ["aggregation_module.prometheus"]
+    # Change the owner of the /prometheus folder to user 65534 (nobody)
+    command: sh -c "chown -R 65534:65534 /prometheus"
+    volumes:
+      - ${PFD}/Results/prometheus_data:/prometheus
+    restart: "no"
 
-
-# They will be used when all the environment variables had been activated
   init-prometheus-config:
     image: busybox:latest
     container_name: init_prometheus_config
@@ -12,7 +19,7 @@ services:
     volumes:
       - ${PFD}/Aggregation_Normalisation_Module/Configuration_Files/Prometheus/prometheus.yml.tmpl:/tmpl/prometheus.yml.tmpl:ro
       - ${PFD}/Aggregation_Normalisation_Module/Configuration_Files/Prometheus/generated:/out
-    command: sh -c 'sed "s|\${DISCOVERY_AGENT_PORT:-8100}|$DISCOVERY_AGENT_PORT|g" /tmpl/prometheus.yml.tmpl > /out/prometheus.yml'
+    command: sh -c 'sed "s|\$${DISCOVERY_AGENT_PORT}|$${DISCOVERY_AGENT_PORT}|g" /tmpl/prometheus.yml.tmpl > /out/prometheus.yml && cat /out/prometheus.yml'
     restart: "no"
   
   prometheus:
@@ -37,7 +44,6 @@ services:
       - ${PFD}/Aggregation_Normalisation_Module/Configuration_Files/Prometheus/rules:/etc/prometheus/rules:ro
       - ${PFD}/Results/prometheus_data:/prometheus
     command:
-      # CAMBIO: ahora apunta al generado
       - "--config.file=/etc/prometheus/generated/prometheus.yml"
       - "--storage.tsdb.path=/prometheus"
       - "--storage.tsdb.retention.time=30d"
@@ -45,49 +51,6 @@ services:
     ports:
       - "${PROMETHEUS_PORT:-9090}:${PROMETHEUS_PORT:-9090}"
     restart: unless-stopped
-
-##########################
-# OLD init
-##########################
-#
-#  init-prometheus:
-#    image: busybox:latest
-#    container_name: init_prometheus
-#    profiles: ["aggregation_module.prometheus"]
-#    # Change the owner of the /prometheus folder to user 65534 (nobody)
-#    command: sh -c "chown -R 65534:65534 /prometheus"
-#    volumes:
-#      - ${PFD}/Results/prometheus_data:/prometheus
-#    restart: "no"
-#
-#  prometheus:
-#    image: prom/prometheus:v3.8.0
-#    container_name: prometheus_server_robust6g
-#    profiles: ["aggregation_module.prometheus"]
-#    depends_on:
-#      init-prometheus:
-#        condition: service_completed_successfully
-#      discovery-agent: 
-#        condition: service_started
-#    environment:
-#      - TZ=UTC
-#    extra_hosts: # Write a line in /etc/hosts of the Prometheus container to link the discovery agent with the host's IP
-#      - "discovery-agent:host-gateway"
-#    volumes:
-#      - ${PFD}/Aggregation_Normalisation_Module/Configuration_Files/Prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
-#      - ${PFD}/Aggregation_Normalisation_Module/Configuration_Files/Prometheus/rules:/etc/prometheus/rules:ro
-#      - ${PFD}/Results/prometheus_data:/prometheus # Current owner of prometheus_data is user 65534 (nobody)
-#    command:
-#      - "--config.file=/etc/prometheus/prometheus.yml"
-#      - "--storage.tsdb.path=/prometheus"
-#      - "--storage.tsdb.retention.time=30d"
-#      - "--web.enable-lifecycle"
-#    ports:
-#      - "9090:9090"
-#    restart: unless-stopped
-##########################
-# OLD end
-##########################
 
   discovery-agent:
     image: discovery_agent_robust6g:latest
@@ -99,6 +62,7 @@ services:
     environment:
       - DISCOVERY_AGENT_SCAN_PORT=${DISCOVERY_AGENT_SCAN_PORT:-9999}
       - DISCOVERY_AGENT_SCAN_TIMEOUT=${DISCOVERY_AGENT_SCAN_TIMEOUT}
+      - DISCOVERY_AGENT_REFRESH_INTERVAL=${DISCOVERY_AGENT_REFRESH_INTERVAL}
       - TZ=${TZ}
       - DISCOVERY_AGENT_PORT=${DISCOVERY_AGENT_PORT:-8100}
     network_mode: "${NETWORK_MODE}"
