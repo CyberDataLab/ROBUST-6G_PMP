@@ -1,4 +1,4 @@
-# Graphical User Interface of the Programmable Monitoring Platform
+# robust-6g-dashboard
 
 ## Overview
 

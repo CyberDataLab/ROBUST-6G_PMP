@@ -1,0 +1,6 @@
+{
+  "version": 3,
+  "sources": [],
+  "sections": [
+    {"offset": {"line": 10, "column": 0}, "map": {"version":3,"sources":["file:///Users/josemariajorqueravalero/Desktop/GUI/robust-6g-dashboard/src/app/providers.tsx"],"sourcesContent":["\"use client\";\n\nimport { SessionProvider } from \"next-auth/react\";\n\nexport default function Providers({ children }: { children: React.ReactNode }) {\n  return <SessionProvider>{children}</SessionProvider>;\n}"],"names":[],"mappings":";;;;;AAEA;AAFA;;;AAIe,SAAS,UAAU,EAAE,QAAQ,EAAiC;IAC3E,qBAAO,6WAAC,2VAAe;kBAAE;;;;;;AAC3B"}}]
+}

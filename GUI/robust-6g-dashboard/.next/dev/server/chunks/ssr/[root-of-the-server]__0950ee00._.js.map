@@ -1,0 +1,6 @@
+{
+  "version": 3,
+  "sources": [],
+  "sections": [
+    {"offset": {"line": 18, "column": 0}, "map": {"version":3,"sources":["file:///Users/josemariajorqueravalero/Desktop/GUI/robust-6g-dashboard/src/app/dashboard/page.tsx"],"sourcesContent":["import React from 'react';\nimport Header from '../../components/layout/Header';\nimport Sidebar from '../../components/layout/Sidebar';\nimport Footer from '../../components/layout/Footer';\n\nconst DashboardPage: React.FC = () => {\n    return (\n        <div className=\"flex flex-col h-screen\">\n            <Header />\n            <div className=\"flex flex-1\">\n                <Sidebar />\n                <main className=\"flex-1 p-4\">\n                    <h1 className=\"text-2xl font-bold\">Dashboard</h1>\n                    {/* Additional dashboard content goes here */}\n                </main>\n            </div>\n            <Footer />\n        </div>\n    );\n};\n\nexport default DashboardPage;"],"names":[],"mappings":";;;;;AACA;AACA;AACA;;;;;AAEA,MAAM,gBAA0B;IAC5B,qBACI,6WAAC;QAAI,WAAU;;0BACX,6WAAC,iJAAM;;;;;0BACP,6WAAC;gBAAI,WAAU;;kCACX,6WAAC,kJAAO;;;;;kCACR,6WAAC;wBAAK,WAAU;kCACZ,cAAA,6WAAC;4BAAG,WAAU;sCAAqB;;;;;;;;;;;;;;;;;0BAI3C,6WAAC,iJAAM;;;;;;;;;;;AAGnB;uCAEe"}}]
+}
