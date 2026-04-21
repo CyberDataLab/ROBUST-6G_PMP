@@ -1,8 +1,24 @@
+"use client";
+
 import React from "react";
-import Link from "next/link";
+import { usePathname, useRouter } from "next/navigation";
 import { LayoutDashboard, Wrench, Eye, Settings } from "lucide-react";
 
 const Sidebar: React.FC = () => {
+  const router = useRouter();
+  const pathname = usePathname();
+  const noAction = () => undefined;
+
+  const scrollToDashboardSection = (sectionId: string) => {
+    if (pathname !== "/dashboard") {
+      router.push(`/dashboard#${sectionId}`);
+      return;
+    }
+
+    const section = document.getElementById(sectionId);
+    section?.scrollIntoView({ behavior: "smooth", block: "start" });
+  };
+
   return (
     <aside
       className="relative w-46 h-full overflow-hidden border-r border-white/10 text-white bg-fixed bg-cover bg-center bg-no-repeat"
@@ -15,44 +31,50 @@ const Sidebar: React.FC = () => {
       <nav className="relative z-10 p-3">
         <ul className="space-y-2">
           <li>
-            <Link
-              href="/dashboard"
-              className="flex items-center gap-2 rounded-md px-2 py-1.5 text-sm font-medium text-[#0a0e27] hover:brightness-110 transition-all shadow-sm"
+            <button
+              type="button"
+              onClick={() => scrollToDashboardSection("dashboard-top")}
+              className="w-full flex items-center gap-2 rounded-md px-2 py-1.5 text-sm font-medium text-[#0a0e27] hover:brightness-110 transition-all shadow-sm"
               style={{ backgroundColor: "rgba(255,255,255,0.55)" }}
             >
               <LayoutDashboard className="h-3.5 w-3.5" />
               Overview
-            </Link>
+            </button>
           </li>
           <li>
-            <Link
-              href="/dashboard/tools"
-              className="flex items-center gap-2 rounded-md px-2 py-1.5 text-sm font-medium text-[#0a0e27] hover:brightness-110 transition-all shadow-sm"
+            <button
+              type="button"
+              onClick={() =>
+                scrollToDashboardSection("monitoring-tool-configuration")
+              }
+              className="w-full flex items-center gap-2 rounded-md px-2 py-1.5 text-sm font-medium text-[#0a0e27] hover:brightness-110 transition-all shadow-sm"
               style={{ backgroundColor: "rgba(255,255,255,0.55)" }}
             >
               <Wrench className="h-3.5 w-3.5" />
               Manage Tools
-            </Link>
+            </button>
           </li>
           <li>
-            <Link
-              href="/dashboard/visualizations"
-              className="flex items-center gap-2 rounded-md px-2 py-1.5 text-sm font-medium text-[#0a0e27] hover:brightness-110 transition-all shadow-sm"
+            <button
+              type="button"
+              onClick={noAction}
+              className="w-full flex items-center gap-2 rounded-md px-2 py-1.5 text-sm font-medium text-[#0a0e27] hover:brightness-110 transition-all shadow-sm"
               style={{ backgroundColor: "rgba(255,255,255,0.55)" }}
             >
               <Eye className="h-3.5 w-3.5" />
               Visualization
-            </Link>
+            </button>
           </li>
           <li>
-            <Link
-              href="/dashboard/settings"
-              className="flex items-center gap-2 rounded-md px-2 py-1.5 text-sm font-medium text-[#0a0e27] hover:brightness-110 transition-all shadow-sm"
+            <button
+              type="button"
+              onClick={noAction}
+              className="w-full flex items-center gap-2 rounded-md px-2 py-1.5 text-sm font-medium text-[#0a0e27] hover:brightness-110 transition-all shadow-sm"
               style={{ backgroundColor: "rgba(255,255,255,0.55)" }}
             >
               <Settings className="h-3.5 w-3.5" />
               Platform Settings
-            </Link>
+            </button>
           </li>
         </ul>
       </nav>
