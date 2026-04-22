@@ -37,11 +37,13 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
           throw new Error("Not affiliated / invalid organization email domain");
         }
 
+        const appRole = user.role === "ANALYST" ? "USER" : "ADMIN";
+
         return {
           id: user.id,
           name: user.name,
           email: user.email,
-          role: user.role,
+          role: appRole,
           organizationId: user.organizationId,
           organizationSlug: user.organization.slug,
         };
@@ -61,7 +63,8 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
     async session({ session, token }) {
       if (session.user) {
         session.user.id = token.id as string;
-        (session.user as any).role = token.role;
+        (session.user as any).role =
+          token.role === "ANALYST" ? "USER" : token.role;
         (session.user as any).organizationId = token.organizationId;
         (session.user as any).organizationSlug = token.organizationSlug;
       }

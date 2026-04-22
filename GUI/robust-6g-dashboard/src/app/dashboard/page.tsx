@@ -250,6 +250,7 @@ function MonitoringToolConfigurationBox({
   onLaunchClick: () => void;
   onReconfigureClick: () => void;
 }) {
+  const DEPLOY_ENDPOINT = "http://localhost:8080/ConfigurationManager/deployNetworkTool";
   const toolOptionsByPosture: Record<string, string[]> = {
     "Network Security Posture": ["Tshark", "Snort"],
     "Application Security Posture": ["Falco", "Fluentd"],
@@ -258,6 +259,41 @@ function MonitoringToolConfigurationBox({
 
   const availableTools = toolOptionsByPosture[posture] ?? [];
   const exportedJson = draftConfig ? JSON.stringify(draftConfig, null, 2) : "";
+  const [isDeploying, setIsDeploying] = useState(false);
+  const [deployMessage, setDeployMessage] = useState("");
+
+  const handleDeploy = async () => {
+    if (!draftConfig || isDeploying) {
+      return;
+    }
+
+    setIsDeploying(true);
+    setDeployMessage("");
+
+    try {
+      const response = await fetch(DEPLOY_ENDPOINT, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(draftConfig),
+      });
+
+      if (!response.ok) {
+        throw new Error(`Deploy failed with status ${response.status}`);
+      }
+
+      setDeployMessage("Deploy request sent successfully.");
+    } catch (error) {
+      setDeployMessage(
+        error instanceof Error
+          ? error.message
+          : "Deploy failed. Check if localhost endpoint is available.",
+      );
+    } finally {
+      setIsDeploying(false);
+    }
+  };
 
   const renderJsonFields = (config: JsonObject, path: string[] = []) =>
     Object.entries(config).map(([key, value]) => {
@@ -295,7 +331,7 @@ function MonitoringToolConfigurationBox({
               onChange={(event) =>
                 onDraftFieldChange(fieldPath, event.target.value === "true")
               }
-              className="w-full rounded-lg border border-cyan-500/30 bg-[#0b1120] px-4 py-3 text-sm text-white outline-none transition-all focus:border-cyan-400 focus:ring-2 focus:ring-cyan-500/20"
+              className="w-full rounded-lg border border-cyan-500/30 bg-white px-4 py-3 text-sm text-black outline-none transition-all focus:border-cyan-400 focus:ring-2 focus:ring-cyan-500/20"
             >
               <option value="true">true</option>
               <option value="false">false</option>
@@ -313,7 +349,7 @@ function MonitoringToolConfigurationBox({
                     : event.target.value,
                 )
               }
-              className="w-full rounded-lg border border-cyan-500/30 bg-[#0b1120] px-4 py-3 text-sm text-white outline-none transition-all focus:border-cyan-400 focus:ring-2 focus:ring-cyan-500/20"
+              className="w-full rounded-lg border border-cyan-500/30 bg-white px-4 py-3 text-sm text-black outline-none transition-all focus:border-cyan-400 focus:ring-2 focus:ring-cyan-500/20"
             />
           )}
         </div>
@@ -344,7 +380,7 @@ function MonitoringToolConfigurationBox({
               id="monitoring-posture"
               value={posture}
               onChange={(event) => onPostureChange(event.target.value)}
-              className="w-full appearance-none rounded-lg border border-gray-800 bg-gray-950/50 px-4 py-3 pr-10 text-sm font-medium text-white outline-none transition-all hover:border-gray-700 focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500/20"
+              className="w-full appearance-none rounded-lg border border-gray-800 bg-gray-950/50 px-4 py-3 pr-10 text-sm font-medium text-black outline-none transition-all hover:border-gray-700 focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500/20"
             >
               {Object.keys(toolOptionsByPosture).map((option) => (
                 <option key={option} value={option} className="bg-gray-950">
@@ -368,7 +404,7 @@ function MonitoringToolConfigurationBox({
               id="monitoring-tool"
               value={selectedTool}
               onChange={(event) => onToolChange(event.target.value)}
-              className="w-full appearance-none rounded-lg border border-gray-800 bg-gray-950/50 px-4 py-3 pr-10 text-sm font-medium text-white outline-none transition-all hover:border-gray-700 focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500/20"
+              className="w-full appearance-none rounded-lg border border-gray-800 bg-gray-950/50 px-4 py-3 pr-10 text-sm font-medium text-black outline-none transition-all hover:border-gray-700 focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500/20"
             >
               <option value="" className="bg-gray-950">
                 Select a tool
@@ -429,6 +465,17 @@ function MonitoringToolConfigurationBox({
                   <pre className="min-h-[360px] overflow-x-auto rounded-lg border border-cyan-500/30 bg-[#0b1120] px-4 py-3 font-mono text-sm text-white">
                     {exportedJson}
                   </pre>
+                  <button
+                    type="button"
+                    onClick={handleDeploy}
+                    disabled={!draftConfig || isDeploying}
+                    className="w-full rounded-lg bg-emerald-500 px-4 py-3 text-sm font-semibold text-slate-950 transition-colors hover:bg-emerald-400 disabled:cursor-not-allowed disabled:bg-gray-700 disabled:text-gray-400"
+                  >
+                    {isDeploying ? "Deploying..." : "Deploy"}
+                  </button>
+                  {deployMessage && (
+                    <p className="text-xs text-gray-300">{deployMessage}</p>
+                  )}
                 </div>
               </div>
             )}
@@ -453,52 +500,50 @@ function AdminDashboard() {
   const createDraftConfig = (posture: string, tool: string): JsonObject => {
     if (tool === "Tshark") {
       return {
-        MACHINE_ID: "mid",
-        NETWORK_MODE: "network_mode",
-        PDF: "pdf",
-        COMPOSE_PROFILES: "compose_profiles",
-        TZ: "container_timezone",
+        toolName: "toolname",
+        TSHARK_BASE_TOPIC: "tshark_base_topic",
         TSHARK_SIZE_LIMIT_ROTATION: "tshark_size_limit_rotation",
       };
     }
 
     if (tool === "Telegraf") {
       return {
-        MACHINE_ID: "mid",
-        NETWORK_MODE: "network_mode",
-        PFD: "PFD",
-        COMPOSE_PROFILES: "compose_profiles",
-        TZ: "container_timezone",
+        toolName: "toolname",
         ENABLE_TELEGRAF: "enable_telegraf",
         TELEGRAF_TO_PROMETHEUS_PORT: "telegraf_to_prometheus_port",
+        TELEGRAF_BASE_TOPIC: "telegraf_base_topic",
         TELEGRAF_GENERAL_INTERVAL: "telegraf_general_interval",
       };
     }
 
     if (tool === "Falco") {
       return {
-        MACHINE_ID: "mid",
-        NETWORK_MODE: "network_mode",
-        PFD: "PFD",
-        COMPOSE_PROFILES: "compose_profiles",
-        TZ: "container_timezone",
+        toolName: "toolname",
         ENABLE_FALCO: "enable_falco",
+        FALCO_BASE_TOPIC: "falco_base_topic",
         FALCO_SKIP_DRIVER_LOADER: "falco_skip_driver_loader",
         FALCO_EXPORTER_PORT: "falco_exporter_port",
       };
     }
 
+    if (tool === "Snort") {
+      return {
+        toolName: "toolname",
+        SNORT_KAFKA_TOPIC_IN: "snort_kafka_topic_in",
+        SNORT_KAFKA_TOPIC_OUT: "snort_kafka_topic_out",
+        SNORT_ALERT_TAP_IFACE: "snort_alert_tap_iface",
+      };
+    }
+
     if (tool === "Fluentd") {
       return {
-        MACHINE_ID: "mid",
-        NETWORK_MODE: "network_mode",
-        PFD: "PFD",
-        COMPOSE_PROFILES: "compose_profiles",
-        TZ: "container_timezone",
+        toolName: "toolname",
         ENABLE_FLUENTD: "enable_fluentd",
         FLUENTD_TO_PROMETHEUS_PORT: "fluentd_to_prometheus_port",
         FLUENTD_INTERNAL_PORT: "fluentd_internal_port",
         FLUENTD_FILE_SIZE_LIMIT: "fluentd_file_size_limit",
+        FLUENTD_SYSLOG_BASE_TOPIC: "fluentd_syslog_base_topic",
+        FLUENTD_SYSTEMD_BASE_TOPIC: "fluentd_systemd_base_topic",
       };
     }
 
@@ -793,9 +838,9 @@ function AdminDashboard() {
 }
 
 // ═══════════════════════════════════════════════════════════════
-// ANALYST DASHBOARD
+// USER DASHBOARD
 // ═══════════════════════════════════════════════════════════════
-function AnalystDashboard() {
+function UserDashboard() {
   return (
     <div className="space-y-6">
       {/* Welcome banner */}
@@ -1103,7 +1148,7 @@ function AnalystDashboard() {
 // ═══════════════════════════════════════════════════════════════
 export default function DashboardPage() {
   const { data: session } = useSession();
-  const role = (session?.user as any)?.role as "ADMIN" | "ANALYST" | undefined;
+  const role = (session?.user as any)?.role as "ADMIN" | "USER" | undefined;
 
   useEffect(() => {
     const scrollToHashSection = () => {
@@ -1129,7 +1174,7 @@ export default function DashboardPage() {
   return (
     <div className="min-h-screen bg-[#0a0e27] p-6">
       {role === "ADMIN" && <AdminDashboard />}
-      {role === "ANALYST" && <AnalystDashboard />}
+      {role === "USER" && <UserDashboard />}
       {!role && (
         <div className="flex items-center justify-center py-20">
           <div className="h-8 w-8 animate-spin rounded-full border-2 border-gray-700 border-t-cyan-400" />
