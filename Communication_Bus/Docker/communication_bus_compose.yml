@@ -65,9 +65,10 @@ services:
       - "${KAFKA_LAN_HOSTNAME:-kafka-host}:host-gateway"
     volumes:
       - ${PFD}/Communication_Bus/Configuration_Files/filebeat.yml:/usr/share/filebeat/filebeat.yml:ro
-      - ${PFD}/Results/fluentd_logs:/fluentd/log:ro
-      - ${PFD}/Results/tshark/traces:/tshark/traces:ro
-      - ${PFD}/Results/falco/logs:/falco/logs:ro
+      #- ${PFD}/Results/fluentd_logs:/fluentd/log:ro
+      #- ${PFD}/Results/tshark/traces:/tshark/traces:ro
+      #- ${PFD}/Results/falco/logs:/falco/logs:ro
+      - ${PFD}/Results:/results:ro
     command: 
       - "--strict.perms=false" # Manual change of owner was avoided by using this flag in Filebeat.
       - "-e"

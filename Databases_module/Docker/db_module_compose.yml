@@ -19,6 +19,25 @@ services:
       timeout: 5s
       retries: 5
 
+  mongodb_cm:
+    image: mongo:4.4.29
+    container_name: mongodb_cm_robust6g
+    profiles: ["db_module.mongodb_cm"]
+    environment:
+      - TZ=${TZ}
+      - MONGO_INITDB_ROOT_USERNAME=${MONGO_CM_INITDB_ROOT_USERNAME}
+      - MONGO_INITDB_ROOT_PASSWORD=${MONGO_CM_INITDB_ROOT_PASSWORD}
+    volumes:
+      - ${PFD}/Results/mongo_cm:/data/db
+    ports:
+      - "${MONGO_CM_PORT:-27018}:${MONGO_CM_PORT:-27018}"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "mongo", "--eval", "db.adminCommand('ping')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
   redis_robust6g:
     image: redis:8.6.0
     container_name: redis_robust6g

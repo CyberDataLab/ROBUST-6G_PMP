@@ -11,13 +11,13 @@ services:
     container_name: flow_module_robust6g
     profiles: ["flow_module.flow_module"]
     restart: unless-stopped
-    depends_on:
-      kafka_robust6g:
-        condition: service_healthy
+    #depends_on:
+    #  kafka_robust6g:
+    #    condition: service_healthy
     environment:
       - TZ=${TZ}
       - KAFKA_BOOTSTRAP=${KAFKA_BOOTSTRAP}
-      - KAFKA_ENABLE_AUTO_COMMIT=false
+      #- KAFKA_ENABLE_AUTO_COMMIT=false
       - FLOW_KAFKA_GROUP=${FLOW_KAFKA_GROUP}
       - TSHARK_BASE_TOPIC=${TSHARK_BASE_TOPIC}
       - CIC_KAFKA_BASE_TOPIC_OUT=${CIC_KAFKA_BASE_TOPIC_OUT}

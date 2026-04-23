@@ -2,9 +2,10 @@
 filebeat.inputs:
   - type: filestream # log is deprecated from version 7.16
     id: syslog_logs
-    enable: true
+    enabled: true
     paths:
-      - "/fluentd/log/syslog_output.log.[0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9].log"
+      - "/results/fluentd_logs/syslog_output.log.[0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9].log" 
+      #"/fluentd/log/syslog_output.log.[0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9].log"
         # It does not work with [0-9]{8} sentence, it only works with several [0-9] sentences
     tags: ["syslog_logs"]
     fields:
@@ -13,9 +14,10 @@ filebeat.inputs:
 
   - type: filestream #log
     id: systemd_logs
-    enable: true
+    enabled: true
     paths:
-      - "/fluentd/log/systemd_output.log.[0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9].log"
+      - "/results/fluentd_logs/systemd_output.log.[0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9].log"
+      #"/fluentd/log/systemd_output.log.[0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9].log"
         # Example: /fluentd/log/systemd_output.log.20250124.log
     tags: ["systemd_logs"]
     fields:
@@ -24,9 +26,9 @@ filebeat.inputs:
 
   - type: filestream #log
     id: tshark_ndjson_traces
-    enable: true
+    enabled: true
     paths:
-      - "/tshark/traces/infile.ndjson"
+      - "/results/tshark/traces/infile.ndjson" #"/tshark/traces/infile.ndjson"
     tags: ["tshark_ndjson_traces"]
     fields:
       kafka_topic: "${TSHARK_BASE_TOPIC:tshark_traces}" 
@@ -41,9 +43,9 @@ filebeat.inputs:
   
   - type: filestream #log
     id: falco_events
-    enable: true
+    enabled: true
     paths:
-      - "/falco/logs/falco_events.json"
+      - "/results/falco/logs/falco_events.json" #"/falco/logs/falco_events.json"
     tags: ["falco_events"]
     fields:
       kafka_topic: "${FALCO_BASE_TOPIC:falco_events}" # Primero "${FALCO_BASE_TOPIC}" solo y luego cuando meta más cambios esto "${FALCO_BASE_TOPIC}_${MACHINE_ID}"

@@ -9,9 +9,9 @@ services:
       dockerfile: Alert_Module/Docker/Dockerfiles/alert_module.dockerfile
     container_name: alert_module_robust6g
     profiles: ["alert_module.alert_module"]
-    depends_on:
-      kafka_robust6g:
-        condition: service_healthy
+    #depends_on:
+    #  kafka_robust6g:
+    #    condition: service_healthy
     environment:
       - TZ=${TZ}
       - KAFKA_BOOTSTRAP=${KAFKA_BOOTSTRAP}
