@@ -327,11 +327,12 @@ def build_default_env(
     network_mode: str,
     PFD: Path,
     compose_profiles: str,
-    env_file_path: Path,
+    env_file_path: Path
 ) -> Dict[str, str]:
     """
     Build and return the complete DEFAULT_ENV dictionary with all variable defaults.
     This function is imported by configuration_manager_logic.py to avoid duplicating defaults.
+    env_file_path is used to read previously generated passwords so they are not regenerated.
     """
     container_timezone = "UTC"
 
@@ -420,86 +421,91 @@ def build_default_env(
     if not mongo_cm_initdb_root_password:
         mongo_cm_initdb_root_password = generate_secure_password()
     mongo_cm_port = "27018"
-    mongo_cm_uri = (
+    mongo_cm_uri_docker = (
         f"mongodb://{mongo_cm_initdb_root_username}:"
         f"{quote_plus(mongo_cm_initdb_root_password)}"
-        f"@mongodb_cm:{mongo_cm_port}/?authSource=admin"
+        f"@mongodb_cm:27017/?authSource=admin"
+    )
+    mongo_cm_uri_host = (
+        f"mongodb://{mongo_cm_initdb_root_username}:"
+        f"{quote_plus(mongo_cm_initdb_root_password)}"
+        f"@localhost:{mongo_cm_port}/?authSource=admin"
     )
 
     # Redis
-    redis_host                          = "redis_robust6g"
-    redis_port                          = "6379"
-    redis_user                          = "0"
-    redis_password                      = ""
-    redis_maxmemory_samples             = "5"
-    redis_io_threads                    = "4"
-    redis_stream_node_max_bytes         = "4096"
-    redis_stream_node_max_entries       = "100"
-    redis_maxclients                    = "10000"
-    ktrw_kafka_auto_offset_reset        = "latest"
-    ktrw_kafka_enable_auto_commit       = "true"
-    ktrw_kafka_group_id                 = "redis-streamer"
-    ktrw_redis_max_stream_length        = "1000"
-    ktrw_redis_stream_ttl_seconds       = "21600"
-    ktrw_partition_assignment_strategy  = "cooperative-sticky"
-    ktrw_session_timeout_ms             = "10000"
-    ktrw_max_poll_interval_ms           = "300000"
-    ktrw_kafka_topic_refresh_interval   = "30"
-    ktrw_redis_cleanup_interval         = "300"
-    ktrw_redis_retention_hours          = "2"
+    redis_host                           = "redis_robust6g"
+    redis_port                           = "6379"
+    redis_user                           = "0"
+    redis_password                       = ""
+    redis_maxmemory_samples              = "5"
+    redis_io_threads                     = "4"
+    redis_stream_node_max_bytes          = "4096"
+    redis_stream_node_max_entries        = "100"
+    redis_maxclients                     = "10000"
+    ktrw_kafka_auto_offset_reset         = "latest"
+    ktrw_kafka_enable_auto_commit        = "true"
+    ktrw_kafka_group_id                  = "redis-streamer"
+    ktrw_redis_max_stream_length         = "1000"
+    ktrw_redis_stream_ttl_seconds        = "21600"
+    ktrw_partition_assignment_strategy   = "cooperative-sticky"
+    ktrw_session_timeout_ms              = "10000"
+    ktrw_max_poll_interval_ms            = "300000"
+    ktrw_kafka_topic_refresh_interval    = "30"
+    ktrw_redis_cleanup_interval          = "300"
+    ktrw_redis_retention_hours           = "2"
     ktrw_redis_emergency_retention_hours = "1"
-    ktrw_redis_memory_threshold         = "0.85"
+    ktrw_redis_memory_threshold          = "0.85"
 
     # Alert module
-    snort_kafka_group_id                                    = "alert-module"
-    snort_kafka_topic_in                                    = tshark_base_topic
-    snort_alert_tap_iface                                   = "tap0"
-    snort_kafka_message_field                               = "_source"
-    snort_consumer_kafka_auto_offset_reset                  = "earliest"
-    snort_consumer_kafka_enable_auto_commit                 = "true"
-    snort_consumer_kafka_partition_assignment_strategy      = "cooperative-sticky"
-    snort_consumer_kafka_enable_partition_eof               = "true"
-    snort_consumer_kafka_allow_auto_create_topics           = "true"
-    snort_consumer_fetch_min_bytes                          = "1048576"
-    snort_consumer_fetch_wait_max_ms                        = "50"
-    snort_consumer_queued_max_messages_kbytes               = "262144"
-    snort_consumer_max_poll_interval_ms                     = "900000"
-    snort_consumer_session_timeout_ms                       = "10000"
-    snort_producer_kafka_producer_linger_ms                 = "5"
-    snort_producer_batch_num_messages                       = "10000"
-    snort_producer_kafka_producer_batch_size                = "32768"
-    snort_producer_kafka_producer_compression               = "zstd"
+    snort_kafka_group_id                               = "alert-module"
+    snort_kafka_topic_in                               = tshark_base_topic
+    snort_alert_tap_iface                              = "tap0"
+    snort_kafka_message_field                          = "_source"
+    snort_consumer_kafka_auto_offset_reset             = "earliest"
+    snort_consumer_kafka_enable_auto_commit            = "true"
+    snort_consumer_kafka_partition_assignment_strategy = "cooperative-sticky"
+    snort_consumer_kafka_enable_partition_eof          = "true"
+    snort_consumer_kafka_allow_auto_create_topics      = "true"
+    snort_consumer_fetch_min_bytes                     = "1048576"
+    snort_consumer_fetch_wait_max_ms                   = "50"
+    snort_consumer_queued_max_messages_kbytes          = "262144"
+    snort_consumer_max_poll_interval_ms                = "900000"
+    snort_consumer_session_timeout_ms                  = "10000"
+    snort_producer_kafka_producer_linger_ms            = "5"
+    snort_producer_batch_num_messages                  = "10000"
+    snort_producer_kafka_producer_batch_size           = "32768"
+    snort_producer_kafka_producer_compression          = "zstd"
 
-    # Flow module (100 KiB and 50 KiB pre-calculated)
-    flow_kafka_group                                        = "flow-module"
-    flow_pcap_rotate_size_mb                                = "102400"
-    flow_cic_rotate_size_mb                                 = "51200"
-    flow_rotate_time_sec                                    = "0.5"
-    flow_packet_queue_max                                   = "100000"
-    flow_writer_flush_every                                 = "100"
-    flow_watchdog_stall_secs                                = "120"
-    flow_kafka_consumer_auto_offset_reset                   = "earliest"
-    flow_kafka_consumer_enable_auto_commit                  = "true"
-    flow_kafka_consumer_partition_assignment_strategy       = "cooperative-sticky"
-    flow_kafka_consumer_enable_partition_eof                = "true"
-    flow_kafka_consumer_allow_auto_create_topics            = "true"
-    flow_kafka_producer_linger_ms                           = "5"
-    flow_kafka_producer_batch_size                          = "32768"
-    flow_kafka_producer_compression                         = "zstd"
+    # Flow module (102400 = 100 KiB, 51200 = 50 KiB)
+    flow_kafka_group                                   = "flow-module"
+    flow_pcap_rotate_size_mb                           = "102400"
+    flow_cic_rotate_size_mb                            = "51200"
+    flow_rotate_time_sec                               = "0.5"
+    flow_packet_queue_max                              = "100000"
+    flow_writer_flush_every                            = "100"
+    flow_watchdog_stall_secs                           = "120"
+    flow_kafka_consumer_auto_offset_reset              = "earliest"
+    flow_kafka_consumer_enable_auto_commit             = "true"
+    flow_kafka_consumer_partition_assignment_strategy  = "cooperative-sticky"
+    flow_kafka_consumer_enable_partition_eof           = "true"
+    flow_kafka_consumer_allow_auto_create_topics       = "true"
+    flow_kafka_producer_linger_ms                      = "5"
+    flow_kafka_producer_batch_size                     = "32768"
+    flow_kafka_producer_compression                    = "zstd"
 
     # NRTDR API
-    nrtdr_api_port          = "8001"
+    nrtdr_api_port         = "8001"
     if network_mode == "host":
-        nrtdr_api_host      = get_host_ip()
+        nrtdr_api_host     = get_host_ip()
     else:
-        nrtdr_api_host      = "nrtdr_api"
-    nrtdr_ws_poll_interval  = "0.5"
-    nrtdr_ws_batch_size     = "10"
+        nrtdr_api_host     = "nrtdr_api"
+    nrtdr_ws_poll_interval = "0.5"
+    nrtdr_ws_batch_size    = "10"
 
     # Thingsboard alarm collector
-    tb_username     = "tenant@thingsboard.org"
-    tb_password     = "tenant"
-    tb_use_https    = "false"
+    tb_username  = "tenant@thingsboard.org"
+    tb_password  = "tenant"
+    tb_use_https = "false"
 
     DEFAULT_ENV: Dict[str, str] = {
         # Always present - generated internally, not overridable via API
@@ -556,11 +562,11 @@ def build_default_env(
         "FILEBEAT_COMPRESION":          filebeat_compresion,
 
         # Prometheus
-        "PROMETHEUS_PORT":                      prometheus_port,
-        "DISCOVERY_AGENT_SCAN_PORT":            discovery_agent_scan_port,
-        "DISCOVERY_AGENT_SCAN_TIMEOUT":         discovery_agent_scan_timeout,
-        "DISCOVERY_AGENT_REFRESH_INTERVAL":     discovery_agent_refresh_interval,
-        "DISCOVERY_AGENT_PORT":                 discovery_agent_port,
+        "PROMETHEUS_PORT":                    prometheus_port,
+        "DISCOVERY_AGENT_SCAN_PORT":          discovery_agent_scan_port,
+        "DISCOVERY_AGENT_SCAN_TIMEOUT":       discovery_agent_scan_timeout,
+        "DISCOVERY_AGENT_REFRESH_INTERVAL":   discovery_agent_refresh_interval,
+        "DISCOVERY_AGENT_PORT":               discovery_agent_port,
 
         # OpenSearch
         "OPENSEARCH_PASSWORD":          opensearch_password,
@@ -581,7 +587,9 @@ def build_default_env(
         "MONGO_CM_INITDB_ROOT_USERNAME": mongo_cm_initdb_root_username,
         "MONGO_CM_INITDB_ROOT_PASSWORD": mongo_cm_initdb_root_password,
         "MONGO_CM_PORT":                 mongo_cm_port,
-        "MONGO_CM_URI":                  mongo_cm_uri,
+        "MONGO_CM_URI":                  mongo_cm_uri_docker,
+        "MONGO_CM_URI_DOCKER":           mongo_cm_uri_docker,
+        "MONGO_CM_URI_HOST":             mongo_cm_uri_host,
 
         # Redis
         "REDIS_HOST":                           redis_host,
@@ -608,47 +616,47 @@ def build_default_env(
         "KTRW_REDIS_MEMORY_THRESHOLD":          ktrw_redis_memory_threshold,
 
         # Alert module
-        "SNORT_KAFKA_GROUP_ID":                                     snort_kafka_group_id,
-        "SNORT_KAFKA_TOPIC_IN":                                     snort_kafka_topic_in,
-        "SNORT_ALERT_TAP_IFACE":                                    snort_alert_tap_iface,
-        "SNORT_KAFKA_MESSAGE_FIELD":                                snort_kafka_message_field,
-        "SNORT_CONSUMER_KAFKA_AUTO_OFFSET_RESET":                   snort_consumer_kafka_auto_offset_reset,
-        "SNORT_CONSUMER_KAFKA_ENABLE_AUTO_COMMIT":                  snort_consumer_kafka_enable_auto_commit,
-        "SNORT_CONSUMER_KAFKA_PARTITION_ASSIGNMENT_STRATEGY":       snort_consumer_kafka_partition_assignment_strategy,
-        "SNORT_CONSUMER_KAFKA_ENABLE_PARTITION_EOF":                snort_consumer_kafka_enable_partition_eof,
-        "SNORT_CONSUMER_KAFKA_ALLOW_AUTO_CREATE_TOPICS":            snort_consumer_kafka_allow_auto_create_topics,
-        "SNORT_CONSUMER_FETCH_MIN_BYTES":                           snort_consumer_fetch_min_bytes,
-        "SNORT_CONSUMER_FETCH_WAIT_MAX_MS":                         snort_consumer_fetch_wait_max_ms,
-        "SNORT_CONSUMER_QUEUED_MAX_MESSAGES_KBYTES":                snort_consumer_queued_max_messages_kbytes,
-        "SNORT_CONSUMER_MAX_POLL_INTERVAL_MS":                      snort_consumer_max_poll_interval_ms,
-        "SNORT_CONSUMER_SESSION_TIMEOUT_MS":                        snort_consumer_session_timeout_ms,
-        "SNORT_PRODUCER_KAFKA_PRODUCER_LINGER_MS":                  snort_producer_kafka_producer_linger_ms,
-        "SNORT_PRODUCER_BATCH_NUM_MESSAGES":                        snort_producer_batch_num_messages,
-        "SNORT_PRODUCER_KAFKA_PRODUCER_BATCH_SIZE":                 snort_producer_kafka_producer_batch_size,
-        "SNORT_PRODUCER_KAFKA_PRODUCER_COMPRESSION":                snort_producer_kafka_producer_compression,
+        "SNORT_KAFKA_GROUP_ID":                               snort_kafka_group_id,
+        "SNORT_KAFKA_TOPIC_IN":                               snort_kafka_topic_in,
+        "SNORT_ALERT_TAP_IFACE":                              snort_alert_tap_iface,
+        "SNORT_KAFKA_MESSAGE_FIELD":                          snort_kafka_message_field,
+        "SNORT_CONSUMER_KAFKA_AUTO_OFFSET_RESET":             snort_consumer_kafka_auto_offset_reset,
+        "SNORT_CONSUMER_KAFKA_ENABLE_AUTO_COMMIT":            snort_consumer_kafka_enable_auto_commit,
+        "SNORT_CONSUMER_KAFKA_PARTITION_ASSIGNMENT_STRATEGY": snort_consumer_kafka_partition_assignment_strategy,
+        "SNORT_CONSUMER_KAFKA_ENABLE_PARTITION_EOF":          snort_consumer_kafka_enable_partition_eof,
+        "SNORT_CONSUMER_KAFKA_ALLOW_AUTO_CREATE_TOPICS":      snort_consumer_kafka_allow_auto_create_topics,
+        "SNORT_CONSUMER_FETCH_MIN_BYTES":                     snort_consumer_fetch_min_bytes,
+        "SNORT_CONSUMER_FETCH_WAIT_MAX_MS":                   snort_consumer_fetch_wait_max_ms,
+        "SNORT_CONSUMER_QUEUED_MAX_MESSAGES_KBYTES":          snort_consumer_queued_max_messages_kbytes,
+        "SNORT_CONSUMER_MAX_POLL_INTERVAL_MS":                snort_consumer_max_poll_interval_ms,
+        "SNORT_CONSUMER_SESSION_TIMEOUT_MS":                  snort_consumer_session_timeout_ms,
+        "SNORT_PRODUCER_KAFKA_PRODUCER_LINGER_MS":            snort_producer_kafka_producer_linger_ms,
+        "SNORT_PRODUCER_BATCH_NUM_MESSAGES":                  snort_producer_batch_num_messages,
+        "SNORT_PRODUCER_KAFKA_PRODUCER_BATCH_SIZE":           snort_producer_kafka_producer_batch_size,
+        "SNORT_PRODUCER_KAFKA_PRODUCER_COMPRESSION":          snort_producer_kafka_producer_compression,
 
         # Flow module
-        "FLOW_KAFKA_GROUP":                                         flow_kafka_group,
-        "FLOW_PCAP_ROTATE_SIZE_MB":                                 flow_pcap_rotate_size_mb,
-        "FLOW_CIC_ROTATE_SIZE_MB":                                  flow_cic_rotate_size_mb,
-        "FLOW_ROTATE_TIME_SEC":                                     flow_rotate_time_sec,
-        "FLOW_PACKET_QUEUE_MAX":                                    flow_packet_queue_max,
-        "FLOW_WRITER_FLUSH_EVERY":                                  flow_writer_flush_every,
-        "FLOW_WATCHDOG_STALL_SECS":                                 flow_watchdog_stall_secs,
-        "FLOW_KAFKA_CONSUMER_AUTO_OFFSET_RESET":                    flow_kafka_consumer_auto_offset_reset,
-        "FLOW_KAFKA_CONSUMER_ENABLE_AUTO_COMMIT":                   flow_kafka_consumer_enable_auto_commit,
-        "FLOW_KAFKA_CONSUMER_PARTITION_ASSIGNMENT_STRATEGY":        flow_kafka_consumer_partition_assignment_strategy,
-        "FLOW_KAFKA_CONSUMER_ENABLE_PARTITION_EOF":                 flow_kafka_consumer_enable_partition_eof,
-        "FLOW_KAFKA_CONSUMER_ALLOW_AUTO_CREATE_TOPICS":             flow_kafka_consumer_allow_auto_create_topics,
-        "FLOW_KAFKA_PRODUCER_LINGER_MS":                            flow_kafka_producer_linger_ms,
-        "FLOW_KAFKA_PRODUCER_BATCH_SIZE":                           flow_kafka_producer_batch_size,
-        "FLOW_KAFKA_PRODUCER_COMPRESSION":                          flow_kafka_producer_compression,
+        "FLOW_KAFKA_GROUP":                                  flow_kafka_group,
+        "FLOW_PCAP_ROTATE_SIZE_MB":                          flow_pcap_rotate_size_mb,
+        "FLOW_CIC_ROTATE_SIZE_MB":                           flow_cic_rotate_size_mb,
+        "FLOW_ROTATE_TIME_SEC":                              flow_rotate_time_sec,
+        "FLOW_PACKET_QUEUE_MAX":                             flow_packet_queue_max,
+        "FLOW_WRITER_FLUSH_EVERY":                           flow_writer_flush_every,
+        "FLOW_WATCHDOG_STALL_SECS":                          flow_watchdog_stall_secs,
+        "FLOW_KAFKA_CONSUMER_AUTO_OFFSET_RESET":             flow_kafka_consumer_auto_offset_reset,
+        "FLOW_KAFKA_CONSUMER_ENABLE_AUTO_COMMIT":            flow_kafka_consumer_enable_auto_commit,
+        "FLOW_KAFKA_CONSUMER_PARTITION_ASSIGNMENT_STRATEGY": flow_kafka_consumer_partition_assignment_strategy,
+        "FLOW_KAFKA_CONSUMER_ENABLE_PARTITION_EOF":          flow_kafka_consumer_enable_partition_eof,
+        "FLOW_KAFKA_CONSUMER_ALLOW_AUTO_CREATE_TOPICS":      flow_kafka_consumer_allow_auto_create_topics,
+        "FLOW_KAFKA_PRODUCER_LINGER_MS":                     flow_kafka_producer_linger_ms,
+        "FLOW_KAFKA_PRODUCER_BATCH_SIZE":                    flow_kafka_producer_batch_size,
+        "FLOW_KAFKA_PRODUCER_COMPRESSION":                   flow_kafka_producer_compression,
 
         # NRTDR API
-        "NRTDR_API_PORT":           nrtdr_api_port,
-        "NRTDR_API_HOST":           nrtdr_api_host,
-        "NRTDR_WS_POLL_INTERVAL":   nrtdr_ws_poll_interval,
-        "NRTDR_WS_BATCH_SIZE":      nrtdr_ws_batch_size,
+        "NRTDR_API_PORT":         nrtdr_api_port,
+        "NRTDR_API_HOST":         nrtdr_api_host,
+        "NRTDR_WS_POLL_INTERVAL": nrtdr_ws_poll_interval,
+        "NRTDR_WS_BATCH_SIZE":    nrtdr_ws_batch_size,
 
         # Thingsboard alarm collector
         "TB_USERNAME":  tb_username,
@@ -659,7 +667,7 @@ def build_default_env(
     return DEFAULT_ENV
 
 
-# Variables that always go into .env regardless of selected tools.
+# Variables that always go into every .env regardless of selected tools.
 # These are generated internally and cannot be overridden via the API.
 ALWAYS_ENV_VARS: List[str] = [
     "MACHINE_ID",
@@ -668,10 +676,10 @@ ALWAYS_ENV_VARS: List[str] = [
     "COMPOSE_PROFILES",
     "TZ",
     "KAFKA_BOOTSTRAP",
-    "KAFKA_LAN_HOSTNAME",
+    "KAFKA_LAN_HOSTNAME",   # needed by extra_hosts in many containers to resolve Kafka DNS
 ]
 
-# Tool -> list of env var names it requires
+# Tool -> list of env var names it requires in the .env
 TOOL_ENV_VARS: Dict[str, List[str]] = {
     "telegraf": [
         "ENABLE_TELEGRAF",
@@ -730,6 +738,12 @@ TOOL_ENV_VARS: Dict[str, List[str]] = {
         "OPENSEARCH_REST_API_PORT",
         "OPENSEARCH_ANALYSER_PORT",
         "OPENSEARCH_DASHBOARD_PORT",
+        # Logstash always deploys alongside opensearch and needs all producer topics
+        "TELEGRAF_BASE_TOPIC",
+        "TSHARK_BASE_TOPIC",
+        "FLUENTD_SYSLOG_BASE_TOPIC",
+        "FLUENTD_SYSTEMD_BASE_TOPIC",
+        "FALCO_BASE_TOPIC",
     ],
     "mongodb": [
         "MONGO_INITDB_ROOT_USERNAME",
@@ -742,6 +756,8 @@ TOOL_ENV_VARS: Dict[str, List[str]] = {
         "MONGO_CM_INITDB_ROOT_PASSWORD",
         "MONGO_CM_PORT",
         "MONGO_CM_URI",
+        "MONGO_CM_URI_DOCKER",
+        "MONGO_CM_URI_HOST",
     ],
     "redis": [
         "REDIS_HOST",
@@ -768,6 +784,12 @@ TOOL_ENV_VARS: Dict[str, List[str]] = {
         "KTRW_REDIS_MEMORY_THRESHOLD",
     ],
     "flow_module": [
+        # Cross-dependency: flow_module consumes from tshark's topic.
+        # The real value is resolved from MongoDB CM in configuration_manager_logic.py
+        # before launch() is called. This entry ensures it is written to the .env
+        # with whatever value arrives in env_overrides (real) or default (fallback).
+        "TSHARK_BASE_TOPIC",
+        "MONGO_URI",
         "CIC_KAFKA_BASE_TOPIC_OUT",
         "FLOW_KAFKA_GROUP",
         "FLOW_PCAP_ROTATE_SIZE_MB",
@@ -786,6 +808,10 @@ TOOL_ENV_VARS: Dict[str, List[str]] = {
         "FLOW_KAFKA_PRODUCER_COMPRESSION",
     ],
     "alert_module": [
+        # Cross-dependency: alert_module (snort3) consumes from tshark's topic.
+        # Same resolution strategy as flow_module above.
+        "TSHARK_BASE_TOPIC",
+        "MONGO_URI",
         "SNORT_KAFKA_GROUP_ID",
         "SNORT_KAFKA_TOPIC_IN",
         "SNORT_KAFKA_TOPIC_OUT",
@@ -819,6 +845,31 @@ TOOL_ENV_VARS: Dict[str, List[str]] = {
     ],
 }
 
+# Topic variables that producer tools publish to Kafka.
+# Used by configuration_manager_logic.py to update the kafka_topics document in MongoDB CM.
+PRODUCER_TOPIC_VARS: Dict[str, List[str]] = {
+    "tshark":       ["TSHARK_BASE_TOPIC"],
+    "telegraf":     ["TELEGRAF_BASE_TOPIC"],
+    "fluentd":      ["FLUENTD_SYSLOG_BASE_TOPIC", "FLUENTD_SYSTEMD_BASE_TOPIC"],
+    "falco":        ["FALCO_BASE_TOPIC"],
+    "flow_module":  ["CIC_KAFKA_BASE_TOPIC_OUT"],
+    "snort3":       ["SNORT_KAFKA_TOPIC_OUT"],
+}
+
+# Topic variables that consumer tools need to read from Kafka.
+# Used by configuration_manager_logic.py to inject the real topic values from MongoDB CM.
+CONSUMER_TOPIC_VARS: Dict[str, List[str]] = {
+    "flow_module":  ["TSHARK_BASE_TOPIC"],
+    "snort3":       ["TSHARK_BASE_TOPIC"],
+    "opensearch":   [
+        "TELEGRAF_BASE_TOPIC",
+        "TSHARK_BASE_TOPIC",
+        "FLUENTD_SYSLOG_BASE_TOPIC",
+        "FLUENTD_SYSTEMD_BASE_TOPIC",
+        "FALCO_BASE_TOPIC",
+    ],
+}
+
 
 def launch(
     selected: "OrderedDict[str, List[str]]",
@@ -827,7 +878,8 @@ def launch(
     """
     Core launch function: resolves env vars, writes .env, and runs docker compose up.
     Called both from CLI (main) and from configuration_manager_logic.py (API).
-    env_overrides contains only tool-specific variables; ALWAYS_ENV_VARS are never overridden.
+    env_overrides contains tool-specific variables already resolved (including real topic values).
+    ALWAYS_ENV_VARS are never replaced by env_overrides.
     """
     try:
         LFD = Path(__file__).resolve().parent
@@ -842,8 +894,8 @@ def launch(
 
     network_mode = detect_os()
     PFD = Path(__file__).resolve().parent.parent
-    env_file_path = Path(__file__).resolve().parent / ".env"
     init_env_file_path = Path(__file__).resolve().parent / ".init_pmp_env"
+    env_file_path = Path(__file__).resolve().parent / ".env"
 
     # Add info tool automatically when collection_module is selected
     if "collection_module" in selected and "info" not in selected["collection_module"]:
@@ -855,12 +907,13 @@ def launch(
     print("Selected:", selected)
     print("COMPOSE_PROFILES:", compose_profiles_list)
 
+    # build_default_env reads existing passwords from init_env_file_path to avoid regenerating them
     default_env = build_default_env(
         mid=mid,
         network_mode=network_mode,
         PFD=PFD,
         compose_profiles=compose_profiles,
-        env_file_path=init_env_file_path # env_file_path
+        env_file_path=init_env_file_path
     )
 
     # Apply overrides from API - ALWAYS_ENV_VARS are protected and never replaced
@@ -874,26 +927,26 @@ def launch(
         tool_env_vars=TOOL_ENV_VARS,
         always_env_vars=ALWAYS_ENV_VARS
     )
-    
-    if not Path.exists(init_env_file_path): # Initial deployment for the core of PMP. init_written_path variable has been not used, it is only to clarify
-        init_written_path = write_dotenv(
-        env_keys=env_keys,
-        path=init_env_file_path,
-        defaults=default_env,
-        header=""
-    )
-    elif "flow_module" in selected or "alert_module" in selected:
-        if "MONGO_URI" not in env_keys:
-            env_keys.append("MONGO_URI")
-            env_keys.append("TSHARK_BASE_TOPIC")
 
+    # On first run (init_pmp_env does not exist yet) write the full env as the
+    # persistent reference file so subsequent runs can read generated passwords.
+    if not init_env_file_path.exists():
+        write_dotenv(
+            env_keys=list(default_env.keys()),
+            path=init_env_file_path,
+            defaults=default_env,
+            header=""
+        )
+        print(f"Initial PMP env written to {init_env_file_path}")
 
-    written_path = write_dotenv(
-        env_keys=env_keys,
-        path=env_file_path,
-        defaults=default_env,
-        header=""
-    )
+        written_path = init_env_file_path
+    else:
+        written_path = write_dotenv(
+            env_keys=env_keys,
+            path=env_file_path,
+            defaults=default_env,
+            header=""
+        )
 
     selected_compose_files = build_selected_compose_files(
         selected=selected,
@@ -907,14 +960,11 @@ def launch(
 
     print("Compose files:", selected_compose_files)
 
-    for directory in [
-        Path(PFD) / "Results" / "fluentd_logs",
-        Path(PFD) / "Results" / "tshark" / "traces",
-        Path(PFD) / "Results" / "falco" / "logs",
-    ]:
-        directory.mkdir(parents=True, exist_ok=True)
-
     compose_cmd = ["docker", "compose"]
+
+    for profile in compose_profiles_list:
+        compose_cmd.extend(["--profile", profile])
+
     for compose_file in selected_compose_files:
         compose_cmd.extend(["-f", compose_file])
 
@@ -927,8 +977,7 @@ def launch(
     try:
         subprocess.run(compose_cmd, check=True)
     except subprocess.CalledProcessError as e:
-        print(f"Error executing docker-compose: {e}")
-        return
+        raise RuntimeError(f"Error executing docker compose: {e}") from e
 
 
 def main() -> None:
