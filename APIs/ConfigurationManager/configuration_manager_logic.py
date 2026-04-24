@@ -505,6 +505,28 @@ def resolve_consumer_topics(
         return resolved_env
 
     updated_env = dict(resolved_env)
+
+    # Special case: snort3 consumes the topic produced by tshark, but its actual input variable is SNORT_KAFKA_TOPIC_IN.
+    if tool_name == "snort3" and "TSHARK_BASE_TOPIC" in stored_topics:
+        real_tshark_topic = stored_topics["TSHARK_BASE_TOPIC"]
+
+        if updated_env.get("TSHARK_BASE_TOPIC") != real_tshark_topic:
+            print(
+                f"  Topic override for 'snort3': "
+                f"TSHARK_BASE_TOPIC = '{real_tshark_topic}' "
+                f"(was '{updated_env.get('TSHARK_BASE_TOPIC')}')"
+            )
+
+        if updated_env.get("SNORT_KAFKA_TOPIC_IN") != real_tshark_topic:
+            print(
+                f"  Topic override for 'snort3': "
+                f"SNORT_KAFKA_TOPIC_IN = '{real_tshark_topic}' "
+                f"(was '{updated_env.get('SNORT_KAFKA_TOPIC_IN')}')"
+            )
+
+        updated_env["TSHARK_BASE_TOPIC"] = real_tshark_topic
+        updated_env["SNORT_KAFKA_TOPIC_IN"] = real_tshark_topic
+
     for topic_var in needed_topics:
         if topic_var in stored_topics:
             real_value = stored_topics[topic_var]

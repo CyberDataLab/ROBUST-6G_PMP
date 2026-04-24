@@ -971,11 +971,15 @@ def launch(
     compose_cmd.extend([
         "--project-directory", str(PFD),
         "--env-file", str(written_path),
-        "up", "--build", "-d"
+        "up", "--build", "-d", "--force-recreate"
     ])
 
     try:
-        subprocess.run(compose_cmd, check=True)
+        compose_env = os.environ.copy()
+        for key in env_keys:
+            compose_env.pop(key, None)
+
+        subprocess.run(compose_cmd, check=True, env=compose_env)
     except subprocess.CalledProcessError as e:
         raise RuntimeError(f"Error executing docker compose: {e}") from e
 
