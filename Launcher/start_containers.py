@@ -352,6 +352,7 @@ def build_default_env(
 
     # Tshark (30 MiB pre-calculated)
     tshark_size_limit_rotation  = "31457280"
+    tshark_interface            = "no_interface"
 
     # Fluentd (20 MiB pre-calculated)
     enable_fluentd              = "1"
@@ -531,6 +532,7 @@ def build_default_env(
 
         # Tshark
         "TSHARK_SIZE_LIMIT_ROTATION":   tshark_size_limit_rotation,
+        "TSHARK_INTERFACE":             tshark_interface,
 
         # Fluentd
         "ENABLE_FLUENTD":               enable_fluentd,
@@ -690,6 +692,7 @@ TOOL_ENV_VARS: Dict[str, List[str]] = {
     "tshark": [
         "TSHARK_BASE_TOPIC",
         "TSHARK_SIZE_LIMIT_ROTATION",
+        "TSHARK_INTERFACE",
     ],
     "fluentd": [
         "ENABLE_FLUENTD",

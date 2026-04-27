@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+from typing import List
 import os
 import re
 import sys
@@ -36,14 +37,18 @@ def get_interfaces():
     return interfaces
 
 
-def build_tshark_command(interfaces) -> str:
+def build_tshark_command(interfaces : List[str], interface_by_api: bool) -> str:
     """
     Create the command to launch Tshark
     """
     command = ["tshark"]
     for interface in interfaces:
-        new_interface = re.findall(r"'(.*?)'", interface)
-        command.extend(["-i", new_interface[0]])
+        if not interface_by_api:
+            new_interface = re.findall(r"'(.*?)'", interface)
+            command.extend(["-i", new_interface[0]])
+        else:
+            command.extend(["-i", interface])
+
     command.extend(["-T", "json", "-x","-l", "--no-duplicate-keys", "2>/dev/null"])
     return (
         f"{" ".join(map(str, command))}"
@@ -183,10 +188,21 @@ def main():
 
     signal.signal(signal.SIGTERM, _graceful_exit)
     signal.signal(signal.SIGINT,  _graceful_exit)
-    interfaces   = get_interfaces()
+
+    TSHARK_INTERFACE = os.getenv("TSHARK_INTERFACE")
+    interfaces: List[str] = []
+    
+    if TSHARK_INTERFACE == "no_interface":
+        print("No interface specified, analysing network for active interfaces...", flush=True)
+        interfaces   = get_interfaces()
+        interface_by_api = False
+    else:
+        interfaces=[TSHARK_INTERFACE, "lo"]
+        interface_by_api = True
+    
     print("Launching Tshark...", flush=True)
     print(f"Selected interfaces: {interfaces}", flush=True)
-    command = build_tshark_command(interfaces)
+    command = build_tshark_command(interfaces, interface_by_api)
     print(f"Command launched: {command}",flush=True)
 
     proc, output_file = run_tshark(command)

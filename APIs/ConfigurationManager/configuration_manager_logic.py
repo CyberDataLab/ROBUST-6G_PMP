@@ -105,6 +105,7 @@ class TsharkConfig(BaseModel):
 
     TSHARK_BASE_TOPIC:              str = "tshark_traces"
     TSHARK_SIZE_LIMIT_ROTATION:     str = "31457280"
+    TSHARK_INTERFACE:               str = "no_interface"
 
 
 class FluentdConfig(BaseModel):

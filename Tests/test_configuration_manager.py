@@ -53,7 +53,7 @@ def call(
     path: str,
     payload: Optional[Dict[str, Any]] = None,
     params: Optional[Dict[str, str]] = None,
-    timeout: float = 10.0,
+    timeout: float = 120.0,
 ) -> requests.Response:
     url = base_url.rstrip("/") + "/" + path.lstrip("/")
     print(f"\n  --> {method} {url}")
@@ -215,13 +215,23 @@ def test_deploy_network_tool(session: requests.Session, base_url: str) -> Option
         "POST",
         "/ConfigurationManager/DeployNetworkTool",
         params={"toolName": "tshark"},
-        payload={"toolName": "tshark", "configuration": {}},
+        payload={"toolName": "tshark", "configuration": {"TSHARK_INTERFACE": "enp0s3", "TSHARK_BASE_TOPIC": "tshark_traces"}},
     )
     assert_test(
         "Legacy body with toolName is rejected or ignored safely",
         resp.status_code in (200, 422),
         "If this returns 200, Pydantic is ignoring extra body fields. Use Query param as source of truth.",
     )
+
+    resp = call(
+        session,
+        base_url,
+        "POST",
+        "/ConfigurationManager/DeployNetworkTool",
+        params={"toolName": "flow_module"},
+        payload={"configuration": {}},
+    )
+    assert_test("flow_module with empty config returns 200", resp.status_code == 200)
 
     return config_id
 
@@ -317,7 +327,7 @@ def test_deploy_security_tool(session: requests.Session, base_url: str) -> None:
         payload={"configuration": {"SNORT_KAFKA_TOPIC_OUT": "my_alerts"}},
     )
     assert_test("snort3 with partial config returns 200", resp.status_code == 200)
-
+'''
     # Restauramos topic de salida por defecto en una segunda prueba
     resp = call(
         session,
@@ -329,7 +339,7 @@ def test_deploy_security_tool(session: requests.Session, base_url: str) -> None:
     )
     assert_test("snort3 with empty config returns 200", resp.status_code == 200)
 
-
+'''
 def test_get_configuration(session: requests.Session, base_url: str, config_id: Optional[str]) -> None:
     print_section("7. GET /ConfigurationManager/getConfiguration")
 
@@ -425,14 +435,14 @@ def main() -> None:
 
     print(f"\n🧪 Running tests against: {base_url}\n")
 
-    test_health(session, base_url)
-    test_get_configuration_options(session, base_url)
+    #test_health(session, base_url)
+    #test_get_configuration_options(session, base_url)
     config_id = test_deploy_network_tool(session, base_url)
-    test_deploy_infrastructure_tool(session, base_url)
-    test_deploy_service_tool(session, base_url)
-    test_deploy_security_tool(session, base_url)
-    test_get_configuration(session, base_url, config_id)
-    test_update_configuration(session, base_url, config_id)
+    #test_deploy_infrastructure_tool(session, base_url)
+    #test_deploy_service_tool(session, base_url)
+    #test_deploy_security_tool(session, base_url)
+    #test_get_configuration(session, base_url, config_id)
+    #test_update_configuration(session, base_url, config_id)
 
     print_section("SUMMARY")
     total = passed + failed

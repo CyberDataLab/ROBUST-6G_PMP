@@ -71,6 +71,7 @@ services:
       - TZ=${TZ}
       - TSHARK_BASE_TOPIC=${TSHARK_BASE_TOPIC}
       - TSHARK_SIZE_LIMIT_ROTATION=${TSHARK_SIZE_LIMIT_ROTATION}
+      - TSHARK_INTERFACE=${TSHARK_INTERFACE}
     network_mode: "${NETWORK_MODE}" # Allows container to see host interfaces
     cap_add:
       # https://man7.org/linux/man-pages/man7/capabilities.7.html
