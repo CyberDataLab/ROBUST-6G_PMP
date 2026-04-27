@@ -83,6 +83,15 @@ TOOL_NAME_TO_MODULE: Dict[str, Tuple[str, str]] = {
     "alarm_collector":  ("thingsboard_module",   "alarm_collector"),
 }
 
+# ---------------------------------------------------------------------------
+# Mapping: Co-deployments (tools that must be restarted when a producer is updated)
+# ---------------------------------------------------------------------------
+CO_DEPLOY_TOOLS: Dict[str, List[str]] = {
+    "tshark":   ["filebeat"],
+    "fluentd":  ["filebeat"],
+    "falco":    ["filebeat"],
+}
+
 
 # ===========================================================================
 # Pydantic models for each tool.
@@ -662,6 +671,22 @@ def process_deploy_request(
     # If this tool consumes Kafka topics, inject the real topic values from MongoDB CM
     resolved_env = resolve_consumer_topics(tool_name, resolved_env, collection)
 
+    selected = build_selected_from_tool_name(tool_name)
+
+    # --- Apply co-deployments ---
+    co_deploy_tools = CO_DEPLOY_TOOLS.get(tool_name, [])
+    for cd_tool in co_deploy_tools:
+        cd_module, cd_tool_in_registry = TOOL_NAME_TO_MODULE.get(cd_tool, (None, None))
+        if cd_module and cd_tool_in_registry:
+            if cd_module not in selected:
+                selected[cd_module] = []
+            if cd_tool_in_registry not in selected[cd_module]:
+                selected[cd_module].append(cd_tool_in_registry)
+        is_valid_cd, _, cd_env = validate_and_parse_config(cd_tool, {})
+        if is_valid_cd:
+            cd_env = resolve_consumer_topics(cd_tool, cd_env, collection)
+            resolved_env.update(cd_env)
+
     config_id = build_config_id(endpoint, tool_name, resolved_env)
 
     if collection is not None:
@@ -672,8 +697,6 @@ def process_deploy_request(
             tool_name=tool_name,
             resolved_env=resolved_env
         )
-
-    selected = build_selected_from_tool_name(tool_name)
 
     success, error_msg = call_start_containers(
         selected=selected,
@@ -735,6 +758,22 @@ def process_update_configuration(
     persist_producer_topics(tool_name, base_env, collection)
     base_env = resolve_consumer_topics(tool_name, base_env, collection)
 
+    selected = build_selected_from_tool_name(stored_tool_name)
+
+    # --- Apply co-deployments ---
+    co_deploy_tools = CO_DEPLOY_TOOLS.get(tool_name, [])
+    for cd_tool in co_deploy_tools:
+        cd_module, cd_tool_in_registry = TOOL_NAME_TO_MODULE.get(cd_tool, (None, None))
+        if cd_module and cd_tool_in_registry:
+            if cd_module not in selected:
+                selected[cd_module] = []
+            if cd_tool_in_registry not in selected[cd_module]:
+                selected[cd_module].append(cd_tool_in_registry)
+        is_valid_cd, _, cd_env = validate_and_parse_config(cd_tool, {})
+        if is_valid_cd:
+            cd_env = resolve_consumer_topics(cd_tool, cd_env, collection)
+            base_env.update(cd_env)
+
     new_config_id = build_config_id(endpoint + "_updated", tool_name, base_env)
 
     save_deployment_to_mongo(
@@ -744,8 +783,6 @@ def process_update_configuration(
         tool_name=tool_name,
         resolved_env=base_env
     )
-
-    selected = build_selected_from_tool_name(stored_tool_name)
 
     success, error_msg = call_start_containers(
         selected=selected,

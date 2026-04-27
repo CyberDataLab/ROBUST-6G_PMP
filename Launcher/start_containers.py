@@ -725,6 +725,10 @@ TOOL_ENV_VARS: Dict[str, List[str]] = {
     "filebeat": [
         "FILEBEAT_BULK_MAX_SIZE",
         "FILEBEAT_COMPRESION",
+        "FLUENTD_SYSLOG_BASE_TOPIC",
+        "FLUENTD_SYSTEMD_BASE_TOPIC",
+        "TSHARK_BASE_TOPIC",
+        "FALCO_BASE_TOPIC",
     ],
     "prometheus": [
         "PROMETHEUS_PORT",
@@ -871,6 +875,13 @@ CONSUMER_TOPIC_VARS: Dict[str, List[str]] = {
         "FLUENTD_SYSTEMD_BASE_TOPIC",
         "FALCO_BASE_TOPIC",
     ],
+    "filebeat": [
+        "TSHARK_BASE_TOPIC",
+        "FLUENTD_SYSLOG_BASE_TOPIC",
+        "FLUENTD_SYSTEMD_BASE_TOPIC",
+        "FALCO_BASE_TOPIC",
+    ],
+    
 }
 
 

@@ -9,7 +9,7 @@ services:
       - MONGO_INITDB_ROOT_USERNAME=${MONGO_INITDB_ROOT_USERNAME}
       - MONGO_INITDB_ROOT_PASSWORD=${MONGO_INITDB_ROOT_PASSWORD}
     volumes:
-      - ${PFD}/Results/mongo_data:/data/db
+      - ${PFD}/Persistence/mongo_data:/data/db
     ports:
       - "${MONGO_PORT:-27017}:27017"
     restart: unless-stopped
@@ -28,7 +28,7 @@ services:
       - MONGO_INITDB_ROOT_USERNAME=${MONGO_CM_INITDB_ROOT_USERNAME}
       - MONGO_INITDB_ROOT_PASSWORD=${MONGO_CM_INITDB_ROOT_PASSWORD}
     volumes:
-      - ${PFD}/Results/mongo_cm:/data/db
+      - ${PFD}/Persistence/mongo_cm:/data/db
     ports:
       - "${MONGO_CM_PORT:-27018}:27017"
     restart: unless-stopped
@@ -54,7 +54,7 @@ services:
     #--requirepass ${REDIS_PASSWORD} -> first I need to configure the ACL Redis to create users
     volumes:
       - ${PFD}/Databases_module/Configuration_files/Redis/redis.conf:/usr/local/etc/redis/redis.conf:ro
-      - ${PFD}/Results/Redis_data:/data
+      - ${PFD}/Persistence/Redis_data:/data
     ports:
       - "${REDIS_PORT:-6379}:6379"
     restart: unless-stopped
