@@ -1,0 +1,32 @@
+{
+  "files.exclude": {
+    "**/.next": true,
+    "**/__pycache__": true,
+    "**/dist": true,
+    "**/build": true,
+    "**/coverage": true,
+    "Internal_logs": true,
+    "Persistence": true,
+    "Results": true
+  },
+  "search.exclude": {
+    "**/.next": true,
+    "**/__pycache__": true,
+    "**/dist": true,
+    "**/build": true,
+    "**/coverage": true,
+    "Internal_logs": true,
+    "Persistence": true,
+    "Results": true
+  },
+  "files.watcherExclude": {
+    "**/.next/**": true,
+    "**/__pycache__/**": true,
+    "**/dist/**": true,
+    "**/build/**": true,
+    "**/coverage/**": true,
+    "Internal_logs/**": true,
+    "Persistence/**": true,
+    "Results/**": true
+  }
+}

@@ -1,0 +1,9 @@
+Persistence/
+Results/
+Launcher/__pycache__/
+APIs/*/__pycache__/
+Internal_logs/
+Launcher/.env
+Launcher/.init_pmp_env
+.antigravityignore
+.DS_Store
