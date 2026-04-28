@@ -50,8 +50,8 @@ services:
     image: elastic/filebeat:8.16.2
     container_name: filebeat_robust6g
     profiles: ["communication_module.filebeat"]
-    depends_on:
-      - kafka_robust6g
+    #depends_on:
+      #- kafka_robust6g
     environment:
       - TZ=${TZ}
       - FLUENTD_SYSLOG_BASE_TOPIC=${FLUENTD_SYSLOG_BASE_TOPIC}
