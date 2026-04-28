@@ -215,7 +215,7 @@ def test_deploy_network_tool(session: requests.Session, base_url: str) -> Option
         "POST",
         "/ConfigurationManager/DeployNetworkTool",
         params={"toolName": "tshark"},
-        payload={"toolName": "tshark", "configuration": {"TSHARK_INTERFACE": "enp0s3", "TSHARK_BASE_TOPIC": "tshark_traces"}},
+        payload={"toolName": "tshark", "configuration": {"TSHARK_INTERFACE": "enp0s3", "TSHARK_BASE_TOPIC": "another_topic"}}, #
     )
     assert_test(
         "Legacy body with toolName is rejected or ignored safely",

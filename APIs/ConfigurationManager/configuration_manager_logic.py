@@ -160,6 +160,10 @@ class FilebeatConfig(BaseModel):
 
     FILEBEAT_BULK_MAX_SIZE:         str = "4096"
     FILEBEAT_COMPRESION:            str = "lz4"
+    FLUENTD_SYSLOG_BASE_TOPIC:      str = FluentdConfig.model_fields["FLUENTD_SYSLOG_BASE_TOPIC"].default
+    FLUENTD_SYSTEMD_BASE_TOPIC:     str = FluentdConfig.model_fields["FLUENTD_SYSTEMD_BASE_TOPIC"].default
+    TSHARK_BASE_TOPIC:              str = TsharkConfig.model_fields["TSHARK_BASE_TOPIC"].default
+    FALCO_BASE_TOPIC:               str = FalcoConfig.model_fields["FALCO_BASE_TOPIC"].default
 
 
 class PrometheusConfig(BaseModel):
@@ -494,8 +498,9 @@ def resolve_consumer_topics(
 ) -> Dict[str, str]:
     """
     For consumer tools, overwrite their topic variables with the real values stored
-    in the kafka_topics MongoDB CM document. Falls back to Pydantic defaults (already
-    in resolved_env) if MongoDB CM is unavailable or the document does not exist yet.
+    in the kafka_topics MongoDB CM document. Falls back to the Pydantic defaults
+    already present in resolved_env if MongoDB CM is unavailable or the document
+    does not exist yet.
     """
     _, consumer_map = _load_producer_consumer_maps()
 

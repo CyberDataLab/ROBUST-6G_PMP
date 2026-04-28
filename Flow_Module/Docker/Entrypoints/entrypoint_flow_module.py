@@ -288,7 +288,8 @@ class PacketWriter:
         while self._running:
             # Rotation per time
             if time.time() - self._last_file_ts >= FLOW_ROTATE_TIME_SEC:
-                self._new_file()
+                if self.j2p_worker and not self.j2p_worker.first_packet:
+                    self._new_file()
                 self._last_file_ts = time.time()
 
             try:
