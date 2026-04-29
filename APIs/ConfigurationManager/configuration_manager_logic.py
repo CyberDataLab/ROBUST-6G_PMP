@@ -365,18 +365,56 @@ def save_deployment_to_mongo(
     config_id: str,
     endpoint: str,
     tool_name: str,
-    resolved_env: Dict[str, str]
+    resolved_env: Dict[str, str],
+    is_update: bool = False
 ) -> None:
     """
     Insert or replace a deployment document in MongoDB using config_id as _id.
+    Stores version metadata so the same config_id can evolve over time through updates.
     """
-    document = {
-        "_id":          config_id,
-        "endpoint":     endpoint,
-        "tool_name":    tool_name,
-        "timestamp":    datetime.now(timezone.utc).isoformat(),
+    now_iso = datetime.now(timezone.utc).isoformat()
+    existing_document = get_deployment_from_mongo(collection, config_id) or {}
+
+    current_revision = int(existing_document.get("revision", 1 if existing_document else 0))
+    revision = (current_revision + 1) if is_update else (current_revision or 1)
+
+    created_at = existing_document.get("created_at", now_iso)
+
+    rules_config = None
+    if tool_name == "snort3":
+        existing_rules_config = existing_document.get("rules_config", {})
+        rules_config = {
+            "include_default_rules": bool(existing_rules_config.get("include_default_rules", True)),
+            "custom_rules": list(existing_rules_config.get("custom_rules", [])),
+            "custom_rule_sids": [str(sid) for sid in existing_rules_config.get("custom_rule_sids", [])],
+        }
+
+    version_payload: Dict[str, Any] = {
+        "endpoint": endpoint,
+        "tool_name": tool_name,
         "resolved_env": resolved_env,
     }
+    if rules_config is not None:
+        version_payload["rules_config"] = rules_config
+
+    current_version_hash = hashlib.md5(
+        json.dumps(version_payload, sort_keys=True).encode("utf-8")
+    ).hexdigest()
+
+    document = {
+        "_id":                  config_id,
+        "endpoint":             endpoint,
+        "tool_name":            tool_name,
+        "timestamp":            now_iso,
+        "created_at":           created_at,
+        "updated_at":           now_iso,
+        "revision":             revision,
+        "current_version_hash": current_version_hash,
+        "resolved_env":         resolved_env,
+    }
+    if rules_config is not None:
+        document["rules_config"] = rules_config
+
     try:
         collection.replace_one({"_id": config_id}, document, upsert=True)
     except Exception as e:
@@ -731,7 +769,8 @@ def process_deploy_request(
             config_id=config_id,
             endpoint=endpoint,
             tool_name=tool_name,
-            resolved_env=resolved_env
+            resolved_env=resolved_env,
+            is_update=False
         )
 
     success, error_msg = call_start_containers(
@@ -824,7 +863,8 @@ def process_update_configuration(
         config_id=request.config_id,
         endpoint=endpoint,
         tool_name=tool_name,
-        resolved_env=base_env
+        resolved_env=base_env,
+        is_update=True
     )
 
     success, error_msg = call_start_containers(

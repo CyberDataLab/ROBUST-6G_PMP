@@ -19,7 +19,7 @@ Usage:
 import argparse
 import json
 import sys
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, Tuple
 
 import requests
 
@@ -139,10 +139,11 @@ def test_get_configuration_options(session: requests.Session, base_url: str) -> 
     assert_test("Missing toolName query param returns 422", resp.status_code == 422)
 
 
-def test_deploy_network_tool(session: requests.Session, base_url: str) -> Optional[str]:
+def test_deploy_network_tool(session: requests.Session, base_url: str) -> Tuple[Optional[str], Optional[str]]:
     print_section("3. POST /ConfigurationManager/DeployNetworkTool")
 
     config_id = None
+    flow_config_id = None
 
     resp = call(
         session,
@@ -150,7 +151,7 @@ def test_deploy_network_tool(session: requests.Session, base_url: str) -> Option
         "POST",
         "/ConfigurationManager/DeployNetworkTool",
         params={"toolName": "tshark"},
-        payload={"configuration": {"TSHARK_BASE_TOPIC": "initial_topic", "TSHARK_INTERFACE": "eth-test0"}},
+        payload={"configuration": {"TSHARK_BASE_TOPIC": "initial_topic", "TSHARK_INTERFACE": "enp0s3"}},
     )
     assert_test("tshark with initial custom config returns 200", resp.status_code == 200)
     data = resp.json()
@@ -179,6 +180,9 @@ def test_deploy_network_tool(session: requests.Session, base_url: str) -> Option
         payload={"configuration": {}},
     )
     assert_test("flow_module with empty config returns 200", resp.status_code == 200)
+    data = resp.json()
+    if "config_id" in data:
+        flow_config_id = data["config_id"]
 
     resp = call(
         session,
@@ -232,8 +236,11 @@ def test_deploy_network_tool(session: requests.Session, base_url: str) -> Option
         payload={"configuration": {}},
     )
     assert_test("flow_module with empty config returns 200", resp.status_code == 200)
+    data = resp.json()
+    if "config_id" in data:
+        flow_config_id = data["config_id"]
 
-    return config_id
+    return config_id, flow_config_id
 
 
 def test_deploy_infrastructure_tool(session: requests.Session, base_url: str) -> None:
@@ -358,6 +365,8 @@ def test_get_configuration(session: requests.Session, base_url: str, config_id: 
     data = resp.json()
     assert_test("Response contains data field", "data" in data)
     assert_test("data contains resolved_env field", "resolved_env" in data.get("data", {}))
+    assert_test("data contains revision field", "revision" in data.get("data", {}))
+    assert_test("data contains current_version_hash field", "current_version_hash" in data.get("data", {}))
 
     resp = call(
         session,
@@ -373,12 +382,25 @@ def test_update_configuration(
     session: requests.Session,
     base_url: str,
     config_id: Optional[str],
+    flow_config_id: Optional[str],
 ) -> None:
     print_section("8. PUT /ConfigurationManager/updateConfiguration")
 
     if config_id is None:
         print("  ⚠️  Skipping: no config_id available from previous deploy test.")
         return
+
+    resp = call(
+        session,
+        base_url,
+        "GET",
+        "/ConfigurationManager/getConfiguration",
+        params={"config_id": config_id},
+    )
+    assert_test("getConfiguration before update returns 200", resp.status_code == 200)
+    data = resp.json()
+    previous_revision = data.get("data", {}).get("revision")
+    assert_test("Previous revision is present before update", isinstance(previous_revision, int))
 
     payload = {
         "config_id": config_id,
@@ -406,11 +428,49 @@ def test_update_configuration(
     assert_test("getConfiguration after update returns 200", resp.status_code == 200)
     data = resp.json()
     resolved_env = data.get("data", {}).get("resolved_env", {})
+    revision = data.get("data", {}).get("revision")
+    current_version_hash = data.get("data", {}).get("current_version_hash")
     assert_test("Updated topic is persisted", resolved_env.get("TSHARK_BASE_TOPIC") == "updated_topic")
     assert_test(
         "Non-updated fields are preserved",
-        resolved_env.get("TSHARK_INTERFACE") == "eth-test0",
+        resolved_env.get("TSHARK_INTERFACE") == "enp0s3",
     )
+    if isinstance(previous_revision, int):
+        assert_test("Revision increments after update", revision == previous_revision + 1)
+    else:
+        assert_test("Revision increments after update", False, "Previous revision was not available as an integer.")
+    assert_test("current_version_hash is present after update", isinstance(current_version_hash, str) and len(current_version_hash) > 0)
+
+    if flow_config_id:
+        resp = call(
+            session,
+            base_url,
+            "PUT",
+            "/ConfigurationManager/updateConfiguration",
+            params={"toolName": "flow_module"},
+            payload={
+                "config_id": flow_config_id,
+                "configuration": {"TSHARK_BASE_TOPIC": "updated_topic"},
+            },
+        )
+        assert_test("flow_module update after tshark update returns 200", resp.status_code == 200)
+        data = resp.json()
+        assert_test("flow_module update keeps same config_id", data.get("config_id") == flow_config_id)
+
+        resp = call(
+            session,
+            base_url,
+            "GET",
+            "/ConfigurationManager/getConfiguration",
+            params={"config_id": flow_config_id},
+        )
+        assert_test("getConfiguration for updated flow_module returns 200", resp.status_code == 200)
+        data = resp.json()
+        flow_resolved_env = data.get("data", {}).get("resolved_env", {})
+        assert_test(
+            "Updated flow_module picks updated tshark topic",
+            flow_resolved_env.get("TSHARK_BASE_TOPIC") == "updated_topic",
+        )
 
     payload_bad = {
         "config_id": "doesnotexist000",
@@ -472,12 +532,12 @@ def main() -> None:
 
     #test_health(session, base_url)
     #test_get_configuration_options(session, base_url)
-    config_id = test_deploy_network_tool(session, base_url)
+    config_id, flow_config_id = test_deploy_network_tool(session, base_url)
     #test_deploy_infrastructure_tool(session, base_url)
     #test_deploy_service_tool(session, base_url)
     #test_deploy_security_tool(session, base_url)
-    #test_get_configuration(session, base_url, config_id)
-    test_update_configuration(session, base_url, config_id)
+    test_get_configuration(session, base_url, config_id)
+    test_update_configuration(session, base_url, config_id, flow_config_id)
 
     print_section("SUMMARY")
     total = passed + failed
