@@ -5,9 +5,9 @@
     "**/dist": true,
     "**/build": true,
     "**/coverage": true,
-    "Internal_logs": true,
+    "Internal_logs": false,
     "Persistence": true,
-    "Results": true
+    "Results": false
   },
   "search.exclude": {
     "**/.next": true,

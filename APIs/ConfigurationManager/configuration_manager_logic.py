@@ -491,6 +491,37 @@ def validate_and_parse_config(
     return True, "", resolved
 
 
+def validate_and_parse_partial_update_config(
+    tool_name: str,
+    incoming_config: Dict[str, Any]
+) -> Tuple[bool, str, Dict[str, str]]:
+    """
+    Validate a partial update payload for a tool.
+    Unlike deploy validation, this only returns the keys explicitly sent by the client,
+    so non-updated fields are not replaced with model defaults.
+    """
+    if not incoming_config:
+        return False, "No configuration values were provided to update.", {}
+
+    if tool_name not in TOOL_CONFIG_MODELS:
+        valid_names = list(TOOL_CONFIG_MODELS.keys())
+        return False, f"Unknown toolName '{tool_name}'. Valid tools: {valid_names}", {}
+
+    config_model_class = TOOL_CONFIG_MODELS[tool_name]
+
+    try:
+        parsed_config = config_model_class.model_validate(incoming_config)
+    except Exception as e:
+        return False, f"Invalid configuration for tool '{tool_name}': {e}", {}
+
+    resolved: Dict[str, str] = {
+        key: str(getattr(parsed_config, key))
+        for key in incoming_config.keys()
+    }
+
+    return True, "", resolved
+
+
 def resolve_consumer_topics(
     tool_name: str,
     resolved_env: Dict[str, str],
@@ -749,7 +780,16 @@ def process_update_configuration(
     endpoint: str = existing.get("endpoint", "unknown")
     stored_tool_name: str = existing.get("tool_name", tool_name)
 
-    is_valid, error_msg, resolved_env = validate_and_parse_config(
+    if stored_tool_name != tool_name:
+        return {
+            "status":  "error",
+            "message": (
+                f"Tool mismatch for config_id '{request.config_id}': "
+                f"stored tool is '{stored_tool_name}', but request used '{tool_name}'."
+            )
+        }
+
+    is_valid, error_msg, partial_env = validate_and_parse_partial_update_config(
         tool_name=tool_name,
         incoming_config=request.configuration or {}
     )
@@ -757,7 +797,7 @@ def process_update_configuration(
     if not is_valid:
         return {"status": "error", "message": error_msg}
 
-    base_env.update(resolved_env)
+    base_env.update(partial_env)
 
     # Re-apply producer/consumer topic logic on update as well
     persist_producer_topics(tool_name, base_env, collection)
@@ -779,11 +819,9 @@ def process_update_configuration(
             cd_env = resolve_consumer_topics(cd_tool, cd_env, collection)
             base_env.update(cd_env)
 
-    new_config_id = build_config_id(endpoint + "_updated", tool_name, base_env)
-
     save_deployment_to_mongo(
         collection=collection,
-        config_id=new_config_id,
+        config_id=request.config_id,
         endpoint=endpoint,
         tool_name=tool_name,
         resolved_env=base_env
@@ -798,11 +836,10 @@ def process_update_configuration(
         return {"status": "error", "message": error_msg}
 
     return {
-        "status":           "success",
-        "old_config_id":    request.config_id,
-        "new_config_id":    new_config_id,
-        "message":          "Configuration updated and redeployment started.",
-        "updated_tool":     tool_name,
+        "status":       "success",
+        "config_id":    request.config_id,
+        "message":      "Configuration updated and redeployment started.",
+        "updated_tool": tool_name,
     }
 
 

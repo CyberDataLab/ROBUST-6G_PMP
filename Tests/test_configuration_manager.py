@@ -150,9 +150,9 @@ def test_deploy_network_tool(session: requests.Session, base_url: str) -> Option
         "POST",
         "/ConfigurationManager/DeployNetworkTool",
         params={"toolName": "tshark"},
-        payload={"configuration": {}},
+        payload={"configuration": {"TSHARK_BASE_TOPIC": "initial_topic", "TSHARK_INTERFACE": "eth-test0"}},
     )
-    assert_test("tshark with empty config returns 200", resp.status_code == 200)
+    assert_test("tshark with initial custom config returns 200", resp.status_code == 200)
     data = resp.json()
     assert_test("Response contains config_id", "config_id" in data)
     assert_test("Response deployed_tool is tshark", data.get("deployed_tool") == "tshark")
@@ -357,7 +357,7 @@ def test_get_configuration(session: requests.Session, base_url: str, config_id: 
     assert_test("getConfiguration with valid id returns 200", resp.status_code == 200)
     data = resp.json()
     assert_test("Response contains data field", "data" in data)
-    assert_test("data contains tools field", "tools" in data.get("data", {}))
+    assert_test("data contains resolved_env field", "resolved_env" in data.get("data", {}))
 
     resp = call(
         session,
@@ -394,8 +394,23 @@ def test_update_configuration(
     )
     assert_test("updateConfiguration returns 200", resp.status_code == 200)
     data = resp.json()
-    assert_test("Response contains new_config_id", "new_config_id" in data)
-    assert_test("old_config_id matches what we sent", data.get("old_config_id") == config_id)
+    assert_test("Response keeps same config_id", data.get("config_id") == config_id)
+
+    resp = call(
+        session,
+        base_url,
+        "GET",
+        "/ConfigurationManager/getConfiguration",
+        params={"config_id": config_id},
+    )
+    assert_test("getConfiguration after update returns 200", resp.status_code == 200)
+    data = resp.json()
+    resolved_env = data.get("data", {}).get("resolved_env", {})
+    assert_test("Updated topic is persisted", resolved_env.get("TSHARK_BASE_TOPIC") == "updated_topic")
+    assert_test(
+        "Non-updated fields are preserved",
+        resolved_env.get("TSHARK_INTERFACE") == "eth-test0",
+    )
 
     payload_bad = {
         "config_id": "doesnotexist000",
@@ -410,6 +425,26 @@ def test_update_configuration(
         payload=payload_bad,
     )
     assert_test("updateConfiguration with unknown id returns 400", resp.status_code == 400)
+
+    resp = call(
+        session,
+        base_url,
+        "PUT",
+        "/ConfigurationManager/updateConfiguration",
+        params={"toolName": "snort3"},
+        payload={"config_id": config_id, "configuration": {"SNORT_KAFKA_TOPIC_OUT": "oops"}},
+    )
+    assert_test("updateConfiguration with tool mismatch returns 400", resp.status_code == 400)
+
+    resp = call(
+        session,
+        base_url,
+        "PUT",
+        "/ConfigurationManager/updateConfiguration",
+        params={"toolName": "tshark"},
+        payload={"config_id": config_id, "configuration": {}},
+    )
+    assert_test("updateConfiguration with empty configuration returns 400", resp.status_code == 400)
 
     resp = call(
         session,
@@ -442,7 +477,7 @@ def main() -> None:
     #test_deploy_service_tool(session, base_url)
     #test_deploy_security_tool(session, base_url)
     #test_get_configuration(session, base_url, config_id)
-    #test_update_configuration(session, base_url, config_id)
+    test_update_configuration(session, base_url, config_id)
 
     print_section("SUMMARY")
     total = passed + failed
