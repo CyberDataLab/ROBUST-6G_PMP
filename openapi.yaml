@@ -144,7 +144,7 @@ paths:
       tags:
         - ConfigurationManager
       summary: "Security Orchestrator - Request to deploy a security tool"
-      description: "This endpoint allows the NXW Security Orchestrator to request the deployment of a security tool"
+      description: "Deploy snort3 with optional configuration overrides and optional custom rules."
       operationId: "deploySecurityTool"
       requestBody:
         required: true
@@ -153,45 +153,22 @@ paths:
             schema:
               type: object
               properties:
-                podIP:
-                  type: string
-                  description: "IP address of the pod where the tool will be deployed"
-                toolName:
-                  type: string
-                  description: "Name of the service tool to deploy"
-                sigma_rules:
-                  type: array
-                  items:
-                    type: string
-                    description: "Sigma rules generated from the SSLA by the Security Orchestrator."
                 configuration:
+                  type: object
+                  additionalProperties: true
+                  description: "Optional snort3 env var overrides."
+                  example:
+                    SNORT_KAFKA_TOPIC_OUT: "snort_alerts"
+                rules:
                   type: array
                   items:
                     type: string
-                    description: "Configuration in JSON format from the ZTSO"
-                  examples:
-                     -
-                     # Snort3 configuration
-                      - SNORT_KAFKA_TOPIC_OUT: "snort_alerts"
-                      - SNORT_ALERT_TAP_IFACE: "tap0"
-                      - SNORT_KAFKA_MESSAGE_FIELD: "_source"
-                      - SNORT_CONSUMER_KAFKA_AUTO_OFFSET_RESET: "earliest"
-                      - SNORT_CONSUMER_KAFKA_ENABLE_AUTO_COMMIT: true
-                      - SNORT_CONSUMER_KAFKA_PARTITION_ASSIGNMENT_STRATEGY: "cooperative-sticky"
-                      - SNORT_CONSUMER_KAFKA_ENABLE_PARTITION_EOF: true
-                      - SNORT_CONSUMER_KAFKA_ALLOW_AUTO_CREATE_TOPICS: true
-                      - SNORT_CONSUMER_FETCH_MIN_BYTES:  1048576
-                      - SNORT_CONSUMER_FETCH_WAIT_MAX_MS:  50
-                      - SNORT_CONSUMER_QUEUED_MAX_MESSAGES_KBYTE:  262144
-                      - SNORT_CONSUMER_MAX_POLL_INTERVAL_MS: 900000
-                      - SNORT_CONSUMER_SESSION_TIMEOUT_MS: 10000
-                      - SNORT_PRODUCER_KAFKA_PRODUCER_LINGER_MS: 5
-                      - SNORT_PRODUCER_BATCH_NUM_MESSAGES: 10000
-                      - SNORT_PRODUCER_KAFKA_PRODUCER_BATCH_SIZE: 32768
-                      - SNORT_PRODUCER_KAFKA_PRODUCER_COMPRESSION: "zstd"
-              required:
-                - podIP
-                - toolName
+                  description: "Optional list of custom Snort3 rules. Each rule must include a sid."
+                  example:
+                    - "alert tcp any any -> any any (msg:\"snort3 test rule\"; sid:10001; rev:1;)"
+                include_default_rules:
+                  type: boolean
+                  description: "If true, snort3 uses community rules together with the provided custom rules. If omitted while rules are sent, it is interpreted as false."
       responses:
         '200':
           description: "Request successfully. You can collect the information in IP:Port -> kafka_robust6g-node1.lan:9094"
@@ -230,12 +207,73 @@ paths:
                       - "sensors"
                       - "internet speed"
 
+  /ConfigurationManager/getConfiguration:
+    get:
+      tags:
+        - ConfigurationManager
+      summary: "Security Orchestrator - Retrieve a persisted deployment configuration"
+      description: "Return the current stored configuration for a deployment, including revision metadata and, for snort3, the current rules_config."
+      operationId: "getConfiguration"
+      parameters:
+        - name: config_id
+          in: query
+          description: "The stable configuration identifier returned by a previous deploy call."
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: "Current persisted configuration"
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: "success"
+                  config_id:
+                    type: string
+                  data:
+                    type: object
+                    properties:
+                      endpoint:
+                        type: string
+                      tool_name:
+                        type: string
+                      created_at:
+                        type: string
+                      updated_at:
+                        type: string
+                      revision:
+                        type: integer
+                      current_version_hash:
+                        type: string
+                      resolved_env:
+                        type: object
+                        additionalProperties:
+                          type: string
+                      rules_config:
+                        type: object
+                        description: "Present for snort3 only."
+                        properties:
+                          include_default_rules:
+                            type: boolean
+                          custom_rules:
+                            type: array
+                            items:
+                              type: string
+                          custom_rule_sids:
+                            type: array
+                            items:
+                              type: string
+
   /ConfigurationManager/updateConfiguration:
     put:
       tags:
         - ConfigurationManager
       summary: "Security Orchestrator updates the current configuration."
-      description: "This endpoint allows the Security Orchestrator to update the current deployed configuration."
+      description: "Update an existing deployment configuration. For snort3, this endpoint also supports rules_action add/remove/replace."
       operationId: "soUpdateConfiguration"
       requestBody:
         required: true
@@ -244,30 +282,32 @@ paths:
             schema:
               type: object
               properties:
-                podIP:
+                config_id:
                   type: string
-                  description: "IP address of the pod where the tool is already deployed"
-                toolName:
+                  description: "Stable identifier of the deployment to update."
+                configuration:
+                  type: object
+                  additionalProperties: true
+                  description: "Optional partial env var overrides."
+                rules_action:
                   type: string
-                  description: "Name of the service tool to deployed"
-                tool_type:
-                  type: string
-                  description: "Type of the service tool deployed"
-                  example:
-                   - "network"
-                   - "infrastructure"
-                   - "service"
-                   - "security"
-                sigma_rules:
+                  enum: [add, remove, replace]
+                  description: "snort3-only action for mutating custom rules."
+                rules:
                   type: array
                   items:
                     type: string
-                    description: "New sigma rules generated from the SSLA by the Security Orchestrator."
+                  description: "snort3-only list of custom rules. Required for add and replace."
+                rule_sids:
+                  type: array
+                  items:
+                    type: string
+                  description: "snort3-only list of custom rule SIDs to remove. Required for remove."
+                include_default_rules:
+                  type: boolean
+                  description: "snort3-only flag accepted during replace to set whether default rules are used together with custom rules."
               required:
-                - podIP
-                - toolName
-                - toolName
-                - sigma_rules
+                - config_id
 
       responses:
         "200":

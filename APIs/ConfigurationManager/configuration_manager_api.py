@@ -30,6 +30,7 @@ from fastapi.responses import JSONResponse
 
 from configuration_manager_logic import (
     DeployRequest,
+    DeploySecurityRequest,
     UpdateConfigurationRequest,
     get_configuration_options,
     get_configuration_by_id,
@@ -44,7 +45,7 @@ app = FastAPI(
         "Supports network, infrastructure, service and security tool deployment. "
         "toolName is passed as a query parameter; the JSON body carries only env var overrides."
     ),
-    version="3.0.0",
+    version="3.1.0",
 )
 
 # ---------------------------------------------------------------------------
@@ -63,7 +64,7 @@ async def root():
     """
     return {
         "message":          "Configuration Manager API is running",
-        "version":          "3.0.0",
+        "version":          "3.1.0",
         "kafka_bootstrap":  "kafka_robust6g-node1.lan:9094",
     }
 
@@ -167,20 +168,20 @@ async def deploy_service_tool(
 @app.post("/ConfigurationManager/DeploySecurityTool")
 async def deploy_security_tool(
     toolName: str = Query(..., description="Name of the security tool to deploy. Valid values: snort3"),
-    request: DeployRequest = None
+    request: DeploySecurityRequest = None
 ):
     """
     Deploy a security tool (snort3).
 
     - toolName: query parameter with the tool to deploy.
-    - Body: optional JSON with env var overrides. Send {} or omit body to use all defaults.
+    - Body: optional JSON with env var overrides and optional custom rules payload.
 
     Example:
         POST /ConfigurationManager/DeploySecurityTool?toolName=snort3
         Body: {"configuration": {"SNORT_KAFKA_TOPIC_OUT": "my_alerts"}}
     """
     if request is None:
-        request = DeployRequest()
+        request = DeploySecurityRequest()
 
     result = process_deploy_request(
         tool_name=toolName,
@@ -241,7 +242,7 @@ async def update_configuration_endpoint(
     Only the variables explicitly sent are overridden; the rest keep their stored values.
 
     - toolName: query parameter indicating which tool's config model to use for validation.
-    - Body: JSON with config_id and optional configuration overrides.
+    - Body: JSON with config_id, optional configuration overrides and optional snort3 rules contract.
 
     Example:
         PUT /ConfigurationManager/updateConfiguration?toolName=tshark

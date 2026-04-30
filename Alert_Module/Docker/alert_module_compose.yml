@@ -50,3 +50,21 @@ services:
     volumes:
       - ${PFD}/Results/Alerts:/home/Alert_Module/Alerts
     restart: unless-stopped
+
+  alert_rules_validator:
+    image: alert_module_robust6g:latest
+    build:
+      context: ${PFD}
+      dockerfile: Alert_Module/Docker/Dockerfiles/alert_module.dockerfile
+    profiles: ["alert_module.validator"]
+    entrypoint:
+      - snort
+      - -T
+      - -c
+      - /home/Alert_Module/Snort_configuration/lua/snort.lua
+      - -R
+      - /home/Alert_Module/Snort_configuration/Rules/snort3_custom.tmp.rules
+    volumes:
+      - ${PFD}/Alert_Module/Configuration_Files/lua:/home/Alert_Module/Snort_configuration/lua:ro
+      - ${PFD}/Alert_Module/Configuration_Files/Rules:/home/Alert_Module/Snort_configuration/Rules:ro
+    restart: "no"

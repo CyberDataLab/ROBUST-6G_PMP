@@ -21,13 +21,19 @@ import os
 from collections import OrderedDict
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Literal, Optional, Tuple
 from dotenv import load_dotenv
 
 from pydantic import BaseModel, Field
 from pymongo import MongoClient
 from pymongo.collection import Collection
 from pymongo.errors import ServerSelectionTimeoutError
+from snort_rules_manager import (
+    apply_snort3_rules_files,
+    apply_snort3_rules_update,
+    build_default_snort3_rules_config,
+    build_snort3_rules_config_for_deploy,
+)
 
 # ---------------------------------------------------------------------------
 # Path to start_containers.py
@@ -329,14 +335,39 @@ class DeployRequest(BaseModel):
     Deployment request body. Contains only the env var overrides for the tool.
     The toolName is received as a query parameter in the API endpoint, not here.
     An empty body {} is valid and means: use all defaults for that tool.
+
+    Note:
+    - 'rules' and 'include_default_rules' are declared in this base request on purpose,
+      even though only snort3 supports them.
+    - This allows non-snort3 endpoints to detect that the client sent rules-related
+      fields and return a controlled business error (400), instead of silently ignoring
+      them during request parsing.
     """
     configuration: Optional[Dict[str, Any]] = Field(default_factory=dict)
+    rules: Optional[List[str]] = None
+    include_default_rules: Optional[bool] = None
+
+
+class DeploySecurityRequest(DeployRequest):
+    """
+    Security-tool deployment request body.
+
+    This class currently does not add new fields beyond DeployRequest and intentionally
+    uses 'pass'. It exists to:
+    - make the snort3 endpoint contract explicit at the API layer
+    - provide a dedicated type for future security-specific validation or fields
+    """
+    pass
 
 
 class UpdateConfigurationRequest(BaseModel):
     """Request to update an existing deployment identified by its config_id."""
     config_id: str
     configuration: Optional[Dict[str, Any]] = Field(default_factory=dict)
+    rules_action: Optional[Literal["add", "remove", "replace"]] = None
+    rules: Optional[List[str]] = None
+    rule_sids: Optional[List[str]] = None
+    include_default_rules: Optional[bool] = None
 
 
 # ===========================================================================
@@ -366,7 +397,8 @@ def save_deployment_to_mongo(
     endpoint: str,
     tool_name: str,
     resolved_env: Dict[str, str],
-    is_update: bool = False
+    is_update: bool = False,
+    rules_config_override: Optional[Dict[str, Any]] = None
 ) -> None:
     """
     Insert or replace a deployment document in MongoDB using config_id as _id.
@@ -383,10 +415,11 @@ def save_deployment_to_mongo(
     rules_config = None
     if tool_name == "snort3":
         existing_rules_config = existing_document.get("rules_config", {})
+        source_rules_config = rules_config_override if rules_config_override is not None else existing_rules_config
         rules_config = {
-            "include_default_rules": bool(existing_rules_config.get("include_default_rules", True)),
-            "custom_rules": list(existing_rules_config.get("custom_rules", [])),
-            "custom_rule_sids": [str(sid) for sid in existing_rules_config.get("custom_rule_sids", [])],
+            "include_default_rules": bool(source_rules_config.get("include_default_rules", True)),
+            "custom_rules": [str(rule) for rule in source_rules_config.get("custom_rules", [])],
+            "custom_rule_sids": [str(sid) for sid in source_rules_config.get("custom_rule_sids", [])],
         }
 
     version_payload: Dict[str, Any] = {
@@ -560,6 +593,24 @@ def validate_and_parse_partial_update_config(
     return True, "", resolved
 
 
+def request_uses_rules_contract(request: Any) -> bool:
+    """Return True if the request includes any rules-related fields."""
+    return any(
+        getattr(request, field_name, None) is not None
+        for field_name in ("rules", "rule_sids", "rules_action", "include_default_rules")
+    )
+
+
+def validate_rules_contract_for_non_snort3(tool_name: str, request: Any) -> Tuple[bool, str]:
+    """Reject Snort3-only rules fields for tools that do not support them."""
+    if tool_name != "snort3" and request_uses_rules_contract(request):
+        return False, (
+            f"Rules-related fields are only supported for tool 'snort3'. "
+            f"Received rules contract fields for tool '{tool_name}'."
+        )
+    return True, ""
+
+
 def resolve_consumer_topics(
     tool_name: str,
     resolved_env: Dict[str, str],
@@ -652,12 +703,25 @@ def persist_producer_topics(
         update_kafka_topics_in_mongo(collection, producer_topic_updates)
 
 
-def build_config_id(endpoint: str, tool_name: str, resolved_env: Dict[str, str]) -> str:
+def build_config_id(
+    endpoint: str,
+    tool_name: str,
+    resolved_env: Dict[str, str],
+    rules_config: Optional[Dict[str, Any]] = None
+) -> str:
     """
     Generate a deterministic MD5 hash ID from endpoint, tool_name and resolved env dict.
     """
+    raw_payload: Dict[str, Any] = {
+        "endpoint": endpoint,
+        "tool_name": tool_name,
+        "resolved_env": resolved_env,
+    }
+    if rules_config is not None:
+        raw_payload["rules_config"] = rules_config
+
     raw = json.dumps(
-        {"endpoint": endpoint, "tool_name": tool_name, "resolved_env": resolved_env},
+        raw_payload,
         sort_keys=True
     )
     return hashlib.md5(raw.encode("utf-8")).hexdigest()
@@ -729,6 +793,10 @@ def process_deploy_request(
             )
         }
 
+    are_rules_fields_valid, rules_error_msg = validate_rules_contract_for_non_snort3(tool_name, request)
+    if not are_rules_fields_valid:
+        return {"status": "error", "message": rules_error_msg}
+
     is_valid, error_msg, resolved_env = validate_and_parse_config(
         tool_name=tool_name,
         incoming_config=request.configuration or {}
@@ -736,6 +804,23 @@ def process_deploy_request(
 
     if not is_valid:
         return {"status": "error", "message": error_msg}
+
+    rules_config: Optional[Dict[str, Any]] = None
+    if tool_name == "snort3":
+        is_valid_rules, rules_error_msg, rules_config = build_snort3_rules_config_for_deploy(
+            rules=request.rules,
+            include_default_rules=request.include_default_rules,
+        )
+        if not is_valid_rules:
+            return {"status": "error", "message": rules_error_msg}
+
+        should_validate_custom_rules = bool(request.rules)
+        are_rules_files_ready, rules_files_error = apply_snort3_rules_files(
+            rules_config=rules_config,
+            validate_custom_rules=should_validate_custom_rules,
+        )
+        if not are_rules_files_ready:
+            return {"status": "error", "message": rules_files_error}
 
     collection = get_mongo_collection()
 
@@ -761,7 +846,7 @@ def process_deploy_request(
             cd_env = resolve_consumer_topics(cd_tool, cd_env, collection)
             resolved_env.update(cd_env)
 
-    config_id = build_config_id(endpoint, tool_name, resolved_env)
+    config_id = build_config_id(endpoint, tool_name, resolved_env, rules_config=rules_config)
 
     if collection is not None:
         save_deployment_to_mongo(
@@ -770,7 +855,8 @@ def process_deploy_request(
             endpoint=endpoint,
             tool_name=tool_name,
             resolved_env=resolved_env,
-            is_update=False
+            is_update=False,
+            rules_config_override=rules_config
         )
 
     success, error_msg = call_start_containers(
@@ -818,6 +904,7 @@ def process_update_configuration(
     base_env: Dict[str, str] = dict(existing.get("resolved_env", {}))
     endpoint: str = existing.get("endpoint", "unknown")
     stored_tool_name: str = existing.get("tool_name", tool_name)
+    existing_rules_config: Dict[str, Any] = dict(existing.get("rules_config", build_default_snort3_rules_config()))
 
     if stored_tool_name != tool_name:
         return {
@@ -828,13 +915,46 @@ def process_update_configuration(
             )
         }
 
-    is_valid, error_msg, partial_env = validate_and_parse_partial_update_config(
-        tool_name=tool_name,
-        incoming_config=request.configuration or {}
-    )
+    are_rules_fields_valid, rules_error_msg = validate_rules_contract_for_non_snort3(tool_name, request)
+    if not are_rules_fields_valid:
+        return {"status": "error", "message": rules_error_msg}
 
-    if not is_valid:
-        return {"status": "error", "message": error_msg}
+    partial_env: Dict[str, str] = {}
+    if request.configuration:
+        is_valid, error_msg, partial_env = validate_and_parse_partial_update_config(
+            tool_name=tool_name,
+            incoming_config=request.configuration
+        )
+
+        if not is_valid:
+            return {"status": "error", "message": error_msg}
+
+    updated_rules_config: Optional[Dict[str, Any]] = None
+    rules_contract_used = request_uses_rules_contract(request)
+    if tool_name == "snort3" and rules_contract_used:
+        if request.rules_action is None:
+            return {"status": "error", "message": "The 'rules_action' field is required when rules-related fields are sent for snort3."}
+
+        is_valid_rules, rules_error_msg, updated_rules_config = apply_snort3_rules_update(
+            existing_rules_config=existing_rules_config,
+            rules_action=request.rules_action,
+            rules=request.rules,
+            rule_sids=request.rule_sids,
+            include_default_rules=request.include_default_rules,
+        )
+        if not is_valid_rules:
+            return {"status": "error", "message": rules_error_msg}
+
+        should_validate_custom_rules = request.rules_action in {"add", "replace"}
+        are_rules_files_ready, rules_files_error = apply_snort3_rules_files(
+            rules_config=updated_rules_config,
+            validate_custom_rules=should_validate_custom_rules,
+        )
+        if not are_rules_files_ready:
+            return {"status": "error", "message": rules_files_error}
+
+    if not partial_env and updated_rules_config is None:
+        return {"status": "error", "message": "No configuration values or valid snort3 rules changes were provided to update."}
 
     base_env.update(partial_env)
 
@@ -864,7 +984,8 @@ def process_update_configuration(
         endpoint=endpoint,
         tool_name=tool_name,
         resolved_env=base_env,
-        is_update=True
+        is_update=True,
+        rules_config_override=updated_rules_config
     )
 
     success, error_msg = call_start_containers(
