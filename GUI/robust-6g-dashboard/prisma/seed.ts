@@ -35,20 +35,20 @@ async function main() {
   });
   console.log(`✅ Admin user created: ${admin.email}`);
 
-  // 3. Create ANALYST user
-  const analystPasswordHash = await bcrypt.hash("Analyst123!", 12);
-  const analyst = await prisma.user.upsert({
-    where: { email: "analyst@robust-6g.eu" },
+  // 3. Create USER user
+  const userPasswordHash = await bcrypt.hash("User123!", 12);
+  const user = await prisma.user.upsert({
+    where: { email: "user@robust-6g.eu" },
     update: {},
     create: {
-      name: "Analyst User",
-      email: "analyst@robust-6g.eu",
-      passwordHash: analystPasswordHash,
+      name: "User",
+      email: "user@robust-6g.eu",
+      passwordHash: userPasswordHash,
       role: "ANALYST",
       organizationId: org.id,
     },
   });
-  console.log(`✅ Analyst user created: ${analyst.email}`);
+  console.log(`✅ User created: ${user.email}`);
 
   // 4. Create sample dashboard
   const dashboard = await prisma.dashboard.upsert({

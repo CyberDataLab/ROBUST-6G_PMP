@@ -5,15 +5,22 @@ import { useRouter } from "next/navigation";
 import { signIn } from "next-auth/react";
 
 export default function LoginPage() {
+  type AuthMode = "signin" | "signup";
+  type SignupRole = "ADMIN" | "USER";
+
   const router = useRouter();
+  const [mode, setMode] = useState<AuthMode>("signin");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [role, setRole] = useState<SignupRole>("USER");
   const [error, setError] = useState("");
+  const [successMessage, setSuccessMessage] = useState("");
   const [loading, setLoading] = useState(false);
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSignIn = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
+    setSuccessMessage("");
     setLoading(true);
 
     try {
@@ -33,6 +40,52 @@ export default function LoginPage() {
       setError("An unexpected error occurred. Please try again.");
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleSignUp = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError("");
+    setSuccessMessage("");
+    setLoading(true);
+
+    try {
+      const response = await fetch("/api/auth/register", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          email,
+          password,
+          role,
+        }),
+      });
+
+      const payload = await response.json();
+      if (!response.ok) {
+        setError(payload?.error ?? "Registration failed. Please try again.");
+        return;
+      }
+
+      setSuccessMessage("Account created successfully. You can now sign in.");
+      setPassword("");
+      setRole("USER");
+      setMode("signin");
+    } catch (err) {
+      setError("An unexpected error occurred. Please try again.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleModeChange = (nextMode: AuthMode) => {
+    setMode(nextMode);
+    setError("");
+    setSuccessMessage("");
+    setPassword("");
+    if (nextMode === "signup") {
+      setRole("USER");
     }
   };
 
@@ -74,12 +127,23 @@ export default function LoginPage() {
               Programmable Monitoring Platform
             </h3>
             <p className="mt-1 text-sm text-blue-200/60">
-              Sign in to access your dashboard
+              {mode === "signin"
+                ? "Sign in to access your dashboard"
+                : "Create your account to access the platform"}
             </p>
           </div>
 
           {/* Form */}
-          <form onSubmit={handleSubmit} className="space-y-4">
+          <form
+            onSubmit={mode === "signin" ? handleSignIn : handleSignUp}
+            className="space-y-4"
+          >
+            {successMessage && (
+              <div className="flex items-center gap-2 rounded-lg border border-emerald-500/30 bg-emerald-500/10 p-4 text-sm text-emerald-200 backdrop-blur-sm">
+                {successMessage}
+              </div>
+            )}
+
             {error && (
               <div className="flex items-center gap-2 rounded-lg border border-red-500/30 bg-red-500/10 p-4 text-sm text-red-300 backdrop-blur-sm">
                 <svg
@@ -135,6 +199,27 @@ export default function LoginPage() {
               />
             </div>
 
+            {mode === "signup" && (
+              <div>
+                <label
+                  htmlFor="role"
+                  className="block text-sm font-medium text-blue-100/80"
+                >
+                  Role
+                </label>
+                <select
+                  id="role"
+                  value={role}
+                  onChange={(e) => setRole(e.target.value as SignupRole)}
+                  required
+                  className="mt-1.5 block w-full rounded-lg border border-white/10 bg-white/5 px-4 py-3 text-black shadow-sm focus:border-cyan-400/50 focus:outline-none focus:ring-2 focus:ring-cyan-400/20 backdrop-blur-sm transition-all"
+                >
+                  <option value="ADMIN">Admin</option>
+                  <option value="USER">User</option>
+                </select>
+              </div>
+            )}
+
             <button
               type="submit"
               disabled={loading}
@@ -161,12 +246,32 @@ export default function LoginPage() {
                       d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"
                     />
                   </svg>
-                  Signing in...
+                  {mode === "signin" ? "Signing in..." : "Signing up..."}
                 </span>
               ) : (
-                "Sign in"
+                mode === "signin"
+                  ? "Sign in"
+                  : "Sign up"
               )}
             </button>
+
+            {mode === "signin" ? (
+              <button
+                type="button"
+                onClick={() => handleModeChange("signup")}
+                className="w-full rounded-lg border border-cyan-500/40 bg-cyan-500/10 px-4 py-3 text-sm font-semibold text-cyan-200 transition-colors hover:bg-cyan-500/20"
+              >
+                Sign up
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={() => handleModeChange("signin")}
+                className="w-full rounded-lg border border-white/20 bg-white/5 px-4 py-3 text-sm font-semibold text-blue-100/90 transition-colors hover:bg-white/10"
+              >
+                Back to sign in
+              </button>
+            )}
 
             {/* Domain policy */}
             <div className="rounded-lg border border-cyan-400/10 bg-cyan-400/5 p-3 backdrop-blur-sm">
