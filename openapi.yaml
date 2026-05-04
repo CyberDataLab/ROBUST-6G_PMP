@@ -2,7 +2,7 @@ openapi: 3.1.0
 info:
   title: Programmable Monitoring Platform API
   description: These sets of APIs describes the principal functionalities of the ROBUST-6G PMP.
-  version: 1.0.0
+  version: 3.1.0
 
 tags:
 
@@ -23,119 +23,171 @@ tags:
 
 
 servers:
-  - url: http://localhost:5000
-    description: Local / default environmen
+  - url: http://localhost:8000
+    description: Local / default environment for the Configuration Manager API
 
 paths:
   /ConfigurationManager/DeployNetworkTool:
     post:
       tags:
         - ConfigurationManager
-      summary: "Security Orchestrator - Request to deploy a network tool"
-      description: "This endpoint allows the NXW Security Orchestrator to request the deployment of a network tool"
+      summary: "Deploy a network tool"
+      description: "Deploy one network tool per request. The tool is selected with the required toolName query parameter."
       operationId: "deployNetworkTool"
+      parameters:
+        - name: toolName
+          in: query
+          required: true
+          description: "Name of the network tool to deploy."
+          schema:
+            type: string
+            enum: [tshark, flow_module]
       requestBody:
-        required: true
+        required: false
         content:
           application/json:
             schema:
               type: object
               properties:
-                podIP:
-                  type: string
-                  description: "IP address of the pod where the tool will be deployed"
-                interface:
-                  type: string
-                  description: "Network interface on which the tool will sniff traffic"
-                toolName:
-                  type: string
-                  description: "Name of the network tool to deploy"
-                sigma_rules:
-                  type: array
-                  items:
-                    type: string
-                    description: "Sigma rules generated from the SSLA by the Security Orchestrator."
                 configuration:
-                  type: array
-                  items:
-                    type: string
-                    description: "Configuration in JSON format from the ZTSO"
-                  examples:
-                    - 
-                      - TSHARK_BASE_TOPIC: tshark_traces
-              required:
-                - podIP
-                - interface
-                - toolName
+                  type: object
+                  additionalProperties: true
+                  description: "Optional environment-variable overrides for the selected tool."
+            examples:
+              tshark_full:
+                summary: "Full tshark configuration example"
+                value:
+                  configuration:
+                    TSHARK_BASE_TOPIC: tshark_traces
+                    TSHARK_SIZE_LIMIT_ROTATION: "31457280"
+                    TSHARK_INTERFACE: enp0s3
+              flow_module_full:
+                summary: "Full flow_module configuration example"
+                value:
+                  configuration:
+                    TSHARK_BASE_TOPIC: tshark_traces
+                    CIC_KAFKA_BASE_TOPIC_OUT: cic_flow
+                    FLOW_KAFKA_GROUP: flow-module
+                    FLOW_PCAP_ROTATE_SIZE_MB: "102400"
+                    FLOW_CIC_ROTATE_SIZE_MB: "51200"
+                    FLOW_ROTATE_TIME_SEC: "0.5"
+                    FLOW_PACKET_QUEUE_MAX: "100000"
+                    FLOW_WRITER_FLUSH_EVERY: "100"
+                    FLOW_WATCHDOG_STALL_SECS: "120"
+                    FLOW_KAFKA_CONSUMER_AUTO_OFFSET_RESET: earliest
+                    FLOW_KAFKA_CONSUMER_ENABLE_AUTO_COMMIT: "true"
+                    FLOW_KAFKA_CONSUMER_PARTITION_ASSIGNMENT_STRATEGY: cooperative-sticky
+                    FLOW_KAFKA_CONSUMER_ENABLE_PARTITION_EOF: "true"
+                    FLOW_KAFKA_CONSUMER_ALLOW_AUTO_CREATE_TOPICS: "true"
+                    FLOW_KAFKA_PRODUCER_LINGER_MS: "5"
+                    FLOW_KAFKA_PRODUCER_BATCH_SIZE: "32768"
+                    FLOW_KAFKA_PRODUCER_COMPRESSION: zstd
       responses:
         '200':
-          description: "Request successfully. You can collect the information in IP:Port -> kafka_robust6g-node1.lan:9094"
+          description: "Deployment started successfully."
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: success
+                  config_id:
+                    type: string
+                  message:
+                    type: string
+                  deployed_tool:
+                    type: string
+                  kafka_bootstrap:
+                    type: string
+        '400':
+          description: "Validation or deployment error."
   
   /ConfigurationManager/DeployInfrastructureTool: 
     post:
       tags:
         - ConfigurationManager
-      summary: "Security Orchestrator - Request to deploy a infrastructure tool"
-      description: "This endpoint allows the NXW Security Orchestrator to request the deployment of a infrastructure tool"
+      summary: "Deploy an infrastructure tool"
+      description: "Deploy one infrastructure tool per request. The tool is selected with the required toolName query parameter."
       operationId: "deployInfrastructureTool"
+      parameters:
+        - name: toolName
+          in: query
+          required: true
+          description: "Name of the infrastructure tool to deploy."
+          schema:
+            type: string
+            enum: [telegraf]
       requestBody:
-        required: true
+        required: false
         content:
           application/json:
             schema:
               type: object
               properties:
-                podIP:
-                  type: string
-                  description: "IP address of the pod where the tool will be deployed"
-                toolName:
-                  type: string
-                  description: "Name of the infrastructure tool to deploy"
-                sigma_rules:
-                  type: array
-                  items:
-                    type: string
-                    description: "Sigma rules generated from the SSLA by the Security Orchestrator."
-              required:
-                - podIP
-                - toolName
-                - sigma_rules
+                configuration:
+                  type: object
+                  additionalProperties: true
+                  description: "Optional environment-variable overrides for telegraf."
+            examples:
+              telegraf_full:
+                summary: "Full telegraf configuration example"
+                value:
+                  configuration:
+                    TELEGRAF_BASE_TOPIC: telegraf_metrics
+                    TELEGRAF_GENERAL_INTERVAL: 30s
       responses:
         '200':
-          description: OK
+          description: "Deployment started successfully."
+        '400':
+          description: "Validation or deployment error."
 
   /ConfigurationManager/DeployServiceTool: 
     post:
       tags:
         - ConfigurationManager
-      summary: "Security Orchestrator - Request to deploy a service tool"
-      description: "This endpoint allows the NXW Security Orchestrator to request the deployment of a service tool"
+      summary: "Deploy a service tool"
+      description: "Deploy one service tool per request. The tool is selected with the required toolName query parameter."
       operationId: "deployServiceTool"
+      parameters:
+        - name: toolName
+          in: query
+          required: true
+          description: "Name of the service tool to deploy."
+          schema:
+            type: string
+            enum: [fluentd, falco]
       requestBody:
-        required: true
+        required: false
         content:
           application/json:
             schema:
               type: object
               properties:
-                podIP:
-                  type: string
-                  description: "IP address of the pod where the tool will be deployed"
-                toolName:
-                  type: string
-                  description: "Name of the service tool to deploy"
-                sigma_rules:
-                  type: array
-                  items:
-                    type: string
-                    description: "Sigma rules generated from the SSLA by the Security Orchestrator."
-              required:
-                - podIP
-                - toolName
-                - sigma_rules
+                configuration:
+                  type: object
+                  additionalProperties: true
+                  description: "Optional environment-variable overrides for the selected tool."
+            examples:
+              fluentd_full:
+                summary: "Full fluentd configuration example"
+                value:
+                  configuration:
+                    FLUENTD_FILE_SIZE_LIMIT: "20971520"
+                    FLUENTD_SYSLOG_BASE_TOPIC: syslog_logs
+                    FLUENTD_SYSTEMD_BASE_TOPIC: systemd_logs
+              falco_full:
+                summary: "Full falco configuration example"
+                value:
+                  configuration:
+                    FALCO_BASE_TOPIC: falco_events
+                    FALCO_SKIP_DRIVER_LOADER: "1"
       responses:
         '200':
-          description: OK
+          description: "Deployment started successfully."
+        '400':
+          description: "Validation or deployment error."
 
 
 
@@ -143,11 +195,19 @@ paths:
     post:
       tags:
         - ConfigurationManager
-      summary: "Security Orchestrator - Request to deploy a security tool"
+      summary: "Deploy a security tool"
       description: "Deploy snort3 with optional configuration overrides and optional custom rules."
       operationId: "deploySecurityTool"
+      parameters:
+        - name: toolName
+          in: query
+          required: true
+          description: "Name of the security tool to deploy."
+          schema:
+            type: string
+            enum: [snort3]
       requestBody:
-        required: true
+        required: false
         content:
           application/json:
             schema:
@@ -163,55 +223,96 @@ paths:
                   type: array
                   items:
                     type: string
-                  description: "Optional list of custom Snort3 rules. Each rule must include a sid."
+                  description: "Optional list of custom Snort3 rules. Each rule must include a unique sid >= 1000001."
                   example:
-                    - "alert tcp any any -> any any (msg:\"snort3 test rule\"; sid:10001; rev:1;)"
+                    - "alert tcp any any -> any any (msg:\"snort3 test rule\"; sid:1000001; rev:1;)"
                 include_default_rules:
                   type: boolean
-                  description: "If true, snort3 uses community rules together with the provided custom rules. If omitted while rules are sent, it is interpreted as false."
+                  description: "If true, snort3 uses community rules together with the provided custom rules. If omitted while rules are sent, it is interpreted as false. If no custom rules are provided, default community rules are always used."
+            examples:
+              snort3_defaults_only:
+                summary: "Deploy snort3 with full default env configuration and community rules only"
+                value:
+                  configuration:
+                    TSHARK_BASE_TOPIC: tshark_traces
+                    SNORT_KAFKA_GROUP_ID: alert-module
+                    SNORT_KAFKA_TOPIC_IN: tshark_traces
+                    SNORT_KAFKA_TOPIC_OUT: snort_alerts
+                    SNORT_ALERT_TAP_IFACE: tap0
+                    SNORT_KAFKA_MESSAGE_FIELD: _source
+                    SNORT_CONSUMER_KAFKA_AUTO_OFFSET_RESET: earliest
+                    SNORT_CONSUMER_KAFKA_ENABLE_AUTO_COMMIT: "true"
+                    SNORT_CONSUMER_KAFKA_PARTITION_ASSIGNMENT_STRATEGY: cooperative-sticky
+                    SNORT_CONSUMER_KAFKA_ENABLE_PARTITION_EOF: "true"
+                    SNORT_CONSUMER_KAFKA_ALLOW_AUTO_CREATE_TOPICS: "true"
+                    SNORT_CONSUMER_FETCH_MIN_BYTES: "1048576"
+                    SNORT_CONSUMER_FETCH_WAIT_MAX_MS: "50"
+                    SNORT_CONSUMER_QUEUED_MAX_MESSAGES_KBYTES: "262144"
+                    SNORT_CONSUMER_MAX_POLL_INTERVAL_MS: "900000"
+                    SNORT_CONSUMER_SESSION_TIMEOUT_MS: "10000"
+                    SNORT_PRODUCER_KAFKA_PRODUCER_LINGER_MS: "5"
+                    SNORT_PRODUCER_BATCH_NUM_MESSAGES: "10000"
+                    SNORT_PRODUCER_KAFKA_PRODUCER_BATCH_SIZE: "32768"
+                    SNORT_PRODUCER_KAFKA_PRODUCER_COMPRESSION: zstd
+              snort3_with_custom_and_defaults:
+                summary: "Deploy snort3 with one custom rule and community rules enabled"
+                value:
+                  configuration:
+                    SNORT_KAFKA_TOPIC_OUT: my_alerts
+                  rules:
+                    - "alert tcp any any -> any any (msg:\"snort3 test rule\"; sid:1000001; rev:1;)"
+                  include_default_rules: true
       responses:
         '200':
-          description: "Request successfully. You can collect the information in IP:Port -> kafka_robust6g-node1.lan:9094"
+          description: "Deployment started successfully."
+        '400':
+          description: "Validation, rule-processing or deployment error."
 
   /ConfigurationManager/getConfigurationOptions:
     get:
       tags:
         - ConfigurationManager
-      summary: "Security Orchestrator - Requests to know the different configurations that a tool can manage"
-      description: "This endpoint allows the NXW Security Orchestrator to know what options it has for configuring a tool"
+      summary: "List configurable variables for one tool"
+      description: "Return the configurable environment variables and their default values for the selected tool."
       operationId: "getConfigurationOptions"
       parameters:
         - name: toolName
           in: query
-          description: "Name of the tool for which the orchestrator wants to know the options"
+          description: "Name of the tool for which to retrieve configurable variables."
           required: true
           schema:
             type: string
       responses:
         '200':
-          description: "Options of the tool"
+          description: "Configurable variables for the selected tool."
           content:
             application/json:
               schema:
                 type: object
                 properties:
-                  configurationOptions:
+                  status:
+                    type: string
+                    example: success
+                  toolName:
+                    type: string
+                  configurable_variables:
                     type: array
-                    description: "List of options. Can be one or more options"
+                    description: "List of configurable environment variables."
                     items:
-                      type: string
-                    examples:
-                      - "memory"
-                      - "disk"
-                      - "cpu"
-                      - "sensors"
-                      - "internet speed"
+                      type: object
+                      properties:
+                        name:
+                          type: string
+                        default_value:
+                          type: string
+        '404':
+          description: "Unknown tool."
 
   /ConfigurationManager/getConfiguration:
     get:
       tags:
         - ConfigurationManager
-      summary: "Security Orchestrator - Retrieve a persisted deployment configuration"
+      summary: "Retrieve a persisted deployment configuration"
       description: "Return the current stored configuration for a deployment, including revision metadata and, for snort3, the current rules_config."
       operationId: "getConfiguration"
       parameters:
@@ -251,6 +352,7 @@ paths:
                         type: string
                       resolved_env:
                         type: object
+                        description: "Resolved environment variables persisted for the deployment. Internal-only variables such as SNORT_RULES_PATHS are not exposed."
                         additionalProperties:
                           type: string
                       rules_config:
@@ -267,14 +369,23 @@ paths:
                             type: array
                             items:
                               type: string
+        '404':
+          description: "Configuration not found."
 
   /ConfigurationManager/updateConfiguration:
     put:
       tags:
         - ConfigurationManager
-      summary: "Security Orchestrator updates the current configuration."
+      summary: "Update an existing deployment configuration"
       description: "Update an existing deployment configuration. For snort3, this endpoint also supports rules_action add/remove/replace."
       operationId: "soUpdateConfiguration"
+      parameters:
+        - name: toolName
+          in: query
+          required: true
+          description: "Name of the tool to update."
+          schema:
+            type: string
       requestBody:
         required: true
         content:
@@ -305,26 +416,61 @@ paths:
                   description: "snort3-only list of custom rule SIDs to remove. Required for remove."
                 include_default_rules:
                   type: boolean
-                  description: "snort3-only flag accepted during replace to set whether default rules are used together with custom rules."
+                  description: "snort3-only flag accepted during replace to set whether default rules are used together with custom rules. It is rejected for remove and for add."
               required:
                 - config_id
+            examples:
+              tshark_partial_update:
+                summary: "Update one tshark field only"
+                value:
+                  config_id: "<tshark-config-id>"
+                  configuration:
+                    TSHARK_BASE_TOPIC: updated_topic
+              snort3_add_rule:
+                summary: "Add one custom snort3 rule"
+                value:
+                  config_id: "<snort3-config-id>"
+                  rules_action: add
+                  rules:
+                    - "alert udp any any -> any any (msg:\"snort3 add rule\"; sid:1000002; rev:1;)"
+              snort3_replace_rules:
+                summary: "Replace all current custom snort3 rules"
+                value:
+                  config_id: "<snort3-config-id>"
+                  rules_action: replace
+                  rules:
+                    - "alert icmp any any -> any any (msg:\"snort3 replace rule\"; sid:1000003; rev:1;)"
+                  include_default_rules: false
+              snort3_remove_rules:
+                summary: "Remove custom snort3 rules by SID"
+                value:
+                  config_id: "<snort3-config-id>"
+                  rules_action: remove
+                  rule_sids:
+                    - "1000003"
 
       responses:
         "200":
-          description: "Proceeding to update the configuration"
+          description: "Configuration updated and redeployment started."
           content:
             application/json:
               schema:
                 type: object
                 properties:
-                  code:
-                    type: integer
-                    example: 200
-                    description: "Response code indicating success"
+                  status:
+                    type: string
+                    example: success
+                  config_id:
+                    type: string
                   message:
                     type: string
-                    example: "Proceeding to update the configuration"
-                    description: "Response message confirming the success of the request."
+                    example: "Configuration updated and redeployment started."
+                  updated_tool:
+                    type: string
+        '400':
+          description: "Validation, rule-processing or redeployment error."
+        '422':
+          description: "Missing required query parameter or request body."
  
   
    
