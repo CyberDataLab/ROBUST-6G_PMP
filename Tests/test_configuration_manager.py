@@ -404,6 +404,21 @@ def test_deploy_security_tool(session: requests.Session, base_url: str) -> None:
     )
     assert_test("snort3 rejects community SID collisions", resp.status_code == 400)
 
+    resp = call(
+        session,
+        base_url,
+        "POST",
+        "/ConfigurationManager/DeploySecurityTool",
+        params={"toolName": "snort3"},
+        payload={
+            "rules": [
+                "alert tcp any any -> any any (msg:\"snort3 duplicate sid one\"; sid:1000005; rev:1;)",
+                "alert udp any any -> any any (msg:\"snort3 duplicate sid two\"; sid:1000005; rev:1;)"
+            ]
+        },
+    )
+    assert_test("snort3 rejects duplicate custom SIDs in the same deploy payload", resp.status_code == 400)
+
     if CUSTOM_RULES_FINAL_PATH.exists():
         final_rules_before_invalid = CUSTOM_RULES_FINAL_PATH.read_text(encoding="utf-8")
     else:
@@ -461,12 +476,58 @@ def test_deploy_security_tool(session: requests.Session, base_url: str) -> None:
                 "config_id": snort_config_id,
                 "rules_action": "add",
                 "rules": [
+                    "alert udp any any -> any any (msg:\"snort3 duplicate existing sid\"; sid:1000001; rev:1;)"
+                ],
+            },
+        )
+        assert_test("snort3 add rejects a SID that already exists in current custom rules", resp.status_code == 400)
+
+        resp = call(
+            session,
+            base_url,
+            "PUT",
+            "/ConfigurationManager/updateConfiguration",
+            params={"toolName": "snort3"},
+            payload={
+                "config_id": snort_config_id,
+                "rules_action": "add",
+                "rules": [
+                    "alert udp any any -> any any (msg:\"snort3 add invalid include_default_rules\"; sid:1000006; rev:1;)"
+                ],
+                "include_default_rules": True,
+            },
+        )
+        assert_test("snort3 add rejects include_default_rules in update", resp.status_code == 400)
+
+        resp = call(
+            session,
+            base_url,
+            "PUT",
+            "/ConfigurationManager/updateConfiguration",
+            params={"toolName": "snort3"},
+            payload={
+                "config_id": snort_config_id,
+                "rules_action": "add",
+                "rules": [
                     "alert udp any any -> any any (msg:\"snort3 add rule\"; sid:1000002; rev:1;)"
                 ],
             },
         )
         assert_test("snort3 add rules returns 200", resp.status_code == 200)
         assert_test("snort3 tmp rules file is removed after successful add validation", not CUSTOM_RULES_TMP_PATH.exists())
+
+        resp = call(
+            session,
+            base_url,
+            "PUT",
+            "/ConfigurationManager/updateConfiguration",
+            params={"toolName": "snort3"},
+            payload={
+                "config_id": snort_config_id,
+                "rules_action": "replace",
+            },
+        )
+        assert_test("snort3 replace rejects requests without rules", resp.status_code == 400)
 
         resp = call(
             session,
@@ -491,6 +552,20 @@ def test_deploy_security_tool(session: requests.Session, base_url: str) -> None:
                 "snort3 replace overwrites final rules file content",
                 "sid:1000003;" in final_rules_content and "sid:1000002;" not in final_rules_content,
             )
+
+        resp = call(
+            session,
+            base_url,
+            "PUT",
+            "/ConfigurationManager/updateConfiguration",
+            params={"toolName": "snort3"},
+            payload={
+                "config_id": snort_config_id,
+                "rules_action": "remove",
+                "rule_sids": ["1999999"],
+            },
+        )
+        assert_test("snort3 remove rejects non-existent custom rule SIDs", resp.status_code == 400)
 
         resp = call(
             session,
