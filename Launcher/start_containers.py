@@ -819,6 +819,7 @@ TOOL_ENV_VARS: Dict[str, List[str]] = {
         # Same resolution strategy as flow_module above.
         "TSHARK_BASE_TOPIC",
         "MONGO_URI",
+        "SNORT_RULES_PATHS",
         "SNORT_KAFKA_GROUP_ID",
         "SNORT_KAFKA_TOPIC_IN",
         "SNORT_KAFKA_TOPIC_OUT",

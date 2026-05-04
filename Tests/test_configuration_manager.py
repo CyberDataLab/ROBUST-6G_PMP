@@ -444,10 +444,12 @@ def test_deploy_security_tool(session: requests.Session, base_url: str) -> None:
         assert_test("getConfiguration for snort3 returns 200", resp.status_code == 200)
         data = resp.json()
         rules_config = data.get("data", {}).get("rules_config", {})
+        snort_resolved_env = data.get("data", {}).get("resolved_env", {})
         assert_test("snort3 getConfiguration returns rules_config", "rules_config" in data.get("data", {}))
         assert_test("snort3 include_default_rules is persisted", rules_config.get("include_default_rules") is True)
         assert_test("snort3 custom_rules are persisted", len(rules_config.get("custom_rules", [])) == 1)
         assert_test("snort3 custom_rule_sids are persisted", rules_config.get("custom_rule_sids") == ["1000001"])
+        assert_test("snort3 getConfiguration hides SNORT_RULES_PATHS", "SNORT_RULES_PATHS" not in snort_resolved_env)
 
         resp = call(
             session,

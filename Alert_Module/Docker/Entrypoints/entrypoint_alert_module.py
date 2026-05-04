@@ -17,7 +17,8 @@ PFD = Path(__file__).resolve().parent  # /home/Alert_Module in container
 
 SNORT_CONFIG_DIR = PFD / "Snort_configuration"
 SNORT_LUA = str(SNORT_CONFIG_DIR / "lua" / "snort.lua")
-SNORT_RULES = str(SNORT_CONFIG_DIR / "Rules" / "snort3_community.rules")#"alert_rules.rules")
+DEFAULT_SNORT_RULES = str(SNORT_CONFIG_DIR / "Rules" / "snort3_community.rules")
+SNORT_RULES_PATHS_ENV = os.getenv("SNORT_RULES_PATHS", DEFAULT_SNORT_RULES)
 ALERT_DIR = str(PFD / "Alerts")
 ALERT_FILE = "alert_json"
 ALERT_PATH = os.path.join(ALERT_DIR, f"{ALERT_FILE}.txt")
@@ -28,22 +29,44 @@ KAFKA_TOPIC_IN = os.getenv("SNORT_KAFKA_TOPIC_IN", "tshark_traces")
 KAFKA_TOPIC_OUT = os.getenv("SNORT_KAFKA_TOPIC_OUT", "snort_alerts")
 
 # === SNORT CONFIG ===
-SNORT_BASE_CMD = [
-    "snort",
-    "-c", SNORT_LUA,
-    "-R", SNORT_RULES,
-    "-A", ALERT_FILE,
-    "--lua",
-    f"{ALERT_FILE} = {{file = true, fields = 'msg timestamp pkt_num proto pkt_gen pkt_len dir src_ap dst_ap rule action'}}",
-    "-l", ALERT_DIR,
-    "-k", "none",
-]
-
 # ====== CONSTANTS TUN/TAP ======
 TAP_IFACE = os.getenv("SNORT_ALERT_TAP_IFACE", "tap0")
 TUNSETIFF = 0x400454ca
 IFF_TAP = 0x0002
 IFF_NO_PI = 0x1000
+
+
+def get_snort_rules_paths() -> list[str]:
+    """
+    Return the ordered list of Snort rule file paths to load.
+    Falls back to the community rules file if the env var is missing or malformed.
+    """
+    raw_paths = [path.strip() for path in SNORT_RULES_PATHS_ENV.split(":") if path.strip()]
+    if not raw_paths:
+        return [DEFAULT_SNORT_RULES]
+    return raw_paths
+
+
+def build_snort_base_cmd() -> list[str]:
+    """
+    Build the base Snort3 command, expanding one -R argument per configured rules file.
+    """
+    cmd = [
+        "snort",
+        "-c", SNORT_LUA,
+    ]
+
+    for rules_path in get_snort_rules_paths():
+        cmd.extend(["-R", rules_path])
+
+    cmd.extend([
+        "-A", ALERT_FILE,
+        "--lua",
+        f"{ALERT_FILE} = {{file = true, fields = 'msg timestamp pkt_num proto pkt_gen pkt_len dir src_ap dst_ap rule action'}}",
+        "-l", ALERT_DIR,
+        "-k", "none",
+    ])
+    return cmd
 
 def ensure_mode_644(path: str):
     """
@@ -131,8 +154,9 @@ def start_snort_live(ifname: str):
     redirecting output streams to background logging threads.
     Returns the running subprocess handle for lifecycle management.
     """
-    cmd = SNORT_BASE_CMD + ["-i", ifname]
+    cmd = build_snort_base_cmd() + ["-i", ifname]
     print(f"🚀 Starting Snort3 live on interface {ifname}")
+    print(f"📚 Snort3 rules paths: {get_snort_rules_paths()}")
     proc = subprocess.Popen(
         cmd,
         stdout=subprocess.PIPE,

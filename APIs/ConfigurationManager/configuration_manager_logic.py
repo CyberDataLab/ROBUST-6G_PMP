@@ -32,6 +32,7 @@ from snort_rules_manager import (
     apply_snort3_rules_files,
     apply_snort3_rules_update,
     build_default_snort3_rules_config,
+    build_snort3_rules_paths_env,
     build_snort3_rules_config_for_deploy,
 )
 
@@ -39,6 +40,7 @@ from snort_rules_manager import (
 # Path to start_containers.py
 # ---------------------------------------------------------------------------
 LAUNCHER_PATH = Path(__file__).resolve().parent.parent.parent / "Launcher" / "start_containers.py"
+INTERNAL_ONLY_ENV_VARS = {"SNORT_RULES_PATHS"}
 
 # ---------------------------------------------------------------------------
 # MongoDB Configuration Manager connection.
@@ -601,6 +603,15 @@ def request_uses_rules_contract(request: Any) -> bool:
     )
 
 
+def build_public_resolved_env(resolved_env: Dict[str, Any]) -> Dict[str, str]:
+    """Filter internal-only env vars out of the API response payload."""
+    return {
+        str(key): str(value)
+        for key, value in resolved_env.items()
+        if str(key) not in INTERNAL_ONLY_ENV_VARS
+    }
+
+
 def validate_rules_contract_for_non_snort3(tool_name: str, request: Any) -> Tuple[bool, str]:
     """Reject Snort3-only rules fields for tools that do not support them."""
     if tool_name != "snort3" and request_uses_rules_contract(request):
@@ -822,6 +833,8 @@ def process_deploy_request(
         if not are_rules_files_ready:
             return {"status": "error", "message": rules_files_error}
 
+        resolved_env["SNORT_RULES_PATHS"] = build_snort3_rules_paths_env(rules_config)
+
     collection = get_mongo_collection()
 
     # If this tool produces Kafka topics, persist them so consumers can find them later
@@ -953,6 +966,10 @@ def process_update_configuration(
         if not are_rules_files_ready:
             return {"status": "error", "message": rules_files_error}
 
+    if tool_name == "snort3":
+        effective_rules_config = updated_rules_config if updated_rules_config is not None else existing_rules_config
+        base_env["SNORT_RULES_PATHS"] = build_snort3_rules_paths_env(effective_rules_config)
+
     if not partial_env and updated_rules_config is None:
         return {"status": "error", "message": "No configuration values or valid snort3 rules changes were provided to update."}
 
@@ -1054,6 +1071,8 @@ def get_configuration_by_id(config_id: str) -> Dict[str, Any]:
         }
 
     document.pop("_id", None)
+    if "resolved_env" in document and isinstance(document["resolved_env"], dict):
+        document["resolved_env"] = build_public_resolved_env(document["resolved_env"])
 
     return {
         "status":    "success",

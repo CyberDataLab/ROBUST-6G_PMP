@@ -28,6 +28,10 @@ RULES_DIR = REPO_ROOT / "Alert_Module" / "Configuration_Files" / "Rules"
 COMMUNITY_RULES_PATH = RULES_DIR / "snort3_community.rules"
 CUSTOM_RULES_TMP_PATH = RULES_DIR / "snort3_custom.tmp.rules"
 CUSTOM_RULES_FINAL_PATH = RULES_DIR / "snort3_custom.rules"
+CONTAINER_RULES_DIR = Path("/home/Alert_Module/Snort_configuration/Rules")
+CONTAINER_COMMUNITY_RULES_PATH = str(CONTAINER_RULES_DIR / "snort3_community.rules")
+CONTAINER_CUSTOM_RULES_PATH = str(CONTAINER_RULES_DIR / "snort3_custom.rules")
+SNORT_RULES_PATHS_SEPARATOR = ":"
 ALERT_MODULE_COMPOSE_PATH = REPO_ROOT / "Alert_Module" / "Docker" / "alert_module_compose.yml"
 VALIDATOR_SERVICE_NAME = "alert_rules_validator"
 VALIDATOR_PROFILE = "alert_module.validator"
@@ -39,6 +43,7 @@ VALIDATOR_COMPOSE_VARS = [
     "SNORT_KAFKA_GROUP_ID",
     "SNORT_KAFKA_TOPIC_IN",
     "SNORT_KAFKA_TOPIC_OUT",
+    "SNORT_RULES_PATHS",
     "SNORT_ALERT_TAP_IFACE",
     "MONGO_URI",
     "MONGO_INITDB_ROOT_USERNAME",
@@ -69,6 +74,28 @@ def build_default_snort3_rules_config() -> Dict[str, Any]:
         "custom_rules": [],
         "custom_rule_sids": [],
     }
+
+
+def build_snort3_rules_paths_env(rules_config: Optional[Dict[str, Any]]) -> str:
+    """
+    Build the internal SNORT_RULES_PATHS env value for the alert_module container.
+    Fallback is always the community rules file if anything is missing or malformed.
+    """
+    if not rules_config:
+        return CONTAINER_COMMUNITY_RULES_PATH
+
+    custom_rules = [str(rule) for rule in rules_config.get("custom_rules", [])]
+    include_default_rules = bool(rules_config.get("include_default_rules", True))
+
+    if not custom_rules:
+        return CONTAINER_COMMUNITY_RULES_PATH
+
+    if include_default_rules:
+        return SNORT_RULES_PATHS_SEPARATOR.join(
+            [CONTAINER_COMMUNITY_RULES_PATH, CONTAINER_CUSTOM_RULES_PATH]
+        )
+
+    return CONTAINER_CUSTOM_RULES_PATH
 
 
 def normalize_rule_strings(rules: List[str]) -> Tuple[bool, str, List[str]]:
@@ -403,10 +430,14 @@ def _extract_relevant_validation_output(text: str) -> str:
     if not normalized:
         return ""
 
+    error_markers = ["ERROR:", "FATAL:"]
+    error_positions = [normalized.rfind(marker) for marker in error_markers]
+    error_positions = [position for position in error_positions if position != -1]
+    if error_positions:
+        return normalized[min(error_positions):]
+
     markers = [
         'o")~   Snort++',
-        "FATAL:",
-        "ERROR:",
         "Loading /home/Alert_Module/Snort_configuration/lua/snort.lua:",
         "Loading /home/Alert_Module/Snort_configuration/Rules/snort3_custom.tmp.rules:",
     ]
