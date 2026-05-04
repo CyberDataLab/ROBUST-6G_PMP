@@ -3,6 +3,12 @@ import sys
 from pathlib import Path
 from typing import Dict, List
 
+# Deleting log files after stopping containers
+# sudo find PFD/Results/fluentd_logs -mindepth 1 -delete
+# sudo find PFD/Results/tshark/traces -mindepth 1 -delete
+# sudo find PFD/Results/falco/logs -mindepth 1 -delete
+
+
 MODULE_COMPOSE_FILES: Dict[str, List[str]] = {
     "communication_module": [
         "Communication_Bus/Docker/communication_bus_compose.yml",
