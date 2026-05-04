@@ -347,6 +347,27 @@ def remove_file_if_exists(path: Path) -> None:
         return
 
 
+def capture_snort3_final_rules_state() -> Tuple[bool, Optional[str]]:
+    """Capture whether the definitive custom rules file exists and, if so, its current content."""
+    if not CUSTOM_RULES_FINAL_PATH.exists():
+        return False, None
+    return True, CUSTOM_RULES_FINAL_PATH.read_text(encoding="utf-8")
+
+
+def restore_snort3_final_rules_state(previous_exists: bool, previous_content: Optional[str]) -> Tuple[bool, str]:
+    """Restore the definitive custom rules file to the state captured before a failed operation."""
+    try:
+        cleanup_snort3_rules_tmp_file()
+        if previous_exists:
+            CUSTOM_RULES_FINAL_PATH.parent.mkdir(parents=True, exist_ok=True)
+            CUSTOM_RULES_FINAL_PATH.write_text("" if previous_content is None else previous_content, encoding="utf-8")
+        else:
+            remove_file_if_exists(CUSTOM_RULES_FINAL_PATH)
+        return True, ""
+    except Exception as e:
+        return False, f"Could not restore the previous Snort3 custom rules file state: {e}"
+
+
 def cleanup_snort3_rules_tmp_file() -> None:
     """Delete the temporary custom rules file if it exists."""
     remove_file_if_exists(CUSTOM_RULES_TMP_PATH)

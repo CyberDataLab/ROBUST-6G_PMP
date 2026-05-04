@@ -34,6 +34,8 @@ from snort_rules_manager import (
     build_default_snort3_rules_config,
     build_snort3_rules_paths_env,
     build_snort3_rules_config_for_deploy,
+    capture_snort3_final_rules_state,
+    restore_snort3_final_rules_state,
 )
 
 # ---------------------------------------------------------------------------
@@ -401,7 +403,7 @@ def save_deployment_to_mongo(
     resolved_env: Dict[str, str],
     is_update: bool = False,
     rules_config_override: Optional[Dict[str, Any]] = None
-) -> None:
+) -> Tuple[bool, str]:
     """
     Insert or replace a deployment document in MongoDB using config_id as _id.
     Stores version metadata so the same config_id can evolve over time through updates.
@@ -452,8 +454,32 @@ def save_deployment_to_mongo(
 
     try:
         collection.replace_one({"_id": config_id}, document, upsert=True)
+        return True, ""
     except Exception as e:
-        print(f"Warning: could not save deployment to MongoDB: {e}")
+        error_msg = f"Could not save deployment to MongoDB: {e}"
+        print(f"Warning: {error_msg}")
+        return False, error_msg
+
+
+def restore_deployment_in_mongo(
+    collection: Collection,
+    config_id: str,
+    previous_document: Optional[Dict[str, Any]]
+) -> Tuple[bool, str]:
+    """Restore the deployment document to the state captured before a failed operation."""
+    try:
+        if previous_document is None:
+            collection.delete_one({"_id": config_id})
+            return True, ""
+
+        restored_document = dict(previous_document)
+        restored_document["_id"] = previous_document.get("_id", config_id)
+        collection.replace_one({"_id": config_id}, restored_document, upsert=True)
+        return True, ""
+    except Exception as e:
+        error_msg = f"Could not restore deployment document in MongoDB: {e}"
+        print(f"Warning: {error_msg}")
+        return False, error_msg
 
 
 def get_deployment_from_mongo(collection: Collection, config_id: str) -> Optional[Dict]:
@@ -610,6 +636,13 @@ def build_public_resolved_env(resolved_env: Dict[str, Any]) -> Dict[str, str]:
         for key, value in resolved_env.items()
         if str(key) not in INTERNAL_ONLY_ENV_VARS
     }
+
+
+def append_rollback_error(base_error: str, rollback_error: str) -> str:
+    """Append rollback details to the main error message when recovery also fails."""
+    if not rollback_error:
+        return base_error
+    return f"{base_error} Rollback warning: {rollback_error}"
 
 
 def validate_rules_contract_for_non_snort3(tool_name: str, request: Any) -> Tuple[bool, str]:
@@ -817,7 +850,10 @@ def process_deploy_request(
         return {"status": "error", "message": error_msg}
 
     rules_config: Optional[Dict[str, Any]] = None
+    previous_final_rules_exists = False
+    previous_final_rules_content: Optional[str] = None
     if tool_name == "snort3":
+        previous_final_rules_exists, previous_final_rules_content = capture_snort3_final_rules_state()
         is_valid_rules, rules_error_msg, rules_config = build_snort3_rules_config_for_deploy(
             rules=request.rules,
             include_default_rules=request.include_default_rules,
@@ -860,9 +896,10 @@ def process_deploy_request(
             resolved_env.update(cd_env)
 
     config_id = build_config_id(endpoint, tool_name, resolved_env, rules_config=rules_config)
+    previous_deployment_document = get_deployment_from_mongo(collection, config_id) if collection is not None else None
 
     if collection is not None:
-        save_deployment_to_mongo(
+        mongo_saved, mongo_error = save_deployment_to_mongo(
             collection=collection,
             config_id=config_id,
             endpoint=endpoint,
@@ -871,6 +908,14 @@ def process_deploy_request(
             is_update=False,
             rules_config_override=rules_config
         )
+        if not mongo_saved:
+            if tool_name == "snort3":
+                rollback_ok, rollback_error = restore_snort3_final_rules_state(
+                    previous_final_rules_exists,
+                    previous_final_rules_content,
+                )
+                mongo_error = append_rollback_error(mongo_error, "" if rollback_ok else rollback_error)
+            return {"status": "error", "message": mongo_error}
 
     success, error_msg = call_start_containers(
         selected=selected,
@@ -878,6 +923,19 @@ def process_deploy_request(
     )
 
     if not success:
+        if collection is not None:
+            rollback_mongo_ok, rollback_mongo_error = restore_deployment_in_mongo(
+                collection=collection,
+                config_id=config_id,
+                previous_document=previous_deployment_document,
+            )
+            error_msg = append_rollback_error(error_msg, "" if rollback_mongo_ok else rollback_mongo_error)
+        if tool_name == "snort3":
+            rollback_rules_ok, rollback_rules_error = restore_snort3_final_rules_state(
+                previous_final_rules_exists,
+                previous_final_rules_content,
+            )
+            error_msg = append_rollback_error(error_msg, "" if rollback_rules_ok else rollback_rules_error)
         return {"status": "error", "message": error_msg}
 
     return {
@@ -931,6 +989,11 @@ def process_update_configuration(
     are_rules_fields_valid, rules_error_msg = validate_rules_contract_for_non_snort3(tool_name, request)
     if not are_rules_fields_valid:
         return {"status": "error", "message": rules_error_msg}
+
+    previous_final_rules_exists = False
+    previous_final_rules_content: Optional[str] = None
+    if tool_name == "snort3":
+        previous_final_rules_exists, previous_final_rules_content = capture_snort3_final_rules_state()
 
     partial_env: Dict[str, str] = {}
     if request.configuration:
@@ -995,7 +1058,7 @@ def process_update_configuration(
             cd_env = resolve_consumer_topics(cd_tool, cd_env, collection)
             base_env.update(cd_env)
 
-    save_deployment_to_mongo(
+    mongo_saved, mongo_error = save_deployment_to_mongo(
         collection=collection,
         config_id=request.config_id,
         endpoint=endpoint,
@@ -1004,6 +1067,14 @@ def process_update_configuration(
         is_update=True,
         rules_config_override=updated_rules_config
     )
+    if not mongo_saved:
+        if tool_name == "snort3":
+            rollback_ok, rollback_error = restore_snort3_final_rules_state(
+                previous_final_rules_exists,
+                previous_final_rules_content,
+            )
+            mongo_error = append_rollback_error(mongo_error, "" if rollback_ok else rollback_error)
+        return {"status": "error", "message": mongo_error}
 
     success, error_msg = call_start_containers(
         selected=selected,
@@ -1011,6 +1082,18 @@ def process_update_configuration(
     )
 
     if not success:
+        rollback_mongo_ok, rollback_mongo_error = restore_deployment_in_mongo(
+            collection=collection,
+            config_id=request.config_id,
+            previous_document=existing,
+        )
+        error_msg = append_rollback_error(error_msg, "" if rollback_mongo_ok else rollback_mongo_error)
+        if tool_name == "snort3":
+            rollback_rules_ok, rollback_rules_error = restore_snort3_final_rules_state(
+                previous_final_rules_exists,
+                previous_final_rules_content,
+            )
+            error_msg = append_rollback_error(error_msg, "" if rollback_rules_ok else rollback_rules_error)
         return {"status": "error", "message": error_msg}
 
     return {
