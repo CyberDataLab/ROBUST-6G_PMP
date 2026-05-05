@@ -35,12 +35,70 @@ type JsonValue = JsonPrimitive | JsonObject;
 type JsonObject = {
   [key: string]: JsonValue;
 };
+type ToolApiName = "tshark" | "snort3";
+type ConfigurableVariable = {
+  name: string;
+  default_value?: JsonPrimitive | null;
+};
+
+const TOOL_NAME_TO_API_NAME: Record<string, ToolApiName | undefined> = {
+  Tshark: "tshark",
+  Snort: "snort3",
+};
 
 function formatJsonLabel(key: string) {
   return key
     .replace(/_/g, " ")
     .replace(/([a-z])([A-Z])/g, "$1 $2")
     .replace(/\b\w/g, (char) => char.toUpperCase());
+}
+
+function getApiToolName(toolLabel: string): ToolApiName | undefined {
+  return TOOL_NAME_TO_API_NAME[toolLabel];
+}
+
+function getErrorMessage(error: unknown, fallback: string) {
+  if (
+    typeof error === "object" &&
+    error !== null &&
+    "message" in error &&
+    typeof error.message === "string"
+  ) {
+    return error.message;
+  }
+
+  if (
+    typeof error === "object" &&
+    error !== null &&
+    "detail" in error &&
+    typeof error.detail === "string"
+  ) {
+    return error.detail;
+  }
+
+  if (
+    typeof error === "object" &&
+    error !== null &&
+    "error" in error &&
+    typeof error.error === "string"
+  ) {
+    return error.error;
+  }
+
+  return fallback;
+}
+
+function buildDraftConfigFromVariables(
+  variables: ConfigurableVariable[],
+): JsonObject {
+  return variables.reduce<JsonObject>((config, variable) => {
+    config[variable.name] =
+      variable.default_value === null || variable.default_value === undefined
+        ? ""
+        : variable.default_value;
+
+    return config;
+  }, {});
 }
 
 // ─── KPI Card ───────────────────────────────────────────────
@@ -234,6 +292,8 @@ function MonitoringToolConfigurationBox({
   selectedTool,
   draftConfig,
   isLaunchEditorOpen,
+  isLoadingConfiguration,
+  configurationMessage,
   onPostureChange,
   onToolChange,
   onDraftFieldChange,
@@ -244,13 +304,14 @@ function MonitoringToolConfigurationBox({
   selectedTool: string;
   draftConfig: JsonObject | null;
   isLaunchEditorOpen: boolean;
+  isLoadingConfiguration: boolean;
+  configurationMessage: string;
   onPostureChange: (posture: string) => void;
   onToolChange: (tool: string) => void;
   onDraftFieldChange: (path: string[], value: JsonPrimitive) => void;
   onLaunchClick: () => void;
   onReconfigureClick: () => void;
 }) {
-  const DEPLOY_ENDPOINT = "http://localhost:8080/ConfigurationManager/deployNetworkTool";
   const toolOptionsByPosture: Record<string, string[]> = {
     "Network Security Posture": ["Tshark", "Snort"],
     "Application Security Posture": ["Falco", "Fluentd"],
@@ -261,9 +322,18 @@ function MonitoringToolConfigurationBox({
   const exportedJson = draftConfig ? JSON.stringify(draftConfig, null, 2) : "";
   const [isDeploying, setIsDeploying] = useState(false);
   const [deployMessage, setDeployMessage] = useState("");
+  const selectedApiToolName = getApiToolName(selectedTool);
+  const isSupportedInPoc = Boolean(selectedApiToolName);
 
   const handleDeploy = async () => {
     if (!draftConfig || isDeploying) {
+      return;
+    }
+
+    if (!selectedApiToolName) {
+      setDeployMessage(
+        "This proof of concept is currently wired for Tshark and Snort only.",
+      );
       return;
     }
 
@@ -271,24 +341,46 @@ function MonitoringToolConfigurationBox({
     setDeployMessage("");
 
     try {
-      const response = await fetch(DEPLOY_ENDPOINT, {
+      const response = await fetch("/api/configuration-manager/deploy", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify(draftConfig),
+        body: JSON.stringify({
+          toolName: selectedApiToolName,
+          configuration: draftConfig,
+        }),
       });
+      const payload = await response.json().catch(() => null);
 
       if (!response.ok) {
-        throw new Error(`Deploy failed with status ${response.status}`);
+        throw new Error(
+          getErrorMessage(
+            payload,
+            `Deploy failed with status ${response.status}.`,
+          ),
+        );
       }
 
-      setDeployMessage("Deploy request sent successfully.");
+      const configId =
+        payload &&
+        typeof payload === "object" &&
+        "config_id" in payload &&
+        typeof payload.config_id === "string"
+          ? payload.config_id
+          : undefined;
+
+      setDeployMessage(
+        configId
+          ? `Deploy request sent successfully. Config ID: ${configId}`
+          : "Deploy request sent successfully.",
+      );
     } catch (error) {
       setDeployMessage(
-        error instanceof Error
-          ? error.message
-          : "Deploy failed. Check if localhost endpoint is available.",
+        getErrorMessage(
+          error,
+          "Deploy failed. Check if the backend services are available.",
+        ),
       );
     } finally {
       setIsDeploying(false);
@@ -429,18 +521,34 @@ function MonitoringToolConfigurationBox({
               <button
                 type="button"
                 onClick={onLaunchClick}
-                className="rounded-lg bg-cyan-500 px-4 py-3 text-sm font-semibold text-slate-950 transition-colors hover:bg-cyan-400"
+                disabled={isLoadingConfiguration || !isSupportedInPoc}
+                className="rounded-lg bg-cyan-500 px-4 py-3 text-sm font-semibold text-slate-950 transition-colors hover:bg-cyan-400 disabled:cursor-not-allowed disabled:bg-gray-700 disabled:text-gray-400"
               >
-                Launch Service
+                {isLoadingConfiguration ? "Loading Configuration..." : "Launch Service"}
               </button>
               <button
                 type="button"
                 onClick={onReconfigureClick}
-                className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm font-semibold text-amber-300 transition-colors hover:border-amber-400 hover:bg-amber-400 hover:text-slate-950"
+                disabled={isLoadingConfiguration || !isSupportedInPoc}
+                className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm font-semibold text-amber-300 transition-colors hover:border-amber-400 hover:bg-amber-400 hover:text-slate-950 disabled:cursor-not-allowed disabled:border-gray-700 disabled:bg-gray-900 disabled:text-gray-500"
               >
                 Reconfigure Service
               </button>
             </div>
+            {!isSupportedInPoc && (
+              <p className="mt-3 text-xs text-amber-300">
+                This proof of concept is currently wired for Tshark and Snort.
+              </p>
+            )}
+            {configurationMessage && (
+              <p
+                className={`mt-3 text-xs ${
+                  draftConfig ? "text-cyan-200" : "text-amber-300"
+                }`}
+              >
+                {configurationMessage}
+              </p>
+            )}
           </div>
         )}
 
@@ -496,80 +604,8 @@ function AdminDashboard() {
   const [selectedMonitoringTool, setSelectedMonitoringTool] = useState("");
   const [isLaunchEditorOpen, setIsLaunchEditorOpen] = useState(false);
   const [draftConfig, setDraftConfig] = useState<JsonObject | null>(null);
-
-  const createDraftConfig = (posture: string, tool: string): JsonObject => {
-    if (tool === "Tshark") {
-      return {
-        toolName: "toolname",
-        TSHARK_BASE_TOPIC: "tshark_base_topic",
-        TSHARK_SIZE_LIMIT_ROTATION: "tshark_size_limit_rotation",
-      };
-    }
-
-    if (tool === "Telegraf") {
-      return {
-        toolName: "toolname",
-        ENABLE_TELEGRAF: "enable_telegraf",
-        TELEGRAF_TO_PROMETHEUS_PORT: "telegraf_to_prometheus_port",
-        TELEGRAF_BASE_TOPIC: "telegraf_base_topic",
-        TELEGRAF_GENERAL_INTERVAL: "telegraf_general_interval",
-      };
-    }
-
-    if (tool === "Falco") {
-      return {
-        toolName: "toolname",
-        ENABLE_FALCO: "enable_falco",
-        FALCO_BASE_TOPIC: "falco_base_topic",
-        FALCO_SKIP_DRIVER_LOADER: "falco_skip_driver_loader",
-        FALCO_EXPORTER_PORT: "falco_exporter_port",
-      };
-    }
-
-    if (tool === "Snort") {
-      return {
-        toolName: "toolname",
-        SNORT_KAFKA_TOPIC_IN: "snort_kafka_topic_in",
-        SNORT_KAFKA_TOPIC_OUT: "snort_kafka_topic_out",
-        SNORT_ALERT_TAP_IFACE: "snort_alert_tap_iface",
-      };
-    }
-
-    if (tool === "Fluentd") {
-      return {
-        toolName: "toolname",
-        ENABLE_FLUENTD: "enable_fluentd",
-        FLUENTD_TO_PROMETHEUS_PORT: "fluentd_to_prometheus_port",
-        FLUENTD_INTERNAL_PORT: "fluentd_internal_port",
-        FLUENTD_FILE_SIZE_LIMIT: "fluentd_file_size_limit",
-        FLUENTD_SYSLOG_BASE_TOPIC: "fluentd_syslog_base_topic",
-        FLUENTD_SYSTEMD_BASE_TOPIC: "fluentd_systemd_base_topic",
-      };
-    }
-
-    return {
-      serviceName: tool || "Pending Tool Selection",
-      mode: "launch",
-      securityPosture: posture,
-      deployment: {
-        namespace: "monitoring",
-        replicas: 1,
-        enabled: true,
-      },
-      runtime: {
-        image: `${(tool || "service").toLowerCase().replace(/\s+/g, "-")}:latest`,
-        restartPolicy: "Always",
-      },
-      inputs: {
-        sourceInterface: "eth0",
-        samplingIntervalSeconds: 30,
-      },
-      metadata: {
-        owner: "admin@robust-6g.eu",
-        notes: "Draft configuration. Replace these fields with the final values.",
-      },
-    };
-  };
+  const [isLoadingConfiguration, setIsLoadingConfiguration] = useState(false);
+  const [configurationMessage, setConfigurationMessage] = useState("");
 
   const updateDraftConfigValue = (
     config: JsonObject,
@@ -601,21 +637,71 @@ function AdminDashboard() {
     };
   };
 
-  useEffect(() => {
-    if (!selectedMonitoringTool) {
+  const loadToolConfiguration = async () => {
+    const apiToolName = getApiToolName(selectedMonitoringTool);
+
+    if (!apiToolName) {
+      setDraftConfig(null);
+      setIsLaunchEditorOpen(false);
+      setConfigurationMessage(
+        "This proof of concept is currently wired for Tshark and Snort only.",
+      );
       return;
     }
 
-    if (!isLaunchEditorOpen) {
-      setDraftConfig(
-        createDraftConfig(selectedSecurityPosture, selectedMonitoringTool),
+    setIsLoadingConfiguration(true);
+    setConfigurationMessage("");
+
+    try {
+      const response = await fetch(
+        `/api/configuration-manager/options?toolName=${encodeURIComponent(apiToolName)}`,
+        {
+          cache: "no-store",
+        },
       );
+      const payload = await response.json().catch(() => null);
+
+      if (!response.ok) {
+        throw new Error(
+          getErrorMessage(
+            payload,
+            `Failed to load configuration for ${selectedMonitoringTool}.`,
+          ),
+        );
+      }
+
+      const configurableVariables =
+        payload &&
+        typeof payload === "object" &&
+        "configurable_variables" in payload &&
+        Array.isArray(payload.configurable_variables)
+          ? (payload.configurable_variables as ConfigurableVariable[])
+          : [];
+
+      if (configurableVariables.length === 0) {
+        throw new Error(
+          `Configuration Manager returned no configurable variables for ${selectedMonitoringTool}.`,
+        );
+      }
+
+      setDraftConfig(buildDraftConfigFromVariables(configurableVariables));
+      setIsLaunchEditorOpen(true);
+      setConfigurationMessage(
+        `Loaded ${configurableVariables.length} configurable values from Configuration Manager.`,
+      );
+    } catch (error) {
+      setDraftConfig(null);
+      setIsLaunchEditorOpen(false);
+      setConfigurationMessage(
+        getErrorMessage(
+          error,
+          `Failed to load configuration for ${selectedMonitoringTool}.`,
+        ),
+      );
+    } finally {
+      setIsLoadingConfiguration(false);
     }
-  }, [
-    isLaunchEditorOpen,
-    selectedMonitoringTool,
-    selectedSecurityPosture,
-  ]);
+  };
 
   return (
     <div id="dashboard-top" className="space-y-6">
@@ -739,16 +825,20 @@ function AdminDashboard() {
           selectedTool={selectedMonitoringTool}
           draftConfig={draftConfig}
           isLaunchEditorOpen={isLaunchEditorOpen}
+          isLoadingConfiguration={isLoadingConfiguration}
+          configurationMessage={configurationMessage}
           onPostureChange={(nextPosture) => {
             setSelectedSecurityPosture(nextPosture);
             setSelectedMonitoringTool("");
             setIsLaunchEditorOpen(false);
             setDraftConfig(null);
+            setConfigurationMessage("");
           }}
           onToolChange={(nextTool) => {
             setSelectedMonitoringTool(nextTool);
             setIsLaunchEditorOpen(false);
             setDraftConfig(null);
+            setConfigurationMessage("");
           }}
           onDraftFieldChange={(path, value) => {
             setDraftConfig((currentConfig) => {
@@ -760,22 +850,10 @@ function AdminDashboard() {
             });
           }}
           onLaunchClick={() => {
-            setDraftConfig(
-              createDraftConfig(
-                selectedSecurityPosture,
-                selectedMonitoringTool,
-              ),
-            );
-            setIsLaunchEditorOpen(true);
+            void loadToolConfiguration();
           }}
           onReconfigureClick={() => {
-            setDraftConfig(
-              createDraftConfig(
-                selectedSecurityPosture,
-                selectedMonitoringTool,
-              ),
-            );
-            setIsLaunchEditorOpen(true);
+            void loadToolConfiguration();
           }}
         />
       </div>
