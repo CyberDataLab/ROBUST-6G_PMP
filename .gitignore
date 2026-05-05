@@ -7,3 +7,7 @@ Launcher/.env
 Launcher/.init_pmp_env
 .antigravityignore
 .DS_Store
+GUI/robust-6g-dashboard/.next/
+GUI/robust-6g-dashboard/.env.bak.*
+**/node_modules/
+**/__pycache__/
