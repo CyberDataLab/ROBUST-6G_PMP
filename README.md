@@ -105,7 +105,7 @@ Do not use the individual module compose files directly. PMP relies on generated
 5. **Use the GUI for graphical launch and configuration**.
    - Open `http://localhost:3000`
    - The dashboard talks to the same Configuration Manager API started by the bootstrap
-   - The current GUI PoC is wired to deploy `tshark` and `snort3`
+   - The current GUI is wired to deploy `tshark` and `snort3`
 
 6. **Use the manual launcher for modules not covered by the current API/GUI flow**. This is still useful for advanced or legacy workflows such as `aggregation_module`, `thingsboard_module`, or direct profile-based launches.
    ```bash
