@@ -50,8 +50,21 @@ services:
     image: elastic/filebeat:8.16.2
     container_name: filebeat_robust6g
     profiles: ["communication_module.filebeat"]
-    #depends_on:
-      #- kafka_robust6g
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "filebeat",
+          "test",
+          "config",
+          "--strict.perms=false",
+          "-c",
+          "/usr/share/filebeat/filebeat.yml",
+        ]
+      interval: 10s
+      retries: 3
+      start_period: 10s
+      timeout: 5s
     environment:
       - TZ=${TZ}
       - FLUENTD_SYSLOG_BASE_TOPIC=${FLUENTD_SYSLOG_BASE_TOPIC}

@@ -38,6 +38,30 @@ services:
       timeout: 5s
       retries: 5
 
+  postgres_gui:
+    image: postgres:16
+    container_name: postgres_gui_robust6g
+    profiles: ["db_module.postgres_gui"]
+    environment:
+      - TZ=${TZ}
+      - POSTGRES_USER=${POSTGRES_GUI_USER}
+      - POSTGRES_PASSWORD=${POSTGRES_GUI_PASSWORD}
+      - POSTGRES_DB=${POSTGRES_GUI_DB}
+    volumes:
+      - ${PFD}/Persistence/postgres_gui_data:/var/lib/postgresql/data
+    ports:
+      - "${POSTGRES_GUI_PORT:-5432}:5432"
+    restart: unless-stopped
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "pg_isready -U ${POSTGRES_GUI_USER} -d ${POSTGRES_GUI_DB} -p 5432",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
   redis_robust6g:
     image: redis:8.6.0
     container_name: redis_robust6g

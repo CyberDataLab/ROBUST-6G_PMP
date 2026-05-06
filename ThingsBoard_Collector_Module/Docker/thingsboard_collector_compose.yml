@@ -8,9 +8,6 @@ services:
     container_name: thingsboard_collector_robust6g
     profiles: ["thingsboard_module.alarm_collector"]
     network_mode: "host" #Network_mode with bridge needs the port mapping
-    depends_on:
-      kafka_robust6g:
-        condition: service_healthy
     environment:
       - TZ=UTC
       - KAFKA_BOOTSTRAP=${KAFKA_BOOTSTRAP}

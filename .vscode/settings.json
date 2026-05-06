@@ -1,6 +1,7 @@
 {
   "files.exclude": {
     "**/.next": true,
+    "**/.runtime": true,
     "**/.env.bak.*": true,
     "**/node_modules": true,
     "**/__pycache__": true,
@@ -13,6 +14,7 @@
   },
   "search.exclude": {
     "**/.next": true,
+    "**/.runtime": true,
     "**/.env.bak.*": true,
     "**/node_modules": true,
     "**/__pycache__": true,
@@ -25,6 +27,7 @@
   },
   "files.watcherExclude": {
     "**/.next/**": true,
+    "**/.runtime/**": true,
     "**/node_modules/**": true,
     "**/__pycache__/**": true,
     "**/dist/**": true,

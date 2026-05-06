@@ -11,3 +11,4 @@ GUI/robust-6g-dashboard/.next/
 GUI/robust-6g-dashboard/.env.bak.*
 **/node_modules/
 **/__pycache__/
+.runtime/

@@ -50,7 +50,7 @@ class cmd_parser:
         "communication_module": ["kafka", "filebeat"],
         "collection_module":    ["fluentd", "telegraf", "tshark", "falco", "info"],
         "flow_module":          ["flow_module"],
-        "db_module":            ["mongodb", "mongodb_cm", "redis"],
+        "db_module":            ["mongodb", "mongodb_cm", "postgres_gui", "redis"],
         "aggregation_module":   ["prometheus", "opensearch"],
         "thingsboard_module":   ["alarm_collector"],
     }
@@ -433,6 +433,12 @@ def build_default_env(
         f"@localhost:{mongo_cm_port}/?authSource=admin"
     )
 
+    # PostgreSQL GUI instance
+    postgres_gui_user = "robust6g_admin"
+    postgres_gui_password = "robust6g_pass"
+    postgres_gui_db = "robust6g_dashboard"
+    postgres_gui_port = "5432"
+
     # Redis
     redis_host                           = "redis_robust6g"
     redis_port                           = "6379"
@@ -592,6 +598,12 @@ def build_default_env(
         "MONGO_CM_URI":                  mongo_cm_uri_docker,
         "MONGO_CM_URI_DOCKER":           mongo_cm_uri_docker,
         "MONGO_CM_URI_HOST":             mongo_cm_uri_host,
+
+        # PostgreSQL GUI instance
+        "POSTGRES_GUI_USER":             postgres_gui_user,
+        "POSTGRES_GUI_PASSWORD":         postgres_gui_password,
+        "POSTGRES_GUI_DB":               postgres_gui_db,
+        "POSTGRES_GUI_PORT":             postgres_gui_port,
 
         # Redis
         "REDIS_HOST":                           redis_host,
@@ -765,6 +777,12 @@ TOOL_ENV_VARS: Dict[str, List[str]] = {
         "MONGO_CM_URI",
         "MONGO_CM_URI_DOCKER",
         "MONGO_CM_URI_HOST",
+    ],
+    "postgres_gui": [
+        "POSTGRES_GUI_USER",
+        "POSTGRES_GUI_PASSWORD",
+        "POSTGRES_GUI_DB",
+        "POSTGRES_GUI_PORT",
     ],
     "redis": [
         "REDIS_HOST",
