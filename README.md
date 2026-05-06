@@ -140,11 +140,6 @@ Do not use the individual module compose files directly. PMP relies on generated
    python3 Launcher/stop_gui_backend.py --purge
    ```
 
-9. **Remove compose-managed PMP resources with the legacy cleanup script**.
-   ```bash
-   python3 ./Launcher/remove_containers.py
-   ```
-
 ## :notebook: Notes
 
 Table of current modules and launcher profiles implemented.
