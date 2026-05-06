@@ -19,23 +19,27 @@ PMP is an open source, modularly designed, programmable platform for collecting,
 ## :nut_and_bolt: Tools
 
 :lock: Developed
- * Fluentd
- * Telegraf
- * Falco
- * Tshark
- * Filebeat
- * Kafka
- * Snort3
- * MongoDB
- * CICFlowMeter
- * Prometheus
- * Logstash
- * OpenSearch
+- Fluentd
+- Telegraf
+- Falco
+- Tshark
+- Filebeat
+- Kafka
+- Snort3
+- CICFlowMeter
+- MongoDB
+- MongoDB Configuration Manager
+- PostgreSQL GUI database
+- Redis
+- Prometheus
+- Logstash
+- OpenSearch
+- ThingsBoard alarm collector
 
 :construction: Future development
- * Grafana
- * InfluxDB
- * Sigma translator
+- Grafana
+- InfluxDB
+- Sigma translator
 
 ## ⚙️ Installation
 
@@ -48,89 +52,154 @@ PMP is an open source, modularly designed, programmable platform for collecting,
    cd ROBUST-6G_PMP/
    ```
 
+## 📋 Requirements
+
+- `Docker` 28.5.1 or higher
+- `Python3.12` or higher
+- `pnpm` to bootstrap the dashboard GUI
+- `uvicorn` plus the Python dependencies required by `APIs/ConfigurationManager` to run the Configuration Manager API locally
+
+Do not use the individual module compose files directly. PMP relies on generated environment files and launcher-managed profiles.
+
 ## 🕹️ Usage
 
-1. **Usage and deployment** as a general option in which all modules are activated.
+1. **Bootstrap the current GUI/backend workflow**. This is the recommended entry point for the platform today.
+   ```bash
+   python3 Launcher/bootstrap_gui_backend.py
+   ```
+   This command starts the base stack, launches or reuses the Configuration Manager API on port `8000`, prepares the dashboard GUI, and starts or reuses the GUI on port `3000`.
+
+2. **Understand the base stack started by the bootstrap**. By default it launches:
+   - `kafka`
+   - `filebeat`
+   - `mongodb`
+   - `mongodb_cm`
+   - `postgres_gui`
+
+3. **Run only part of the bootstrap flow when needed**.
+   ```bash
+   python3 Launcher/bootstrap_gui_backend.py --skip-gui
+   python3 Launcher/bootstrap_gui_backend.py --skip-api --skip-gui
+   python3 Launcher/bootstrap_gui_backend.py --gui-init-mode start-only
+   python3 Launcher/bootstrap_gui_backend.py --gui-init-mode reinit
+   ```
+
+4. **Deploy monitoring tools through the Configuration Manager API** once the base stack is ready. The current public deploy endpoints expose:
+   - `DeployNetworkTool`: `tshark`, `flow_module`
+   - `DeployInfrastructureTool`: `telegraf`
+   - `DeployServiceTool`: `fluentd`, `falco`
+   - `DeploySecurityTool`: `snort3`
+
+   Example:
+   ```bash
+   curl -X POST "http://localhost:8000/ConfigurationManager/DeployNetworkTool?toolName=tshark" \
+     -H "Content-Type: application/json" \
+     -d '{"configuration":{"TSHARK_INTERFACE":"eth0"}}'
+   ```
+
+   You can inspect configurable variables for a tool with:
+   ```bash
+   curl "http://localhost:8000/ConfigurationManager/getConfigurationOptions?toolName=tshark"
+   ```
+
+5. **Use the GUI for graphical launch and configuration**.
+   - Open `http://localhost:3000`
+   - The dashboard talks to the same Configuration Manager API started by the bootstrap
+   - The current GUI PoC is wired to deploy `tshark` and `snort3`
+
+6. **Use the manual launcher for modules not covered by the current API/GUI flow**. This is still useful for advanced or legacy workflows such as `aggregation_module`, `thingsboard_module`, or direct profile-based launches.
    ```bash
    python3 ./Launcher/start_containers.py all
    ```
-2. **Usage and deployment** exploiting the modularity of PMP. Use `-m` to name each **module** followed by `-t` with the simple name of the **tools** to be deployed. Tools can be concatenated using **spaces** or **commas**. If you need to use **all the tools** in the module, you can use `-t all`.
+   Or a targeted modular deployment:
    ```bash
-   sudo python3 ./Launcher/start_containers.py -m moduleName -t all
+   python3 ./Launcher/start_containers.py -m moduleName -t all
+   python3 ./Launcher/start_containers.py -m moduleName -t toolName1,toolName2
    ```
-    Or
+   Example:
    ```bash
-   sudo python3 ./Launcher/start_containers.py -m moduleName -t toolName1,toolName2
-   ```
-    In example
-   ```bash
-   sudo python3 ./Launcher/start_containers.py -m alert_module -t all -m db_module -t all -m communication_module -t all -m flow_module -t all -m collection_module -t tshark,fluentd,telegraf
+   python3 ./Launcher/start_containers.py \
+     -m communication_module -t kafka,filebeat \
+     -m db_module -t mongodb,mongodb_cm,postgres_gui \
+     -m thingsboard_module -t alarm_collector
    ```
 
-Do not use the `docker-compose.yml` file, as the PMP requires an environment file to run correctly.
+7. **Stop the GUI/backend workflow**.
+   ```bash
+   python3 Launcher/stop_gui_backend.py
+   ```
+   By default this stops:
+   - the dashboard GUI process
+   - the Configuration Manager API process
+   - the tool containers launched dynamically through the API
 
-3. **Deletes** containers, volumes, and Docker networks, but not the data generated.
+8. **Stop additional resources when required**.
+   ```bash
+   python3 Launcher/stop_gui_backend.py --stop-base
+   python3 Launcher/stop_gui_backend.py --stop-all
+   python3 Launcher/stop_gui_backend.py --purge
+   ```
+
+9. **Remove compose-managed PMP resources with the legacy cleanup script**.
    ```bash
    python3 ./Launcher/remove_containers.py
    ```
 
 ## :notebook: Notes
-Table of current modules and tools implemented.
 
-|        Modules       |    Tool 1    |  Tool 2   |  Tool 3 |  Tool 4 |  Tool 5 |
-|:--------------------:|:------------:|:---------:|:-------:|:-------:|:-------:|
-|     alert_module     | alert_module |           |         |         |         |
-| communication_module |     kafka    | filebeat  |         |         |         |
-|   collection_module  |    fluentd   | telegraf  |  tshark |  falco  |  info\* |
-|      flow_module     |  flow_module |           |         |         |         |
-|       db_module      |    mongodb   |           |         |         |         |
-|  aggregation_module  |   prometheus |opensearch |         |         |         |
+Table of current modules and launcher profiles implemented.
 
-\* info: This container exposes the endpoint addresses of the data collection tools deployed on the target device, as well as its machine_id, which identifies it. Use it only if `prometheus` is to be deployed or is already deployed.
+| Module | Tools / profiles |
+|:--|:--|
+| `alert_module` | `alert_module` |
+| `communication_module` | `kafka`, `filebeat` |
+| `collection_module` | `fluentd`, `telegraf`, `tshark`, `falco`, `info` |
+| `flow_module` | `flow_module` |
+| `db_module` | `mongodb`, `mongodb_cm`, `postgres_gui`, `redis` |
+| `aggregation_module` | `prometheus`, `opensearch` |
+| `thingsboard_module` | `alarm_collector` |
+
+Additional implementation notes:
+
+- In the current API workflow, the alerting tool is requested as `snort3`, although the underlying launcher profile belongs to `alert_module`.
+- The default bootstrap base stack is `communication_module.kafka,filebeat` plus `db_module.mongodb,mongodb_cm,postgres_gui`.
+- `info` exposes the endpoint addresses of the deployed collection tools together with the host `machine_id`. Use it when `prometheus` is required.
+- Runtime logs generated by the GUI/backend bootstrap flow are stored in `Internal_logs/`.
 
 There are more containers associated with some tools to provide necessary services such as these:
 
- * _Collection_Module > falco-exporter_: `falco` has a current exporter plugin developed by the official organisation to expose information to `prometheus`. It is automatically implemented with `falco`.
- * _Aggregation_module > init-prometheus_: Used to change the owner of the /prometheus folder to user 65534 (nobody). It is necessary to manage `prometheus` data from the Docker volume. It changes the owner and is removed when its job is done. It is automatically deployed with `prometheus`.
- * _Aggregation_module > discovery-agent_: Continuously scans the network to discover devices that expose their data from the `info` container. `prometheus` extracts the information from the endpoint of this container. It is automatically deployed with `prometheus`.
- * _Aggregation_module > init-opensearch_: Performs the same task as the `init-prometheus` container, but is used in `opensearch` to correct OpenSearch data permissions (UID 1000). It is automatically implemented with `opensearch`.
- * _Aggregation_module > opensearch-dashboards_: Official dashboard implementation for `opensearch`. Used to visualise data exposed to `opensearch` in Elastic Common Schema format. Automatically deployed with `opensearch`.
- * _Aggregation_module > logstash_: This container implements `logstash` to analyse information from `kafka` topics to Elastic Common Schema. It sends the information to `opensearch`. It is automatically deployed with `opensearch`.
+- _Collection_Module > falco-exporter_: `falco` deploys `falco_exporter_robust6g` automatically so metrics can be exposed to `prometheus`.
+- _Databases_module > redis-worker_: `redis` deploys `redis_worker_robust6g` automatically to stream Kafka data into Redis.
+- _Aggregation_module > init-prometheus_: Changes the owner of the `/prometheus` folder to user `65534` (`nobody`) before `prometheus` starts.
+- _Aggregation_module > init-prometheus-config_: Prepares the Prometheus configuration volume before the main server starts.
+- _Aggregation_module > discovery-agent_: Continuously scans the network to discover devices exposing `info` endpoints for `prometheus`.
+- _Aggregation_module > init-opensearch_: Fixes OpenSearch data permissions before `opensearch` starts.
+- _Aggregation_module > opensearch-dashboards_: Official dashboard implementation for `opensearch`.
+- _Aggregation_module > logstash_: Normalises Kafka topics into Elastic Common Schema and forwards them to `opensearch`.
 
-## 📋 Requirements
+## :heavy_exclamation_mark: Errors
 
- * `Docker` 28.5.1 or higher.
- * ~~`docker-compose` 1.29.2 or higher.~~ Please do not use the individual docker-compose module. Docker 28.5.1 or higher utilises the updated version of `docker compose`, which has the appropriate functionalities to run the PMP.
- * `Python3.12` or higher.
+If you are using PMP locally, update the `/etc/hosts` file to avoid issues with DNS addressing on Kafka brokers. For example:
 
-The tool containers already satisfy their requirements without the need of any user installation.
+```bash
+sudo nano /etc/hosts
+```
+
+Write the following line below the `127.0.1.1 user` entry:
+
+```bash
+yourIP kafka_robust6g-node1.lan
+```
+
+If `bootstrap_gui_backend.py` reports that port `3000` or `8000` is already in use, free the port first or launch the services on different ports with `--gui-port` and `--api-port`.
+
+If the GUI bootstrap fails because `pnpm` or `uvicorn` is missing, install the missing dependency and rerun the bootstrap command.
 
 ## 📜 License
 
 PMP is **open-source** and distributed under the GNU AGPLv3 License. See `LICENSE` for more information.
 
-* **Community Edition** — released under the **GNU Affero GPL v3.0**.
-* **Enterprise Edition** — proprietary license & premium support available.
+- **Community Edition** — released under the **GNU Affero GPL v3.0**
+- **Enterprise Edition** — proprietary license and premium support available
 
 Contact **alberto.garciap@um.es** and **josemaria.jorquera@um.es** for commercial terms.
-
-## :heavy_exclamation_mark: Errors
-
-In case `filebeat.yml` is showing errors, change the permissions manually with: 
-
-   ```bash
-   sudo chmod 644 /Communication_Bus/Configuration_Files/filebeat.yml
-   sudo chown root:root /Communication_Bus/Configuration_Files/filebeat.yml
-   ``` 
-
-If you are using PMP as a test on your local machine, remember to update the `/etc/hosts` file to avoid issues with DNS addressing on Kafka brokers. In example:
-
-   ```bash
-   sudo nano /etc/hosts
-   ```
-
-Write the following line below the `127.0.1.1       user`:
-
-   ```bash
-   yourIP	kafka_robust6g-node1.lan
-   ```
