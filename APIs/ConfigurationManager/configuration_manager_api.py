@@ -34,6 +34,8 @@ from configuration_manager_logic import (
     UpdateConfigurationRequest,
     get_configuration_options,
     get_configuration_by_id,
+    get_kafka_topics_state,
+    get_tool_runtime_state,
     process_deploy_request,
     process_update_configuration,
 )
@@ -227,6 +229,40 @@ async def get_configuration_endpoint(
 
     if result.get("status") == "error":
         raise HTTPException(status_code=404, detail=result["message"])
+
+    return JSONResponse(status_code=200, content=result)
+
+
+@app.get("/ConfigurationManager/getKafkaTopicsState")
+async def get_kafka_topics_state_endpoint():
+    """
+    Return the current kafka_topics document persisted by producer deployments.
+
+    This is useful for clients that need to know whether upstream producers such
+    as tshark have already published their resolved topic configuration.
+    """
+    result = get_kafka_topics_state()
+
+    if result.get("status") == "error":
+        raise HTTPException(status_code=503, detail=result["message"])
+
+    if result.get("status") == "not_found":
+        raise HTTPException(status_code=404, detail=result["message"])
+
+    return JSONResponse(status_code=200, content=result)
+
+
+@app.get("/ConfigurationManager/getToolRuntimeState")
+async def get_tool_runtime_state_endpoint(
+    toolName: str = Query(..., description="Name of the tool whose runtime state should be checked.")
+):
+    """
+    Return the runtime state of the main Docker container associated with a tool.
+    """
+    result = get_tool_runtime_state(toolName)
+
+    if result.get("status") == "error":
+        raise HTTPException(status_code=400, detail=result["message"])
 
     return JSONResponse(status_code=200, content=result)
 

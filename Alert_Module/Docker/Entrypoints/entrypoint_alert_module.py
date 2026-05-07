@@ -345,7 +345,6 @@ def main():
     mongo_uri = os.getenv("MONGO_URI") or f"mongodb://{os.getenv('MONGO_INITDB_ROOT_USERNAME')}:{quote_plus(os.getenv('MONGO_INITDB_ROOT_PASSWORD'))}@mongodb:{os.getenv('MONGO_PORT')}/?authSource=admin"
 
     try:
-        print(mongo_uri)
         client = MongoClient(mongo_uri)
         db = client["snort_db"]
         alerts_collection = db["alerts"]

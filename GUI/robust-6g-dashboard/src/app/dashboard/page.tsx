@@ -40,6 +40,18 @@ type ConfigurableVariable = {
   name: string;
   default_value?: JsonPrimitive | null;
 };
+type SnortDependencyStatus =
+  | "idle"
+  | "checking"
+  | "ready"
+  | "not_ready"
+  | "error";
+type DeployPayload = {
+  toolName: ToolApiName;
+  configuration: JsonObject;
+  rules?: string[];
+  include_default_rules?: boolean;
+};
 
 const TOOL_NAME_TO_API_NAME: Record<string, ToolApiName | undefined> = {
   Tshark: "tshark",
@@ -64,6 +76,15 @@ function getErrorMessage(error: unknown, fallback: string) {
     "message" in error &&
     typeof error.message === "string"
   ) {
+    const normalizedMessage = error.message.trim();
+
+    if (
+      normalizedMessage.includes("NetworkError when attempting to fetch resource") ||
+      normalizedMessage.includes("Failed to fetch")
+    ) {
+      return "The GUI could not complete the request because the web client lost connection to the GUI/backend momentarily. If services were restarting, wait a few seconds and retry.";
+    }
+
     return error.message;
   }
 
@@ -86,6 +107,38 @@ function getErrorMessage(error: unknown, fallback: string) {
   }
 
   return fallback;
+}
+
+function parseSnortRulesInput(rulesInput: string) {
+  return rulesInput
+    .split(/\r?\n/)
+    .map((rule) => rule.trim())
+    .filter(Boolean);
+}
+
+function buildDeployPayload(
+  toolName: ToolApiName,
+  configuration: JsonObject,
+  snortRulesInput: string,
+  includeDefaultRules: boolean,
+): DeployPayload {
+  const payload: DeployPayload = {
+    toolName,
+    configuration,
+  };
+
+  if (toolName !== "snort3") {
+    return payload;
+  }
+
+  const parsedRules = parseSnortRulesInput(snortRulesInput);
+
+  if (parsedRules.length > 0) {
+    payload.rules = parsedRules;
+    payload.include_default_rules = includeDefaultRules;
+  }
+
+  return payload;
 }
 
 function buildDraftConfigFromVariables(
@@ -294,9 +347,15 @@ function MonitoringToolConfigurationBox({
   isLaunchEditorOpen,
   isLoadingConfiguration,
   configurationMessage,
+  snortRulesInput,
+  snortIncludeDefaultRules,
+  snortDependencyStatus,
+  snortDependencyMessage,
   onPostureChange,
   onToolChange,
   onDraftFieldChange,
+  onSnortRulesInputChange,
+  onSnortIncludeDefaultRulesChange,
   onLaunchClick,
   onReconfigureClick,
 }: {
@@ -306,9 +365,15 @@ function MonitoringToolConfigurationBox({
   isLaunchEditorOpen: boolean;
   isLoadingConfiguration: boolean;
   configurationMessage: string;
+  snortRulesInput: string;
+  snortIncludeDefaultRules: boolean;
+  snortDependencyStatus: SnortDependencyStatus;
+  snortDependencyMessage: string;
   onPostureChange: (posture: string) => void;
   onToolChange: (tool: string) => void;
   onDraftFieldChange: (path: string[], value: JsonPrimitive) => void;
+  onSnortRulesInputChange: (value: string) => void;
+  onSnortIncludeDefaultRulesChange: (value: boolean) => void;
   onLaunchClick: () => void;
   onReconfigureClick: () => void;
 }) {
@@ -319,14 +384,34 @@ function MonitoringToolConfigurationBox({
   };
 
   const availableTools = toolOptionsByPosture[posture] ?? [];
-  const exportedJson = draftConfig ? JSON.stringify(draftConfig, null, 2) : "";
   const [isDeploying, setIsDeploying] = useState(false);
   const [deployMessage, setDeployMessage] = useState("");
   const selectedApiToolName = getApiToolName(selectedTool);
   const isSupportedInPoc = Boolean(selectedApiToolName);
+  const isSnortTool = selectedApiToolName === "snort3";
+  const parsedSnortRules = isSnortTool
+    ? parseSnortRulesInput(snortRulesInput)
+    : [];
+  const snortHasCustomRules = parsedSnortRules.length > 0;
+  const deployPayload =
+    draftConfig && selectedApiToolName
+      ? buildDeployPayload(
+          selectedApiToolName,
+          draftConfig,
+          snortRulesInput,
+          snortIncludeDefaultRules,
+        )
+      : null;
+  const exportedJson = deployPayload
+    ? JSON.stringify(deployPayload, null, 2)
+    : "";
+  const isSnortDependencyBlocking =
+    isSnortTool &&
+    (snortDependencyStatus === "checking" ||
+      snortDependencyStatus === "not_ready");
 
   const handleDeploy = async () => {
-    if (!draftConfig || isDeploying) {
+    if (!deployPayload || isDeploying || isSnortDependencyBlocking) {
       return;
     }
 
@@ -346,10 +431,7 @@ function MonitoringToolConfigurationBox({
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({
-          toolName: selectedApiToolName,
-          configuration: draftConfig,
-        }),
+        body: JSON.stringify(deployPayload),
       });
       const payload = await response.json().catch(() => null);
 
@@ -565,10 +647,98 @@ function MonitoringToolConfigurationBox({
             </div>
             {draftConfig && (
               <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
-                <div className="space-y-3">{renderJsonFields(draftConfig)}</div>
+                <div className="space-y-3">
+                  {renderJsonFields(draftConfig)}
+
+                  {isSnortTool && (
+                    <div className="rounded-lg border border-amber-500/20 bg-amber-500/5 p-4">
+                      <div className="mb-3">
+                        <h5 className="text-sm font-semibold text-white">
+                          Snort3 Custom Rules
+                        </h5>
+                        <p className="mt-1 text-xs text-gray-400">
+                          Paste one Snort3 rule per line. The Configuration
+                          Manager validator will reject invalid rules and the GUI
+                          will surface that error message.
+                        </p>
+                      </div>
+
+                      <div
+                        className={`mb-4 rounded-lg border px-3 py-2 text-xs ${
+                          snortDependencyStatus === "ready"
+                            ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-200"
+                            : snortDependencyStatus === "not_ready"
+                              ? "border-amber-500/30 bg-amber-500/10 text-amber-200"
+                              : snortDependencyStatus === "error"
+                                ? "border-red-500/30 bg-red-500/10 text-red-200"
+                                : "border-cyan-500/30 bg-cyan-500/10 text-cyan-200"
+                        }`}
+                      >
+                        {snortDependencyMessage ||
+                          "Checking whether tshark has already been deployed..."}
+                      </div>
+
+                      <label className="mb-3 flex items-start gap-3 rounded-lg border border-cyan-500/20 bg-[#08101d] p-3">
+                        <input
+                          type="checkbox"
+                          checked={
+                            snortHasCustomRules
+                              ? snortIncludeDefaultRules
+                              : true
+                          }
+                          disabled={!snortHasCustomRules}
+                          onChange={(event) =>
+                            onSnortIncludeDefaultRulesChange(
+                              event.target.checked,
+                            )
+                          }
+                          className="mt-1 h-4 w-4 rounded border-gray-600"
+                        />
+                        <div>
+                          <p className="text-sm font-medium text-white">
+                            Include default/community Snort3 rules
+                          </p>
+                          <p className="mt-1 text-xs text-gray-400">
+                            {snortHasCustomRules
+                              ? "Checked: deploy custom rules together with the default rules set."
+                              : "When no custom rules are provided, Snort3 deploys with the default rules set only."}
+                          </p>
+                        </div>
+                      </label>
+
+                      <div className="space-y-2">
+                        <label
+                          htmlFor="snort3-rules-input"
+                          className="block text-xs font-medium uppercase tracking-[0.2em] text-cyan-300"
+                        >
+                          Custom rules
+                        </label>
+                        <textarea
+                          id="snort3-rules-input"
+                          value={snortRulesInput}
+                          onChange={(event) =>
+                            onSnortRulesInputChange(event.target.value)
+                          }
+                          placeholder='alert tcp any any -> any any (msg:"snort3 test rule"; sid:1000001; rev:1;)'
+                          spellCheck={false}
+                          rows={8}
+                          className="w-full rounded-lg border border-cyan-500/30 bg-white px-4 py-3 font-mono text-sm text-black outline-none transition-all focus:border-cyan-400 focus:ring-2 focus:ring-cyan-500/20"
+                        />
+                        <div className="flex items-center justify-between text-xs text-gray-400">
+                          <span>One rule per line.</span>
+                          <span>
+                            {snortHasCustomRules
+                              ? `${parsedSnortRules.length} custom rule${parsedSnortRules.length === 1 ? "" : "s"} ready`
+                              : "Default-rules-only deploy"}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
                 <div className="space-y-2">
                   <label className="block text-xs font-medium uppercase tracking-[0.2em] text-cyan-300">
-                    Exported JSON
+                    Deploy Payload JSON
                   </label>
                   <pre className="min-h-[360px] overflow-x-auto rounded-lg border border-cyan-500/30 bg-[#0b1120] px-4 py-3 font-mono text-sm text-white">
                     {exportedJson}
@@ -576,11 +746,17 @@ function MonitoringToolConfigurationBox({
                   <button
                     type="button"
                     onClick={handleDeploy}
-                    disabled={!draftConfig || isDeploying}
+                    disabled={!deployPayload || isDeploying || isSnortDependencyBlocking}
                     className="w-full rounded-lg bg-emerald-500 px-4 py-3 text-sm font-semibold text-slate-950 transition-colors hover:bg-emerald-400 disabled:cursor-not-allowed disabled:bg-gray-700 disabled:text-gray-400"
                   >
                     {isDeploying ? "Deploying..." : "Deploy"}
                   </button>
+                  {isSnortDependencyBlocking && (
+                    <p className="text-xs text-amber-300">
+                      Deploy is blocked until tshark is deployed and its topic
+                      is available to Snort3.
+                    </p>
+                  )}
                   {deployMessage && (
                     <p className="text-xs text-gray-300">{deployMessage}</p>
                   )}
@@ -606,6 +782,72 @@ function AdminDashboard() {
   const [draftConfig, setDraftConfig] = useState<JsonObject | null>(null);
   const [isLoadingConfiguration, setIsLoadingConfiguration] = useState(false);
   const [configurationMessage, setConfigurationMessage] = useState("");
+  const [snortRulesInput, setSnortRulesInput] = useState("");
+  const [snortIncludeDefaultRules, setSnortIncludeDefaultRules] = useState(true);
+  const [snortDependencyStatus, setSnortDependencyStatus] =
+    useState<SnortDependencyStatus>("idle");
+  const [snortDependencyMessage, setSnortDependencyMessage] = useState("");
+
+  const resetSnortFormState = () => {
+    setSnortRulesInput("");
+    setSnortIncludeDefaultRules(true);
+    setSnortDependencyStatus("idle");
+    setSnortDependencyMessage("");
+  };
+
+  const loadSnortDependencyStatus = async () => {
+    setSnortDependencyStatus("checking");
+    setSnortDependencyMessage(
+      "Checking whether tshark has already been deployed...",
+    );
+
+    try {
+      const response = await fetch(
+        "/api/configuration-manager/dependencies?toolName=snort3",
+        {
+          cache: "no-store",
+        },
+      );
+      const payload = await response.json().catch(() => null);
+
+      if (!response.ok) {
+        throw new Error(
+          getErrorMessage(
+            payload,
+            "Could not verify whether tshark is already deployed.",
+          ),
+        );
+      }
+
+      const dependencyReady =
+        payload &&
+        typeof payload === "object" &&
+        "dependencyReady" in payload &&
+        typeof payload.dependencyReady === "boolean"
+          ? payload.dependencyReady
+          : false;
+      const message =
+        payload &&
+        typeof payload === "object" &&
+        "message" in payload &&
+        typeof payload.message === "string"
+          ? payload.message
+          : dependencyReady
+            ? "Detected a tshark deployment that Snort3 can consume."
+            : "Tshark has not been deployed yet. Deploy tshark first.";
+
+      setSnortDependencyStatus(dependencyReady ? "ready" : "not_ready");
+      setSnortDependencyMessage(message);
+    } catch (error) {
+      setSnortDependencyStatus("error");
+      setSnortDependencyMessage(
+        getErrorMessage(
+          error,
+          "Could not verify the tshark dependency. You can still rely on the backend validation.",
+        ),
+      );
+    }
+  };
 
   const updateDraftConfigValue = (
     config: JsonObject,
@@ -652,6 +894,16 @@ function AdminDashboard() {
     setIsLoadingConfiguration(true);
     setConfigurationMessage("");
 
+    if (apiToolName === "snort3") {
+      setSnortDependencyStatus("checking");
+      setSnortDependencyMessage(
+        "Checking whether tshark has already been deployed...",
+      );
+    } else {
+      setSnortDependencyStatus("idle");
+      setSnortDependencyMessage("");
+    }
+
     try {
       const response = await fetch(
         `/api/configuration-manager/options?toolName=${encodeURIComponent(apiToolName)}`,
@@ -689,6 +941,10 @@ function AdminDashboard() {
       setConfigurationMessage(
         `Loaded ${configurableVariables.length} configurable values from Configuration Manager.`,
       );
+
+      if (apiToolName === "snort3") {
+        await loadSnortDependencyStatus();
+      }
     } catch (error) {
       setDraftConfig(null);
       setIsLaunchEditorOpen(false);
@@ -833,12 +1089,14 @@ function AdminDashboard() {
             setIsLaunchEditorOpen(false);
             setDraftConfig(null);
             setConfigurationMessage("");
+            resetSnortFormState();
           }}
           onToolChange={(nextTool) => {
             setSelectedMonitoringTool(nextTool);
             setIsLaunchEditorOpen(false);
             setDraftConfig(null);
             setConfigurationMessage("");
+            resetSnortFormState();
           }}
           onDraftFieldChange={(path, value) => {
             setDraftConfig((currentConfig) => {
@@ -849,6 +1107,12 @@ function AdminDashboard() {
               return updateDraftConfigValue(currentConfig, path, value);
             });
           }}
+          snortRulesInput={snortRulesInput}
+          snortIncludeDefaultRules={snortIncludeDefaultRules}
+          snortDependencyStatus={snortDependencyStatus}
+          snortDependencyMessage={snortDependencyMessage}
+          onSnortRulesInputChange={setSnortRulesInput}
+          onSnortIncludeDefaultRulesChange={setSnortIncludeDefaultRules}
           onLaunchClick={() => {
             void loadToolConfiguration();
           }}

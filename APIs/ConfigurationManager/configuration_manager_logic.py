@@ -18,6 +18,7 @@ import hashlib
 import importlib.util
 import json
 import os
+import subprocess
 from collections import OrderedDict
 from datetime import datetime, timezone
 from pathlib import Path
@@ -100,6 +101,30 @@ CO_DEPLOY_TOOLS: Dict[str, List[str]] = {
     "tshark":   ["filebeat"],
     "fluentd":  ["filebeat"],
     "falco":    ["filebeat"],
+}
+
+# ---------------------------------------------------------------------------
+# Runtime container names for tools whose active state matters to the API.
+# ---------------------------------------------------------------------------
+TOOL_RUNTIME_CONTAINERS: Dict[str, str] = {
+    "tshark": "tshark_robust6g",
+    "snort3": "alert_module_robust6g",
+}
+
+# ---------------------------------------------------------------------------
+# Variables that exist in the runtime env but should not be edited from the GUI.
+# ---------------------------------------------------------------------------
+NON_CONFIGURABLE_ENV_VARS: Dict[str, set[str]] = {
+    "flow_module": {
+        "TSHARK_BASE_TOPIC",
+    },
+    "snort3": {
+        "TSHARK_BASE_TOPIC",
+        "SNORT_KAFKA_TOPIC_IN",
+        "SNORT_KAFKA_MESSAGE_FIELD",
+        "SNORT_CONSUMER_KAFKA_ALLOW_AUTO_CREATE_TOPICS",
+        "SNORT_ALERT_TAP_IFACE",
+    },
 }
 
 
@@ -563,6 +588,36 @@ def _load_producer_consumer_maps() -> Tuple[Dict[str, List[str]], Dict[str, List
     return producer_map, consumer_map
 
 
+def normalize_empty_string_config_values(
+    tool_name: str,
+    incoming_config: Dict[str, Any]
+) -> Dict[str, Any]:
+    """
+    Replace exact empty-string configuration values with the default declared in
+    the Pydantic model for that tool.
+
+    This normalization intentionally applies only to the 'configuration' payload
+    and does not touch rules-related request fields such as snort3 rules.
+    """
+    if tool_name not in TOOL_CONFIG_MODELS or not incoming_config:
+        return dict(incoming_config or {})
+
+    config_model_class = TOOL_CONFIG_MODELS[tool_name]
+    normalized_config: Dict[str, Any] = dict(incoming_config)
+
+    for key, value in incoming_config.items():
+        if value != "":
+            continue
+
+        model_field = config_model_class.model_fields.get(key)
+        if model_field is None:
+            continue
+
+        normalized_config[key] = model_field.default
+
+    return normalized_config
+
+
 def validate_and_parse_config(
     tool_name: str,
     incoming_config: Dict[str, Any]
@@ -576,10 +631,23 @@ def validate_and_parse_config(
         valid_names = list(TOOL_CONFIG_MODELS.keys())
         return False, f"Unknown toolName '{tool_name}'. Valid tools: {valid_names}", {}
 
+    forbidden_overrides = sorted(
+        key
+        for key in incoming_config.keys()
+        if key in NON_CONFIGURABLE_ENV_VARS.get(tool_name, set())
+    )
+    if forbidden_overrides:
+        return (
+            False,
+            f"The following variables for tool '{tool_name}' are managed internally and cannot be overridden: {', '.join(forbidden_overrides)}",
+            {},
+        )
+
     config_model_class = TOOL_CONFIG_MODELS[tool_name]
+    normalized_config = normalize_empty_string_config_values(tool_name, incoming_config)
 
     try:
-        parsed_config = config_model_class.model_validate(incoming_config or {})
+        parsed_config = config_model_class.model_validate(normalized_config or {})
     except Exception as e:
         return False, f"Invalid configuration for tool '{tool_name}': {e}", {}
 
@@ -606,16 +674,29 @@ def validate_and_parse_partial_update_config(
         valid_names = list(TOOL_CONFIG_MODELS.keys())
         return False, f"Unknown toolName '{tool_name}'. Valid tools: {valid_names}", {}
 
+    forbidden_overrides = sorted(
+        key
+        for key in incoming_config.keys()
+        if key in NON_CONFIGURABLE_ENV_VARS.get(tool_name, set())
+    )
+    if forbidden_overrides:
+        return (
+            False,
+            f"The following variables for tool '{tool_name}' are managed internally and cannot be overridden: {', '.join(forbidden_overrides)}",
+            {},
+        )
+
     config_model_class = TOOL_CONFIG_MODELS[tool_name]
+    normalized_config = normalize_empty_string_config_values(tool_name, incoming_config)
 
     try:
-        parsed_config = config_model_class.model_validate(incoming_config)
+        parsed_config = config_model_class.model_validate(normalized_config)
     except Exception as e:
         return False, f"Invalid configuration for tool '{tool_name}': {e}", {}
 
     resolved: Dict[str, str] = {
         key: str(getattr(parsed_config, key))
-        for key in incoming_config.keys()
+        for key in normalized_config.keys()
     }
 
     return True, "", resolved
@@ -643,6 +724,90 @@ def append_rollback_error(base_error: str, rollback_error: str) -> str:
     if not rollback_error:
         return base_error
     return f"{base_error} Rollback warning: {rollback_error}"
+
+
+def get_container_runtime_status(container_name: str) -> str:
+    """
+    Return the Docker runtime status for a container.
+    If the container does not exist, returns 'missing'.
+    """
+    completed = subprocess.run(
+        [
+            "docker",
+            "inspect",
+            "--format",
+            "{{if .State.Health}}{{.State.Health.Status}}{{else}}{{.State.Status}}{{end}}",
+            container_name,
+        ],
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+
+    if completed.returncode != 0:
+        return "missing"
+
+    return completed.stdout.strip() or "unknown"
+
+
+def get_tool_runtime_state(tool_name: str) -> Dict[str, Any]:
+    """
+    Return the runtime state of a tool's main container.
+    """
+    container_name = TOOL_RUNTIME_CONTAINERS.get(tool_name)
+
+    if not container_name:
+        return {
+            "status": "error",
+            "message": f"No runtime container mapping is defined for tool '{tool_name}'.",
+        }
+
+    runtime_status = get_container_runtime_status(container_name)
+    is_active = runtime_status in {"running", "healthy"}
+
+    return {
+        "status": "success",
+        "toolName": tool_name,
+        "container_name": container_name,
+        "runtime_status": runtime_status,
+        "is_active": is_active,
+    }
+
+
+def validate_snort3_dependency_state(collection: Optional[Collection]) -> Tuple[bool, str]:
+    """
+    Ensure Snort3 can only be deployed when tshark is actively running and its
+    resolved input topic is available in MongoDB CM.
+    """
+    tshark_runtime = get_tool_runtime_state("tshark")
+    if tshark_runtime.get("status") != "success":
+        return False, str(tshark_runtime.get("message", "Could not determine tshark runtime state."))
+
+    if not bool(tshark_runtime.get("is_active")):
+        container_name = str(tshark_runtime.get("container_name", "tshark_robust6g"))
+        runtime_status = str(tshark_runtime.get("runtime_status", "unknown"))
+        return (
+            False,
+            "Snort3 requires tshark to be actively deployed first. "
+            f"Container '{container_name}' is currently '{runtime_status}'.",
+        )
+
+    if collection is None:
+        return (
+            False,
+            "Snort3 requires MongoDB CM to resolve tshark topics, but MongoDB CM is unavailable.",
+        )
+
+    stored_topics = get_kafka_topics_from_mongo(collection)
+    tshark_topic = str(stored_topics.get("TSHARK_BASE_TOPIC", "")).strip()
+    if not tshark_topic:
+        return (
+            False,
+            "Snort3 requires the tshark topic to be present in MongoDB CM. "
+            "Deploy tshark first through the Configuration Manager.",
+        )
+
+    return True, ""
 
 
 def validate_rules_contract_for_non_snort3(tool_name: str, request: Any) -> Tuple[bool, str]:
@@ -841,6 +1006,13 @@ def process_deploy_request(
     if not are_rules_fields_valid:
         return {"status": "error", "message": rules_error_msg}
 
+    collection = get_mongo_collection()
+
+    if tool_name == "snort3":
+        dependency_ok, dependency_error = validate_snort3_dependency_state(collection)
+        if not dependency_ok:
+            return {"status": "error", "message": dependency_error}
+
     is_valid, error_msg, resolved_env = validate_and_parse_config(
         tool_name=tool_name,
         incoming_config=request.configuration or {}
@@ -870,9 +1042,6 @@ def process_deploy_request(
             return {"status": "error", "message": rules_files_error}
 
         resolved_env["SNORT_RULES_PATHS"] = build_snort3_rules_paths_env(rules_config)
-
-    collection = get_mongo_collection()
-
     # If this tool produces Kafka topics, persist them so consumers can find them later
     persist_producer_topics(tool_name, resolved_env, collection)
 
@@ -1118,9 +1287,12 @@ def get_configuration_options(tool_name: str) -> Dict[str, Any]:
     config_model_class = TOOL_CONFIG_MODELS[tool_name]
     default_instance = config_model_class()
     defaults_dict = default_instance.model_dump()
+    hidden_vars = NON_CONFIGURABLE_ENV_VARS.get(tool_name, set())
 
     variables: List[Dict[str, str]] = []
     for var_name, default_value in defaults_dict.items():
+        if var_name in hidden_vars:
+            continue
         variables.append({
             "name":          var_name,
             "default_value": str(default_value),
