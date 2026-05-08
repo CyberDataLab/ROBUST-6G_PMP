@@ -1159,6 +1159,11 @@ def process_update_configuration(
     if not are_rules_fields_valid:
         return {"status": "error", "message": rules_error_msg}
 
+    if tool_name == "snort3":
+        dependency_ok, dependency_error = validate_snort3_dependency_state(collection)
+        if not dependency_ok:
+            return {"status": "error", "message": dependency_error}
+
     previous_final_rules_exists = False
     previous_final_rules_content: Optional[str] = None
     if tool_name == "snort3":

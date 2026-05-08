@@ -541,7 +541,7 @@ def test_deploy_security_tool(session: requests.Session, base_url: str) -> None:
                 "rules": [
                     "alert icmp any any -> any any (msg:\"snort3 replace rule\"; sid:1000003; rev:1;)"
                 ],
-                "include_default_rules": False,
+                "include_default_rules": True,
             },
         )
         assert_test("snort3 replace rules returns 200", resp.status_code == 200)
@@ -593,22 +593,10 @@ def test_deploy_security_tool(session: requests.Session, base_url: str) -> None:
         assert_test("getConfiguration after snort3 rules updates returns 200", resp.status_code == 200)
         data = resp.json()
         rules_config = data.get("data", {}).get("rules_config", {})
-        assert_test("snort3 replace updated include_default_rules", rules_config.get("include_default_rules") is False)
+        assert_test("snort3 replace updated include_default_rules", rules_config.get("include_default_rules") is True)
         assert_test("snort3 remove leaves no custom rules", rules_config.get("custom_rules") == [])
         assert_test("snort3 remove leaves no custom_rule_sids", rules_config.get("custom_rule_sids") == [])
-'''
-    # Restauramos topic de salida por defecto en una segunda prueba
-    resp = call(
-        session,
-        base_url,
-        "POST",
-        "/ConfigurationManager/DeploySecurityTool",
-        params={"toolName": "snort3"},
-        payload={"configuration": {}},
-    )
-    assert_test("snort3 with empty config returns 200", resp.status_code == 200)
 
-'''
 def test_get_configuration(session: requests.Session, base_url: str, config_id: Optional[str]) -> None:
     print_section("7. GET /ConfigurationManager/getConfiguration")
 

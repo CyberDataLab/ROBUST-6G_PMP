@@ -28,9 +28,7 @@ PMP is an open source, modularly designed, programmable platform for collecting,
 - Snort3
 - CICFlowMeter
 - MongoDB
-- MongoDB Configuration Manager
-- PostgreSQL GUI database
-- Redis
+- PostgreSQL
 - Prometheus
 - Logstash
 - OpenSearch
@@ -38,6 +36,7 @@ PMP is an open source, modularly designed, programmable platform for collecting,
 
 :construction: Future development
 - Grafana
+- Redis
 - InfluxDB
 - Sigma translator
 
@@ -55,9 +54,12 @@ PMP is an open source, modularly designed, programmable platform for collecting,
 ## 📋 Requirements
 
 - `Docker` 28.5.1 or higher
-- `Python3.12` or higher
-- `pnpm` to bootstrap the dashboard GUI
-- `uvicorn` plus the Python dependencies required by `APIs/ConfigurationManager` to run the Configuration Manager API locally
+- `Docker Compose` v2
+- `Python` 3.12.x
+- `Node.js` 20.20.2
+- `pnpm` 10.33.3
+- `uvicorn` 0.27.0
+- `python3.12 -m pip install -r APIs/ConfigurationManager/requirements.txt`
 
 Do not use the individual module compose files directly. PMP relies on generated environment files and launcher-managed profiles.
 

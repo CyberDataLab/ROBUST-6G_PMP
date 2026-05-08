@@ -40,6 +40,8 @@ type ConfigurableVariable = {
   name: string;
   default_value?: JsonPrimitive | null;
 };
+type EditorMode = "deploy" | "update";
+type SnortRulesAction = "" | "add" | "replace" | "remove";
 type SnortDependencyStatus =
   | "idle"
   | "checking"
@@ -50,6 +52,15 @@ type DeployPayload = {
   toolName: ToolApiName;
   configuration: JsonObject;
   rules?: string[];
+  include_default_rules?: boolean;
+};
+type UpdatePayload = {
+  toolName: ToolApiName;
+  config_id: string;
+  configuration: JsonObject;
+  rules_action?: "add" | "remove" | "replace";
+  rules?: string[];
+  rule_sids?: string[];
   include_default_rules?: boolean;
 };
 
@@ -109,10 +120,28 @@ function getErrorMessage(error: unknown, fallback: string) {
   return fallback;
 }
 
+function isBrowserTransportError(error: unknown) {
+  return (
+    typeof error === "object" &&
+    error !== null &&
+    "message" in error &&
+    typeof error.message === "string" &&
+    (error.message.includes("NetworkError when attempting to fetch resource") ||
+      error.message.includes("Failed to fetch"))
+  );
+}
+
 function parseSnortRulesInput(rulesInput: string) {
   return rulesInput
     .split(/\r?\n/)
     .map((rule) => rule.trim())
+    .filter(Boolean);
+}
+
+function parseCommaSeparatedInput(input: string) {
+  return input
+    .split(",")
+    .map((value) => value.trim())
     .filter(Boolean);
 }
 
@@ -152,6 +181,91 @@ function buildDraftConfigFromVariables(
 
     return config;
   }, {});
+}
+
+function buildDraftConfigFromResolvedEnv(
+  variables: ConfigurableVariable[],
+  resolvedEnv: Record<string, unknown>,
+): JsonObject {
+  const config = buildDraftConfigFromVariables(variables);
+
+  for (const variable of variables) {
+    if (variable.name in resolvedEnv) {
+      const value = resolvedEnv[variable.name];
+      if (
+        typeof value === "string" ||
+        typeof value === "number" ||
+        typeof value === "boolean"
+      ) {
+        config[variable.name] = value;
+      }
+    }
+  }
+
+  return config;
+}
+
+function resolvedEnvMatchesDraftConfig(
+  draftConfig: JsonObject,
+  resolvedEnv: Record<string, unknown>,
+): boolean {
+  return Object.entries(draftConfig).every(([key, value]) => {
+    if (typeof value === "object" && value !== null && !Array.isArray(value)) {
+      const nestedResolvedEnv =
+        typeof resolvedEnv[key] === "object" &&
+        resolvedEnv[key] !== null &&
+        !Array.isArray(resolvedEnv[key])
+          ? (resolvedEnv[key] as Record<string, unknown>)
+          : {};
+
+      return resolvedEnvMatchesDraftConfig(value, nestedResolvedEnv);
+    }
+
+    return String(resolvedEnv[key] ?? "") === String(value);
+  });
+}
+
+function snortRulesUpdateMatchesStoredState(
+  rulesAction: SnortRulesAction,
+  rulesInput: string,
+  ruleSidsInput: string,
+  includeDefaultRules: boolean,
+  storedRulesConfig: Record<string, unknown>,
+): boolean {
+  if (!rulesAction) {
+    return true;
+  }
+
+  const storedCustomRules = Array.isArray(storedRulesConfig.custom_rules)
+    ? storedRulesConfig.custom_rules.filter(
+        (rule): rule is string => typeof rule === "string",
+      )
+    : [];
+  const storedCustomRuleSids = Array.isArray(storedRulesConfig.custom_rule_sids)
+    ? storedRulesConfig.custom_rule_sids.filter(
+        (sid): sid is string => typeof sid === "string",
+      )
+    : [];
+  const parsedRules = parseSnortRulesInput(rulesInput);
+  const parsedRuleSids = parseCommaSeparatedInput(ruleSidsInput);
+  const storedIncludeDefaultRules =
+    typeof storedRulesConfig.include_default_rules === "boolean"
+      ? storedRulesConfig.include_default_rules
+      : true;
+
+  if (rulesAction === "add") {
+    return parsedRules.every((rule) => storedCustomRules.includes(rule));
+  }
+
+  if (rulesAction === "replace") {
+    return (
+      storedIncludeDefaultRules === includeDefaultRules &&
+      storedCustomRules.length === parsedRules.length &&
+      storedCustomRules.every((rule, index) => rule === parsedRules[index])
+    );
+  }
+
+  return parsedRuleSids.every((sid) => !storedCustomRuleSids.includes(sid));
 }
 
 // ─── KPI Card ───────────────────────────────────────────────
@@ -347,17 +461,29 @@ function MonitoringToolConfigurationBox({
   isLaunchEditorOpen,
   isLoadingConfiguration,
   configurationMessage,
+  editorMode,
+  loadedConfigId,
+  reconfigureConfigId,
   snortRulesInput,
+  snortRuleSidsInput,
   snortIncludeDefaultRules,
+  snortRulesAction,
+  currentSnortRules,
+  currentSnortRuleSids,
   snortDependencyStatus,
   snortDependencyMessage,
   onPostureChange,
   onToolChange,
   onDraftFieldChange,
+  onReconfigureConfigIdChange,
   onSnortRulesInputChange,
+  onSnortRuleSidsInputChange,
   onSnortIncludeDefaultRulesChange,
+  onSnortRulesActionChange,
   onLaunchClick,
   onReconfigureClick,
+  onLoadCurrentConfigClick,
+  onSubmitSuccess,
 }: {
   posture: string;
   selectedTool: string;
@@ -365,17 +491,29 @@ function MonitoringToolConfigurationBox({
   isLaunchEditorOpen: boolean;
   isLoadingConfiguration: boolean;
   configurationMessage: string;
+  editorMode: EditorMode;
+  loadedConfigId: string | null;
+  reconfigureConfigId: string;
   snortRulesInput: string;
+  snortRuleSidsInput: string;
   snortIncludeDefaultRules: boolean;
+  snortRulesAction: SnortRulesAction;
+  currentSnortRules: string[];
+  currentSnortRuleSids: string[];
   snortDependencyStatus: SnortDependencyStatus;
   snortDependencyMessage: string;
   onPostureChange: (posture: string) => void;
   onToolChange: (tool: string) => void;
   onDraftFieldChange: (path: string[], value: JsonPrimitive) => void;
+  onReconfigureConfigIdChange: (value: string) => void;
   onSnortRulesInputChange: (value: string) => void;
+  onSnortRuleSidsInputChange: (value: string) => void;
   onSnortIncludeDefaultRulesChange: (value: boolean) => void;
+  onSnortRulesActionChange: (value: SnortRulesAction) => void;
   onLaunchClick: () => void;
   onReconfigureClick: () => void;
+  onLoadCurrentConfigClick: () => void;
+  onSubmitSuccess: (mode: EditorMode, configId?: string) => void;
 }) {
   const toolOptionsByPosture: Record<string, string[]> = {
     "Network Security Posture": ["Tshark", "Snort"],
@@ -392,6 +530,9 @@ function MonitoringToolConfigurationBox({
   const parsedSnortRules = isSnortTool
     ? parseSnortRulesInput(snortRulesInput)
     : [];
+  const parsedSnortRuleSids = isSnortTool
+    ? parseCommaSeparatedInput(snortRuleSidsInput)
+    : [];
   const snortHasCustomRules = parsedSnortRules.length > 0;
   const deployPayload =
     draftConfig && selectedApiToolName
@@ -402,16 +543,45 @@ function MonitoringToolConfigurationBox({
           snortIncludeDefaultRules,
         )
       : null;
-  const exportedJson = deployPayload
-    ? JSON.stringify(deployPayload, null, 2)
-    : "";
+  const updatePayload =
+    draftConfig && selectedApiToolName && loadedConfigId
+      ? (() => {
+          const payload: UpdatePayload = {
+            toolName: selectedApiToolName,
+            config_id: loadedConfigId,
+            configuration: draftConfig,
+          };
+
+          if (selectedApiToolName === "snort3") {
+            if (snortRulesAction === "add") {
+              payload.rules_action = "add";
+              payload.rules = parsedSnortRules;
+            } else if (snortRulesAction === "replace") {
+              payload.rules_action = "replace";
+              payload.rules = parsedSnortRules;
+              payload.include_default_rules = snortIncludeDefaultRules;
+            } else if (snortRulesAction === "remove") {
+              payload.rules_action = "remove";
+              payload.rule_sids = parsedSnortRuleSids;
+            }
+          }
+
+          return payload;
+        })()
+      : null;
+  const submitPayload = editorMode === "update" ? updatePayload : deployPayload;
+  const exportedJson = submitPayload ? JSON.stringify(submitPayload, null, 2) : "";
   const isSnortDependencyBlocking =
     isSnortTool &&
     (snortDependencyStatus === "checking" ||
       snortDependencyStatus === "not_ready");
 
-  const handleDeploy = async () => {
-    if (!deployPayload || isDeploying || isSnortDependencyBlocking) {
+  useEffect(() => {
+    setDeployMessage("");
+  }, [editorMode, loadedConfigId, selectedTool, isLaunchEditorOpen]);
+
+  const handleSubmit = async () => {
+    if (!submitPayload || isDeploying || isSnortDependencyBlocking) {
       return;
     }
 
@@ -422,24 +592,53 @@ function MonitoringToolConfigurationBox({
       return;
     }
 
+    if (editorMode === "update" && !loadedConfigId) {
+      setDeployMessage("Load a valid config_id before sending an update.");
+      return;
+    }
+
+    if (selectedApiToolName === "snort3" && editorMode === "update") {
+      if (
+        (snortRulesAction === "add" || snortRulesAction === "replace") &&
+        parsedSnortRules.length === 0
+      ) {
+        setDeployMessage(
+          `The '${snortRulesAction}' action requires at least one Snort3 custom rule.`,
+        );
+        return;
+      }
+
+      if (snortRulesAction === "remove" && parsedSnortRuleSids.length === 0) {
+        setDeployMessage(
+          "The 'remove' action requires at least one Snort3 SID separated by commas.",
+        );
+        return;
+      }
+    }
+
     setIsDeploying(true);
     setDeployMessage("");
 
     try {
-      const response = await fetch("/api/configuration-manager/deploy", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
+      const response = await fetch(
+        editorMode === "update"
+          ? "/api/configuration-manager/update"
+          : "/api/configuration-manager/deploy",
+        {
+          method: editorMode === "update" ? "PUT" : "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify(submitPayload),
         },
-        body: JSON.stringify(deployPayload),
-      });
+      );
       const payload = await response.json().catch(() => null);
 
       if (!response.ok) {
         throw new Error(
           getErrorMessage(
             payload,
-            `Deploy failed with status ${response.status}.`,
+            `${editorMode === "update" ? "Update" : "Deploy"} failed with status ${response.status}.`,
           ),
         );
       }
@@ -453,15 +652,84 @@ function MonitoringToolConfigurationBox({
           : undefined;
 
       setDeployMessage(
-        configId
-          ? `Deploy request sent successfully. Config ID: ${configId}`
-          : "Deploy request sent successfully.",
+        editorMode === "update"
+          ? configId
+            ? `Configuration updated successfully. Config ID: ${configId}`
+            : "Configuration updated successfully."
+          : configId
+            ? `Deploy request sent successfully. Config ID: ${configId}`
+            : "Deploy request sent successfully.",
       );
+      onSubmitSuccess(editorMode, configId);
     } catch (error) {
+      if (
+        editorMode === "update" &&
+        loadedConfigId &&
+        draftConfig &&
+        isBrowserTransportError(error)
+      ) {
+        try {
+          const recoveryResponse = await fetch(
+            `/api/configuration-manager/configuration?config_id=${encodeURIComponent(loadedConfigId)}`,
+            {
+              cache: "no-store",
+            },
+          );
+          const recoveryPayload = await recoveryResponse.json().catch(() => null);
+
+          if (recoveryResponse.ok) {
+            const recoveryData =
+              recoveryPayload &&
+              typeof recoveryPayload === "object" &&
+              "data" in recoveryPayload &&
+              typeof recoveryPayload.data === "object" &&
+              recoveryPayload.data !== null
+                ? (recoveryPayload.data as Record<string, unknown>)
+                : {};
+            const recoveryResolvedEnv =
+              typeof recoveryData.resolved_env === "object" &&
+              recoveryData.resolved_env !== null
+                ? (recoveryData.resolved_env as Record<string, unknown>)
+                : {};
+            const recoveryRulesConfig =
+              typeof recoveryData.rules_config === "object" &&
+              recoveryData.rules_config !== null
+                ? (recoveryData.rules_config as Record<string, unknown>)
+                : {};
+
+            const didConfigPersist = resolvedEnvMatchesDraftConfig(
+              draftConfig,
+              recoveryResolvedEnv,
+            );
+            const didRulesPersist =
+              selectedApiToolName !== "snort3" ||
+              snortRulesUpdateMatchesStoredState(
+                snortRulesAction,
+                snortRulesInput,
+                snortRuleSidsInput,
+                snortIncludeDefaultRules,
+                recoveryRulesConfig,
+              );
+
+            if (didConfigPersist && didRulesPersist) {
+              setDeployMessage(
+                "The browser briefly lost connection before receiving the response, but the stored configuration now reflects the requested update.",
+              );
+              onSubmitSuccess(editorMode, loadedConfigId);
+              return;
+            }
+          }
+        } catch {
+          // Ignore recovery errors and fall back to the original message below.
+        }
+      }
+
       setDeployMessage(
         getErrorMessage(
           error,
-          "Deploy failed. Check if the backend services are available.",
+          editorMode === "update"
+            ? "Update failed. Check if the backend services are available."
+            : "Deploy failed. Check if the backend services are available.",
         ),
       );
     } finally {
@@ -638,28 +906,78 @@ function MonitoringToolConfigurationBox({
           <div className="rounded-lg border border-cyan-500/20 bg-slate-950/70 p-4">
             <div className="mb-3">
               <h4 className="text-sm font-semibold text-white">
-                Service Launch Configuration
+                {editorMode === "update"
+                  ? "Service Reconfiguration"
+                  : "Service Launch Configuration"}
               </h4>
               <p className="mt-1 text-xs text-gray-400">
-                Edit the form fields below. The JSON export is rebuilt from the
-                current form values.
+                {editorMode === "update"
+                  ? "Load a stored configuration by config_id and then edit it before sending updateConfiguration."
+                  : "Edit the form fields below. The JSON export is rebuilt from the current form values."}
               </p>
             </div>
+
+            {editorMode === "update" && !draftConfig && (
+              <div className="space-y-4">
+                <div className="space-y-2">
+                  <label
+                    htmlFor="reconfigure-config-id"
+                    className="block text-xs font-medium uppercase tracking-[0.2em] text-cyan-300"
+                  >
+                    Config ID
+                  </label>
+                  <input
+                    id="reconfigure-config-id"
+                    type="text"
+                    value={reconfigureConfigId}
+                    onChange={(event) =>
+                      onReconfigureConfigIdChange(event.target.value)
+                    }
+                    placeholder="Paste the config_id returned by deploy"
+                    className="w-full rounded-lg border border-cyan-500/30 bg-white px-4 py-3 text-sm text-black outline-none transition-all focus:border-cyan-400 focus:ring-2 focus:ring-cyan-500/20"
+                  />
+                </div>
+                <button
+                  type="button"
+                  onClick={onLoadCurrentConfigClick}
+                  disabled={isLoadingConfiguration}
+                  className="rounded-lg bg-amber-400 px-4 py-3 text-sm font-semibold text-slate-950 transition-colors hover:bg-amber-300 disabled:cursor-not-allowed disabled:bg-gray-700 disabled:text-gray-400"
+                >
+                  {isLoadingConfiguration
+                    ? "Loading Current Configuration..."
+                    : "Load Current Configuration"}
+                </button>
+              </div>
+            )}
+
             {draftConfig && (
               <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
                 <div className="space-y-3">
+                  {editorMode === "update" && loadedConfigId && (
+                    <div className="rounded-lg border border-cyan-500/20 bg-cyan-500/5 p-4">
+                      <p className="text-xs font-medium uppercase tracking-[0.2em] text-cyan-300">
+                        Loaded Config ID
+                      </p>
+                      <p className="mt-2 break-all font-mono text-sm text-white">
+                        {loadedConfigId}
+                      </p>
+                    </div>
+                  )}
+
                   {renderJsonFields(draftConfig)}
 
                   {isSnortTool && (
                     <div className="rounded-lg border border-amber-500/20 bg-amber-500/5 p-4">
                       <div className="mb-3">
                         <h5 className="text-sm font-semibold text-white">
-                          Snort3 Custom Rules
+                          {editorMode === "update"
+                            ? "Snort3 Rules Update"
+                            : "Snort3 Custom Rules"}
                         </h5>
                         <p className="mt-1 text-xs text-gray-400">
-                          Paste one Snort3 rule per line. The Configuration
-                          Manager validator will reject invalid rules and the GUI
-                          will surface that error message.
+                          {editorMode === "update"
+                            ? "Current rules are shown below. Select an action only if you want to change the Snort3 rules contract."
+                            : "Paste one Snort3 rule per line. The Configuration Manager validator will reject invalid rules and the GUI will surface that error message."}
                         </p>
                       </div>
 
@@ -678,82 +996,213 @@ function MonitoringToolConfigurationBox({
                           "Checking whether tshark has already been deployed..."}
                       </div>
 
-                      <label className="mb-3 flex items-start gap-3 rounded-lg border border-cyan-500/20 bg-[#08101d] p-3">
-                        <input
-                          type="checkbox"
-                          checked={
-                            snortHasCustomRules
-                              ? snortIncludeDefaultRules
-                              : true
-                          }
-                          disabled={!snortHasCustomRules}
-                          onChange={(event) =>
-                            onSnortIncludeDefaultRulesChange(
-                              event.target.checked,
-                            )
-                          }
-                          className="mt-1 h-4 w-4 rounded border-gray-600"
-                        />
-                        <div>
-                          <p className="text-sm font-medium text-white">
-                            Include default/community Snort3 rules
-                          </p>
-                          <p className="mt-1 text-xs text-gray-400">
-                            {snortHasCustomRules
-                              ? "Checked: deploy custom rules together with the default rules set."
-                              : "When no custom rules are provided, Snort3 deploys with the default rules set only."}
-                          </p>
-                        </div>
-                      </label>
+                      {editorMode === "update" ? (
+                        <div className="space-y-4">
+                          <div className="rounded-lg border border-gray-800 bg-[#08101d] p-4">
+                            <p className="text-xs font-medium uppercase tracking-[0.2em] text-cyan-300">
+                              Current custom rules
+                            </p>
+                            <pre className="mt-3 max-h-48 overflow-auto whitespace-pre-wrap rounded-lg border border-gray-800 bg-[#0b1120] px-4 py-3 font-mono text-sm text-white">
+                              {currentSnortRules.length > 0
+                                ? currentSnortRules.join("\n")
+                                : "No current custom Snort3 rules."}
+                            </pre>
+                            <p className="mt-3 text-xs text-gray-400">
+                              Current SIDs:{" "}
+                              {currentSnortRuleSids.length > 0
+                                ? currentSnortRuleSids.join(", ")
+                                : "none"}
+                            </p>
+                          </div>
 
-                      <div className="space-y-2">
-                        <label
-                          htmlFor="snort3-rules-input"
-                          className="block text-xs font-medium uppercase tracking-[0.2em] text-cyan-300"
-                        >
-                          Custom rules
-                        </label>
-                        <textarea
-                          id="snort3-rules-input"
-                          value={snortRulesInput}
-                          onChange={(event) =>
-                            onSnortRulesInputChange(event.target.value)
-                          }
-                          placeholder='alert tcp any any -> any any (msg:"snort3 test rule"; sid:1000001; rev:1;)'
-                          spellCheck={false}
-                          rows={8}
-                          className="w-full rounded-lg border border-cyan-500/30 bg-white px-4 py-3 font-mono text-sm text-black outline-none transition-all focus:border-cyan-400 focus:ring-2 focus:ring-cyan-500/20"
-                        />
-                        <div className="flex items-center justify-between text-xs text-gray-400">
-                          <span>One rule per line.</span>
-                          <span>
-                            {snortHasCustomRules
-                              ? `${parsedSnortRules.length} custom rule${parsedSnortRules.length === 1 ? "" : "s"} ready`
-                              : "Default-rules-only deploy"}
-                          </span>
+                          <div className="space-y-2">
+                            <label
+                              htmlFor="snort3-rules-action"
+                              className="block text-xs font-medium uppercase tracking-[0.2em] text-cyan-300"
+                            >
+                              Rules action
+                            </label>
+                            <select
+                              id="snort3-rules-action"
+                              value={snortRulesAction}
+                              onChange={(event) =>
+                                onSnortRulesActionChange(
+                                  event.target.value as SnortRulesAction,
+                                )
+                              }
+                              className="w-full rounded-lg border border-cyan-500/30 bg-white px-4 py-3 text-sm text-black outline-none transition-all focus:border-cyan-400 focus:ring-2 focus:ring-cyan-500/20"
+                            >
+                              <option value="">Do not change rules</option>
+                              <option value="add">add</option>
+                              <option value="replace">replace</option>
+                              <option value="remove">remove</option>
+                            </select>
+                          </div>
+
+                          {(snortRulesAction === "add" ||
+                            snortRulesAction === "replace") && (
+                            <div className="space-y-2">
+                              <label
+                                htmlFor="snort3-rules-input"
+                                className="block text-xs font-medium uppercase tracking-[0.2em] text-cyan-300"
+                              >
+                                New custom rules
+                              </label>
+                              <textarea
+                                id="snort3-rules-input"
+                                value={snortRulesInput}
+                                onChange={(event) =>
+                                  onSnortRulesInputChange(event.target.value)
+                                }
+                                placeholder='alert tcp any any -> any any (msg:"snort3 test rule"; sid:1000001; rev:1;)'
+                                spellCheck={false}
+                                rows={8}
+                                className="w-full rounded-lg border border-cyan-500/30 bg-white px-4 py-3 font-mono text-sm text-black outline-none transition-all focus:border-cyan-400 focus:ring-2 focus:ring-cyan-500/20"
+                              />
+                              <p className="text-xs text-gray-400">
+                                Write one rule per line. The '{snortRulesAction}'
+                                action requires at least one rule.
+                              </p>
+                            </div>
+                          )}
+
+                          {snortRulesAction === "replace" && (
+                            <label className="flex items-start gap-3 rounded-lg border border-cyan-500/20 bg-[#08101d] p-3">
+                              <input
+                                type="checkbox"
+                                checked={snortIncludeDefaultRules}
+                                onChange={(event) =>
+                                  onSnortIncludeDefaultRulesChange(
+                                    event.target.checked,
+                                  )
+                                }
+                                className="mt-1 h-4 w-4 rounded border-gray-600"
+                              />
+                              <div>
+                                <p className="text-sm font-medium text-white">
+                                  Include default/community Snort3 rules
+                                </p>
+                                <p className="mt-1 text-xs text-gray-400">
+                                  This flag is applied only with the 'replace'
+                                  action.
+                                </p>
+                              </div>
+                            </label>
+                          )}
+
+                          {snortRulesAction === "remove" && (
+                            <div className="space-y-2">
+                              <label
+                                htmlFor="snort3-rule-sids-input"
+                                className="block text-xs font-medium uppercase tracking-[0.2em] text-cyan-300"
+                              >
+                                Rule SIDs to remove
+                              </label>
+                              <input
+                                id="snort3-rule-sids-input"
+                                type="text"
+                                value={snortRuleSidsInput}
+                                onChange={(event) =>
+                                  onSnortRuleSidsInputChange(
+                                    event.target.value,
+                                  )
+                                }
+                                placeholder="1000001, 1000002"
+                                className="w-full rounded-lg border border-cyan-500/30 bg-white px-4 py-3 font-mono text-sm text-black outline-none transition-all focus:border-cyan-400 focus:ring-2 focus:ring-cyan-500/20"
+                              />
+                              <p className="text-xs text-gray-400">
+                                Enter one or more current SIDs separated by
+                                commas.
+                              </p>
+                            </div>
+                          )}
                         </div>
-                      </div>
+                      ) : (
+                        <div className="space-y-4">
+                          <label className="flex items-start gap-3 rounded-lg border border-cyan-500/20 bg-[#08101d] p-3">
+                            <input
+                              type="checkbox"
+                              checked={
+                                snortHasCustomRules
+                                  ? snortIncludeDefaultRules
+                                  : true
+                              }
+                              disabled={!snortHasCustomRules}
+                              onChange={(event) =>
+                                onSnortIncludeDefaultRulesChange(
+                                  event.target.checked,
+                                )
+                              }
+                              className="mt-1 h-4 w-4 rounded border-gray-600"
+                            />
+                            <div>
+                              <p className="text-sm font-medium text-white">
+                                Include default/community Snort3 rules
+                              </p>
+                              <p className="mt-1 text-xs text-gray-400">
+                                {snortHasCustomRules
+                                  ? "Checked: deploy custom rules together with the default rules set."
+                                  : "When no custom rules are provided, Snort3 deploys with the default rules set only."}
+                              </p>
+                            </div>
+                          </label>
+
+                          <div className="space-y-2">
+                            <label
+                              htmlFor="snort3-rules-input"
+                              className="block text-xs font-medium uppercase tracking-[0.2em] text-cyan-300"
+                            >
+                              Custom rules
+                            </label>
+                            <textarea
+                              id="snort3-rules-input"
+                              value={snortRulesInput}
+                              onChange={(event) =>
+                                onSnortRulesInputChange(event.target.value)
+                              }
+                              placeholder='alert tcp any any -> any any (msg:"snort3 test rule"; sid:1000001; rev:1;)'
+                              spellCheck={false}
+                              rows={8}
+                              className="w-full rounded-lg border border-cyan-500/30 bg-white px-4 py-3 font-mono text-sm text-black outline-none transition-all focus:border-cyan-400 focus:ring-2 focus:ring-cyan-500/20"
+                            />
+                            <div className="flex items-center justify-between text-xs text-gray-400">
+                              <span>One rule per line.</span>
+                              <span>
+                                {snortHasCustomRules
+                                  ? `${parsedSnortRules.length} custom rule${parsedSnortRules.length === 1 ? "" : "s"} ready`
+                                  : "Default-rules-only deploy"}
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+                      )}
                     </div>
                   )}
                 </div>
                 <div className="space-y-2">
                   <label className="block text-xs font-medium uppercase tracking-[0.2em] text-cyan-300">
-                    Deploy Payload JSON
+                    {editorMode === "update" ? "Update Payload JSON" : "Deploy Payload JSON"}
                   </label>
                   <pre className="min-h-[360px] overflow-x-auto rounded-lg border border-cyan-500/30 bg-[#0b1120] px-4 py-3 font-mono text-sm text-white">
                     {exportedJson}
                   </pre>
                   <button
                     type="button"
-                    onClick={handleDeploy}
-                    disabled={!deployPayload || isDeploying || isSnortDependencyBlocking}
+                    onClick={handleSubmit}
+                    disabled={!submitPayload || isDeploying || isSnortDependencyBlocking}
                     className="w-full rounded-lg bg-emerald-500 px-4 py-3 text-sm font-semibold text-slate-950 transition-colors hover:bg-emerald-400 disabled:cursor-not-allowed disabled:bg-gray-700 disabled:text-gray-400"
                   >
-                    {isDeploying ? "Deploying..." : "Deploy"}
+                    {isDeploying
+                      ? editorMode === "update"
+                        ? "Updating..."
+                        : "Deploying..."
+                      : editorMode === "update"
+                        ? "Update Configuration"
+                        : "Deploy"}
                   </button>
                   {isSnortDependencyBlocking && (
                     <p className="text-xs text-amber-300">
-                      Deploy is blocked until tshark is deployed and its topic
+                      {editorMode === "update" ? "Update" : "Deploy"} is blocked until tshark is deployed and its topic
                       is available to Snort3.
                     </p>
                   )}
@@ -782,17 +1231,34 @@ function AdminDashboard() {
   const [draftConfig, setDraftConfig] = useState<JsonObject | null>(null);
   const [isLoadingConfiguration, setIsLoadingConfiguration] = useState(false);
   const [configurationMessage, setConfigurationMessage] = useState("");
+  const [editorMode, setEditorMode] = useState<EditorMode>("deploy");
+  const [reconfigureConfigId, setReconfigureConfigId] = useState("");
+  const [loadedConfigId, setLoadedConfigId] = useState<string | null>(null);
   const [snortRulesInput, setSnortRulesInput] = useState("");
+  const [snortRuleSidsInput, setSnortRuleSidsInput] = useState("");
   const [snortIncludeDefaultRules, setSnortIncludeDefaultRules] = useState(true);
+  const [snortRulesAction, setSnortRulesAction] = useState<SnortRulesAction>("");
+  const [currentSnortRules, setCurrentSnortRules] = useState<string[]>([]);
+  const [currentSnortRuleSids, setCurrentSnortRuleSids] = useState<string[]>([]);
   const [snortDependencyStatus, setSnortDependencyStatus] =
     useState<SnortDependencyStatus>("idle");
   const [snortDependencyMessage, setSnortDependencyMessage] = useState("");
 
   const resetSnortFormState = () => {
     setSnortRulesInput("");
+    setSnortRuleSidsInput("");
     setSnortIncludeDefaultRules(true);
+    setSnortRulesAction("");
+    setCurrentSnortRules([]);
+    setCurrentSnortRuleSids([]);
     setSnortDependencyStatus("idle");
     setSnortDependencyMessage("");
+  };
+
+  const resetEditorState = () => {
+    setEditorMode("deploy");
+    setReconfigureConfigId("");
+    setLoadedConfigId(null);
   };
 
   const loadSnortDependencyStatus = async () => {
@@ -879,7 +1345,7 @@ function AdminDashboard() {
     };
   };
 
-  const loadToolConfiguration = async () => {
+  const loadToolDefaultConfiguration = async () => {
     const apiToolName = getApiToolName(selectedMonitoringTool);
 
     if (!apiToolName) {
@@ -888,11 +1354,16 @@ function AdminDashboard() {
       setConfigurationMessage(
         "This proof of concept is currently wired for Tshark and Snort only.",
       );
+      resetEditorState();
       return;
     }
 
     setIsLoadingConfiguration(true);
     setConfigurationMessage("");
+    setEditorMode("deploy");
+    setReconfigureConfigId("");
+    setLoadedConfigId(null);
+    resetSnortFormState();
 
     if (apiToolName === "snort3") {
       setSnortDependencyStatus("checking");
@@ -948,10 +1419,203 @@ function AdminDashboard() {
     } catch (error) {
       setDraftConfig(null);
       setIsLaunchEditorOpen(false);
+      resetEditorState();
       setConfigurationMessage(
         getErrorMessage(
           error,
           `Failed to load configuration for ${selectedMonitoringTool}.`,
+        ),
+      );
+    } finally {
+      setIsLoadingConfiguration(false);
+    }
+  };
+
+  const startReconfigureFlow = () => {
+    const apiToolName = getApiToolName(selectedMonitoringTool);
+
+    if (!apiToolName) {
+      setDraftConfig(null);
+      setIsLaunchEditorOpen(false);
+      setConfigurationMessage(
+        "This proof of concept is currently wired for Tshark and Snort only.",
+      );
+      resetEditorState();
+      return;
+    }
+
+    setEditorMode("update");
+    setIsLaunchEditorOpen(true);
+    setDraftConfig(null);
+    setReconfigureConfigId("");
+    setLoadedConfigId(null);
+    resetSnortFormState();
+    setConfigurationMessage(
+      "Enter a config_id returned by deploy, then load the stored configuration before editing it.",
+    );
+  };
+
+  const loadCurrentToolConfigurationById = async (configIdOverride?: string) => {
+    const apiToolName = getApiToolName(selectedMonitoringTool);
+    const requestedConfigId = (configIdOverride ?? reconfigureConfigId).trim();
+
+    if (!apiToolName) {
+      setDraftConfig(null);
+      setIsLaunchEditorOpen(false);
+      setConfigurationMessage(
+        "This proof of concept is currently wired for Tshark and Snort only.",
+      );
+      resetEditorState();
+      return;
+    }
+
+    if (!requestedConfigId) {
+      setConfigurationMessage(
+        "Enter the config_id returned by deploy before loading the stored configuration.",
+      );
+      setDraftConfig(null);
+      setLoadedConfigId(null);
+      return;
+    }
+
+    setIsLoadingConfiguration(true);
+    setConfigurationMessage("");
+    setDraftConfig(null);
+    setLoadedConfigId(null);
+    resetSnortFormState();
+
+    try {
+      const [optionsResponse, configurationResponse] = await Promise.all([
+        fetch(
+          `/api/configuration-manager/options?toolName=${encodeURIComponent(apiToolName)}`,
+          {
+            cache: "no-store",
+          },
+        ),
+        fetch(
+          `/api/configuration-manager/configuration?config_id=${encodeURIComponent(requestedConfigId)}`,
+          {
+            cache: "no-store",
+          },
+        ),
+      ]);
+
+      const [optionsPayload, configurationPayload] = await Promise.all([
+        optionsResponse.json().catch(() => null),
+        configurationResponse.json().catch(() => null),
+      ]);
+
+      if (!optionsResponse.ok) {
+        throw new Error(
+          getErrorMessage(
+            optionsPayload,
+            `Failed to load configuration schema for ${selectedMonitoringTool}.`,
+          ),
+        );
+      }
+
+      if (!configurationResponse.ok) {
+        throw new Error(
+          getErrorMessage(
+            configurationPayload,
+            `Failed to load the stored configuration for config_id '${requestedConfigId}'.`,
+          ),
+        );
+      }
+
+      const configurableVariables =
+        optionsPayload &&
+        typeof optionsPayload === "object" &&
+        "configurable_variables" in optionsPayload &&
+        Array.isArray(optionsPayload.configurable_variables)
+          ? (optionsPayload.configurable_variables as ConfigurableVariable[])
+          : [];
+
+      if (configurableVariables.length === 0) {
+        throw new Error(
+          `Configuration Manager returned no configurable variables for ${selectedMonitoringTool}.`,
+        );
+      }
+
+      const configurationData =
+        configurationPayload &&
+        typeof configurationPayload === "object" &&
+        "data" in configurationPayload &&
+        typeof configurationPayload.data === "object" &&
+        configurationPayload.data !== null
+          ? (configurationPayload.data as Record<string, unknown>)
+          : {};
+      const storedToolName =
+        typeof configurationData.tool_name === "string"
+          ? configurationData.tool_name
+          : "";
+
+      if (storedToolName && storedToolName !== apiToolName) {
+        throw new Error(
+          `Config ID '${requestedConfigId}' belongs to '${storedToolName}', not '${apiToolName}'.`,
+        );
+      }
+
+      const loadedConfigIdValue =
+        configurationPayload &&
+        typeof configurationPayload === "object" &&
+        "config_id" in configurationPayload &&
+        typeof configurationPayload.config_id === "string"
+          ? configurationPayload.config_id
+          : requestedConfigId;
+      const resolvedEnv =
+        typeof configurationData.resolved_env === "object" &&
+        configurationData.resolved_env !== null
+          ? (configurationData.resolved_env as Record<string, unknown>)
+          : {};
+
+      setDraftConfig(
+        buildDraftConfigFromResolvedEnv(configurableVariables, resolvedEnv),
+      );
+      setIsLaunchEditorOpen(true);
+      setEditorMode("update");
+      setLoadedConfigId(loadedConfigIdValue);
+      setReconfigureConfigId(loadedConfigIdValue);
+      setConfigurationMessage(
+        `Loaded stored configuration for ${selectedMonitoringTool}. Config ID: ${loadedConfigIdValue}`,
+      );
+
+      if (apiToolName === "snort3") {
+        const rulesConfig =
+          typeof configurationData.rules_config === "object" &&
+          configurationData.rules_config !== null
+            ? (configurationData.rules_config as Record<string, unknown>)
+            : {};
+        const customRules = Array.isArray(rulesConfig.custom_rules)
+          ? rulesConfig.custom_rules.filter(
+              (rule): rule is string => typeof rule === "string",
+            )
+          : [];
+        const customRuleSids = Array.isArray(rulesConfig.custom_rule_sids)
+          ? rulesConfig.custom_rule_sids.filter(
+              (sid): sid is string => typeof sid === "string",
+            )
+          : [];
+        const includeDefaultRules =
+          typeof rulesConfig.include_default_rules === "boolean"
+            ? rulesConfig.include_default_rules
+            : true;
+
+        setCurrentSnortRules(customRules);
+        setCurrentSnortRuleSids(customRuleSids);
+        setSnortIncludeDefaultRules(includeDefaultRules);
+        setSnortRulesAction("");
+        setSnortRulesInput("");
+        setSnortRuleSidsInput("");
+        await loadSnortDependencyStatus();
+      }
+    } catch (error) {
+      setDraftConfig(null);
+      setLoadedConfigId(null);
+      setConfigurationMessage(
+        getErrorMessage(
+          error,
+          `Failed to load the stored configuration for ${selectedMonitoringTool}.`,
         ),
       );
     } finally {
@@ -1089,6 +1753,7 @@ function AdminDashboard() {
             setIsLaunchEditorOpen(false);
             setDraftConfig(null);
             setConfigurationMessage("");
+            resetEditorState();
             resetSnortFormState();
           }}
           onToolChange={(nextTool) => {
@@ -1096,6 +1761,7 @@ function AdminDashboard() {
             setIsLaunchEditorOpen(false);
             setDraftConfig(null);
             setConfigurationMessage("");
+            resetEditorState();
             resetSnortFormState();
           }}
           onDraftFieldChange={(path, value) => {
@@ -1107,17 +1773,37 @@ function AdminDashboard() {
               return updateDraftConfigValue(currentConfig, path, value);
             });
           }}
+          editorMode={editorMode}
+          loadedConfigId={loadedConfigId}
+          reconfigureConfigId={reconfigureConfigId}
           snortRulesInput={snortRulesInput}
+          snortRuleSidsInput={snortRuleSidsInput}
           snortIncludeDefaultRules={snortIncludeDefaultRules}
+          snortRulesAction={snortRulesAction}
+          currentSnortRules={currentSnortRules}
+          currentSnortRuleSids={currentSnortRuleSids}
           snortDependencyStatus={snortDependencyStatus}
           snortDependencyMessage={snortDependencyMessage}
+          onReconfigureConfigIdChange={setReconfigureConfigId}
           onSnortRulesInputChange={setSnortRulesInput}
+          onSnortRuleSidsInputChange={setSnortRuleSidsInput}
           onSnortIncludeDefaultRulesChange={setSnortIncludeDefaultRules}
+          onSnortRulesActionChange={setSnortRulesAction}
           onLaunchClick={() => {
-            void loadToolConfiguration();
+            void loadToolDefaultConfiguration();
           }}
           onReconfigureClick={() => {
-            void loadToolConfiguration();
+            startReconfigureFlow();
+          }}
+          onLoadCurrentConfigClick={() => {
+            void loadCurrentToolConfigurationById();
+          }}
+          onSubmitSuccess={(mode, configId) => {
+            if (mode === "update") {
+              void loadCurrentToolConfigurationById(
+                configId ?? loadedConfigId ?? undefined,
+              );
+            }
           }}
         />
       </div>
