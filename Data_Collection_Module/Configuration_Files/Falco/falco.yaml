@@ -16,7 +16,9 @@ append_output:
   - extra_fields:
       - machine_id: "${MACHINE_ID}"
 
-rules_file: /etc/falco_rules.yaml
+rules_files: 
+  - /etc/Falco/falco_community_rules.yaml
+  - /etc/Falco/falco_rules.yaml
 
 #Used by the falco_exporter
 grpc:
