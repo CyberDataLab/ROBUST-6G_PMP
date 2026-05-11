@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
-
-const SUPPORTED_TOOLS = new Set(["tshark", "snort3"]);
+import {
+  isSupportedToolName,
+  SUPPORTED_TOOLS_MESSAGE,
+} from "../toolSupport";
 
 function getBackendBaseUrl() {
   return process.env.EXTERNAL_API_BASE_URL?.replace(/\/$/, "");
@@ -75,11 +77,11 @@ export async function PUT(request: Request) {
     );
   }
 
-  if (!SUPPORTED_TOOLS.has(toolName)) {
+  if (!isSupportedToolName(toolName)) {
     return NextResponse.json(
       {
         status: "error",
-        message: "This proof of concept currently supports tshark and snort3.",
+        message: SUPPORTED_TOOLS_MESSAGE,
       },
       { status: 400 },
     );

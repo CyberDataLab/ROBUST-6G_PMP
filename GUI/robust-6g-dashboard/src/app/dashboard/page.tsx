@@ -35,7 +35,13 @@ type JsonValue = JsonPrimitive | JsonObject;
 type JsonObject = {
   [key: string]: JsonValue;
 };
-type ToolApiName = "tshark" | "snort3";
+type ToolApiName =
+  | "tshark"
+  | "flow_module"
+  | "telegraf"
+  | "fluentd"
+  | "falco"
+  | "snort3";
 type ConfigurableVariable = {
   name: string;
   default_value?: JsonPrimitive | null;
@@ -66,7 +72,20 @@ type UpdatePayload = {
 
 const TOOL_NAME_TO_API_NAME: Record<string, ToolApiName | undefined> = {
   Tshark: "tshark",
+  Flow: "flow_module",
+  Telegraf: "telegraf",
+  Fluentd: "fluentd",
+  Falco: "falco",
   Snort: "snort3",
+};
+
+const SUPPORTED_TOOLS_MESSAGE =
+  "This proof of concept currently supports Tshark, Snort, Flow, Telegraf, Fluentd, and Falco.";
+
+const TOOL_OPTIONS_BY_POSTURE: Record<string, string[]> = {
+  "Network Security Posture": ["Tshark", "Snort", "Flow"],
+  "Infrastructure Security Posture": ["Telegraf"],
+  "Service Security Posture": ["Fluentd", "Falco"],
 };
 
 function formatJsonLabel(key: string) {
@@ -515,13 +534,7 @@ function MonitoringToolConfigurationBox({
   onLoadCurrentConfigClick: () => void;
   onSubmitSuccess: (mode: EditorMode, configId?: string) => void;
 }) {
-  const toolOptionsByPosture: Record<string, string[]> = {
-    "Network Security Posture": ["Tshark", "Snort"],
-    "Application Security Posture": ["Falco", "Fluentd"],
-    "Service Security Posture": ["Falco", "Telegraf"],
-  };
-
-  const availableTools = toolOptionsByPosture[posture] ?? [];
+  const availableTools = TOOL_OPTIONS_BY_POSTURE[posture] ?? [];
   const [isDeploying, setIsDeploying] = useState(false);
   const [deployMessage, setDeployMessage] = useState("");
   const selectedApiToolName = getApiToolName(selectedTool);
@@ -586,9 +599,7 @@ function MonitoringToolConfigurationBox({
     }
 
     if (!selectedApiToolName) {
-      setDeployMessage(
-        "This proof of concept is currently wired for Tshark and Snort only.",
-      );
+      setDeployMessage(SUPPORTED_TOOLS_MESSAGE);
       return;
     }
 
@@ -824,7 +835,7 @@ function MonitoringToolConfigurationBox({
               onChange={(event) => onPostureChange(event.target.value)}
               className="w-full appearance-none rounded-lg border border-gray-800 bg-gray-950/50 px-4 py-3 pr-10 text-sm font-medium text-black outline-none transition-all hover:border-gray-700 focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500/20"
             >
-              {Object.keys(toolOptionsByPosture).map((option) => (
+              {Object.keys(TOOL_OPTIONS_BY_POSTURE).map((option) => (
                 <option key={option} value={option} className="bg-gray-950">
                   {option}
                 </option>
@@ -887,7 +898,7 @@ function MonitoringToolConfigurationBox({
             </div>
             {!isSupportedInPoc && (
               <p className="mt-3 text-xs text-amber-300">
-                This proof of concept is currently wired for Tshark and Snort.
+                {SUPPORTED_TOOLS_MESSAGE}
               </p>
             )}
             {configurationMessage && (
@@ -1351,9 +1362,7 @@ function AdminDashboard() {
     if (!apiToolName) {
       setDraftConfig(null);
       setIsLaunchEditorOpen(false);
-      setConfigurationMessage(
-        "This proof of concept is currently wired for Tshark and Snort only.",
-      );
+      setConfigurationMessage(SUPPORTED_TOOLS_MESSAGE);
       resetEditorState();
       return;
     }
@@ -1437,9 +1446,7 @@ function AdminDashboard() {
     if (!apiToolName) {
       setDraftConfig(null);
       setIsLaunchEditorOpen(false);
-      setConfigurationMessage(
-        "This proof of concept is currently wired for Tshark and Snort only.",
-      );
+      setConfigurationMessage(SUPPORTED_TOOLS_MESSAGE);
       resetEditorState();
       return;
     }
@@ -1462,9 +1469,7 @@ function AdminDashboard() {
     if (!apiToolName) {
       setDraftConfig(null);
       setIsLaunchEditorOpen(false);
-      setConfigurationMessage(
-        "This proof of concept is currently wired for Tshark and Snort only.",
-      );
+      setConfigurationMessage(SUPPORTED_TOOLS_MESSAGE);
       resetEditorState();
       return;
     }

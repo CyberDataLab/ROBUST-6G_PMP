@@ -1,11 +1,9 @@
 import { NextResponse } from "next/server";
-
-const TOOL_DEPLOY_ENDPOINTS = {
-  tshark: "DeployNetworkTool",
-  snort3: "DeploySecurityTool",
-} as const;
-
-type SupportedToolName = keyof typeof TOOL_DEPLOY_ENDPOINTS;
+import {
+  isSupportedToolName,
+  SUPPORTED_TOOLS_MESSAGE,
+  TOOL_DEPLOY_ENDPOINTS,
+} from "../toolSupport";
 
 function getBackendBaseUrl() {
   return process.env.EXTERNAL_API_BASE_URL?.replace(/\/$/, "");
@@ -58,10 +56,6 @@ function isPlainObject(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-function isSupportedToolName(toolName: string): toolName is SupportedToolName {
-  return toolName in TOOL_DEPLOY_ENDPOINTS;
-}
-
 export async function POST(request: Request) {
   const body = await request.json().catch(() => null);
 
@@ -86,7 +80,7 @@ export async function POST(request: Request) {
     return NextResponse.json(
       {
         status: "error",
-        message: "This proof of concept currently supports tshark and snort3.",
+        message: SUPPORTED_TOOLS_MESSAGE,
       },
       { status: 400 },
     );
