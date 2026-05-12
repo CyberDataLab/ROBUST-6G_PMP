@@ -1,6 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 
-const SUPPORTED_TOOLS = new Set(["snort3"]);
+const SUPPORTED_TOOLS = new Set(["snort3", "flow_module"]);
+
+function getToolDisplayName(toolName: string): string {
+  return toolName === "snort3" ? "Snort3" : toolName === "flow_module" ? "Flow" : toolName;
+}
 
 function getBackendBaseUrl() {
   return process.env.EXTERNAL_API_BASE_URL?.replace(/\/$/, "");
@@ -200,12 +204,12 @@ export async function GET(request: NextRequest) {
     const tsharkTopic = topics.TSHARK_BASE_TOPIC?.trim();
     const dependencyReady = Boolean(tsharkTopic) && tsharkActive;
 
-    let message = "Tshark is not active. Deploy tshark first.";
+    let message = `${getToolDisplayName(toolName)} is not active. Deploy tshark first.`;
     if (tsharkActive && tsharkTopic) {
-      message = `Detected active tshark with topic "${tsharkTopic}". Snort3 can use it as input.`;
+      message = `Detected active tshark with topic "${tsharkTopic}". ${getToolDisplayName(toolName)} can use it as input.`;
     } else if (tsharkActive) {
       message =
-        "Tshark is active, but its topic is not available in MongoDB CM yet.";
+        `Tshark is active, but its topic is not available in MongoDB CM yet.`;
     } else if (tsharkTopic) {
       message =
         `MongoDB CM still stores tshark topic "${tsharkTopic}", but the tshark container is not active. Deploy tshark first.`;

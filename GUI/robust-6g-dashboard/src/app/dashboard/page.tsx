@@ -48,7 +48,7 @@ type ConfigurableVariable = {
 };
 type EditorMode = "deploy" | "update";
 type SnortRulesAction = "" | "add" | "replace" | "remove";
-type SnortDependencyStatus =
+type ToolDependencyStatus =
   | "idle"
   | "checking"
   | "ready"
@@ -489,8 +489,8 @@ function MonitoringToolConfigurationBox({
   snortRulesAction,
   currentSnortRules,
   currentSnortRuleSids,
-  snortDependencyStatus,
-  snortDependencyMessage,
+  toolDependencyStatus,
+  toolDependencyMessage,
   onPostureChange,
   onToolChange,
   onDraftFieldChange,
@@ -519,8 +519,8 @@ function MonitoringToolConfigurationBox({
   snortRulesAction: SnortRulesAction;
   currentSnortRules: string[];
   currentSnortRuleSids: string[];
-  snortDependencyStatus: SnortDependencyStatus;
-  snortDependencyMessage: string;
+  toolDependencyStatus: ToolDependencyStatus;
+  toolDependencyMessage: string;
   onPostureChange: (posture: string) => void;
   onToolChange: (tool: string) => void;
   onDraftFieldChange: (path: string[], value: JsonPrimitive) => void;
@@ -539,6 +539,7 @@ function MonitoringToolConfigurationBox({
   const [deployMessage, setDeployMessage] = useState("");
   const selectedApiToolName = getApiToolName(selectedTool);
   const isSupportedInPoc = Boolean(selectedApiToolName);
+  const isToolWithDependency = selectedApiToolName === "snort3" || selectedApiToolName === "flow_module";
   const isSnortTool = selectedApiToolName === "snort3";
   const parsedSnortRules = isSnortTool
     ? parseSnortRulesInput(snortRulesInput)
@@ -584,17 +585,17 @@ function MonitoringToolConfigurationBox({
       : null;
   const submitPayload = editorMode === "update" ? updatePayload : deployPayload;
   const exportedJson = submitPayload ? JSON.stringify(submitPayload, null, 2) : "";
-  const isSnortDependencyBlocking =
-    isSnortTool &&
-    (snortDependencyStatus === "checking" ||
-      snortDependencyStatus === "not_ready");
+  const isToolDependencyBlocking =
+    isToolWithDependency &&
+    (toolDependencyStatus === "checking" ||
+      toolDependencyStatus === "not_ready");
 
   useEffect(() => {
     setDeployMessage("");
   }, [editorMode, loadedConfigId, selectedTool, isLaunchEditorOpen]);
 
   const handleSubmit = async () => {
-    if (!submitPayload || isDeploying || isSnortDependencyBlocking) {
+    if (!submitPayload || isDeploying || isToolDependencyBlocking) {
       return;
     }
 
@@ -994,16 +995,16 @@ function MonitoringToolConfigurationBox({
 
                       <div
                         className={`mb-4 rounded-lg border px-3 py-2 text-xs ${
-                          snortDependencyStatus === "ready"
+                          toolDependencyStatus === "ready"
                             ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-200"
-                            : snortDependencyStatus === "not_ready"
+                            : toolDependencyStatus === "not_ready"
                               ? "border-amber-500/30 bg-amber-500/10 text-amber-200"
-                              : snortDependencyStatus === "error"
+                              : toolDependencyStatus === "error"
                                 ? "border-red-500/30 bg-red-500/10 text-red-200"
                                 : "border-cyan-500/30 bg-cyan-500/10 text-cyan-200"
                         }`}
                       >
-                        {snortDependencyMessage ||
+                        {toolDependencyMessage ||
                           "Checking whether tshark has already been deployed..."}
                       </div>
 
@@ -1200,7 +1201,7 @@ function MonitoringToolConfigurationBox({
                   <button
                     type="button"
                     onClick={handleSubmit}
-                    disabled={!submitPayload || isDeploying || isSnortDependencyBlocking}
+                    disabled={!submitPayload || isDeploying || isToolDependencyBlocking}
                     className="w-full rounded-lg bg-emerald-500 px-4 py-3 text-sm font-semibold text-slate-950 transition-colors hover:bg-emerald-400 disabled:cursor-not-allowed disabled:bg-gray-700 disabled:text-gray-400"
                   >
                     {isDeploying
@@ -1211,10 +1212,10 @@ function MonitoringToolConfigurationBox({
                         ? "Update Configuration"
                         : "Deploy"}
                   </button>
-                  {isSnortDependencyBlocking && (
+                  {isToolDependencyBlocking && (
                     <p className="text-xs text-amber-300">
                       {editorMode === "update" ? "Update" : "Deploy"} is blocked until tshark is deployed and its topic
-                      is available to Snort3.
+                      is available to the selected tool.
                     </p>
                   )}
                   {deployMessage && (
@@ -1251,9 +1252,9 @@ function AdminDashboard() {
   const [snortRulesAction, setSnortRulesAction] = useState<SnortRulesAction>("");
   const [currentSnortRules, setCurrentSnortRules] = useState<string[]>([]);
   const [currentSnortRuleSids, setCurrentSnortRuleSids] = useState<string[]>([]);
-  const [snortDependencyStatus, setSnortDependencyStatus] =
-    useState<SnortDependencyStatus>("idle");
-  const [snortDependencyMessage, setSnortDependencyMessage] = useState("");
+  const [toolDependencyStatus, setToolDependencyStatus] =
+    useState<ToolDependencyStatus>("idle");
+  const [toolDependencyMessage, setToolDependencyMessage] = useState("");
 
   const resetSnortFormState = () => {
     setSnortRulesInput("");
@@ -1262,8 +1263,8 @@ function AdminDashboard() {
     setSnortRulesAction("");
     setCurrentSnortRules([]);
     setCurrentSnortRuleSids([]);
-    setSnortDependencyStatus("idle");
-    setSnortDependencyMessage("");
+    setToolDependencyStatus("idle");
+    setToolDependencyMessage("");
   };
 
   const resetEditorState = () => {
@@ -1272,15 +1273,15 @@ function AdminDashboard() {
     setLoadedConfigId(null);
   };
 
-  const loadSnortDependencyStatus = async () => {
-    setSnortDependencyStatus("checking");
-    setSnortDependencyMessage(
+  const loadToolDependencyStatus = async (toolName: string) => {
+    setToolDependencyStatus("checking");
+    setToolDependencyMessage(
       "Checking whether tshark has already been deployed...",
     );
 
     try {
       const response = await fetch(
-        "/api/configuration-manager/dependencies?toolName=snort3",
+        `/api/configuration-manager/dependencies?toolName=${toolName}`,
         {
           cache: "no-store",
         },
@@ -1310,14 +1311,14 @@ function AdminDashboard() {
         typeof payload.message === "string"
           ? payload.message
           : dependencyReady
-            ? "Detected a tshark deployment that Snort3 can consume."
+            ? "Detected a tshark deployment that the tool can consume."
             : "Tshark has not been deployed yet. Deploy tshark first.";
 
-      setSnortDependencyStatus(dependencyReady ? "ready" : "not_ready");
-      setSnortDependencyMessage(message);
+      setToolDependencyStatus(dependencyReady ? "ready" : "not_ready");
+      setToolDependencyMessage(message);
     } catch (error) {
-      setSnortDependencyStatus("error");
-      setSnortDependencyMessage(
+      setToolDependencyStatus("error");
+      setToolDependencyMessage(
         getErrorMessage(
           error,
           "Could not verify the tshark dependency. You can still rely on the backend validation.",
@@ -1374,14 +1375,14 @@ function AdminDashboard() {
     setLoadedConfigId(null);
     resetSnortFormState();
 
-    if (apiToolName === "snort3") {
-      setSnortDependencyStatus("checking");
-      setSnortDependencyMessage(
+    if (apiToolName === "snort3" || apiToolName === "flow_module") {
+      setToolDependencyStatus("checking");
+      setToolDependencyMessage(
         "Checking whether tshark has already been deployed...",
       );
     } else {
-      setSnortDependencyStatus("idle");
-      setSnortDependencyMessage("");
+      setToolDependencyStatus("idle");
+      setToolDependencyMessage("");
     }
 
     try {
@@ -1422,8 +1423,8 @@ function AdminDashboard() {
         `Loaded ${configurableVariables.length} configurable values from Configuration Manager.`,
       );
 
-      if (apiToolName === "snort3") {
-        await loadSnortDependencyStatus();
+      if (apiToolName === "snort3" || apiToolName === "flow_module") {
+        await loadToolDependencyStatus(apiToolName);
       }
     } catch (error) {
       setDraftConfig(null);
@@ -1612,7 +1613,9 @@ function AdminDashboard() {
         setSnortRulesAction("");
         setSnortRulesInput("");
         setSnortRuleSidsInput("");
-        await loadSnortDependencyStatus();
+        if (apiToolName === "snort3" || apiToolName === "flow_module") {
+          await loadToolDependencyStatus(apiToolName);
+        }
       }
     } catch (error) {
       setDraftConfig(null);
@@ -1787,8 +1790,8 @@ function AdminDashboard() {
           snortRulesAction={snortRulesAction}
           currentSnortRules={currentSnortRules}
           currentSnortRuleSids={currentSnortRuleSids}
-          snortDependencyStatus={snortDependencyStatus}
-          snortDependencyMessage={snortDependencyMessage}
+          toolDependencyStatus={toolDependencyStatus}
+          toolDependencyMessage={toolDependencyMessage}
           onReconfigureConfigIdChange={setReconfigureConfigId}
           onSnortRulesInputChange={setSnortRulesInput}
           onSnortRuleSidsInputChange={setSnortRuleSidsInput}

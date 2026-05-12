@@ -117,11 +117,24 @@ TOOL_RUNTIME_CONTAINERS: Dict[str, str] = {
 NON_CONFIGURABLE_ENV_VARS: Dict[str, set[str]] = {
     "flow_module": {
         "TSHARK_BASE_TOPIC",
+        "FLOW_KAFKA_CONSUMER_ENABLE_AUTO_COMMIT",
+        "FLOW_KAFKA_CONSUMER_ALLOW_AUTO_CREATE_TOPICS",
+    },
+    "telegraf": {
+        "ENABLE_TELEGRAF",
+    },
+    "fluentd": {
+        "ENABLE_FLUENTD",
+    },
+    "falco": {
+        "ENABLE_FALCO",
+        "FALCO_SKIP_DRIVER_LOADER",
     },
     "snort3": {
         "TSHARK_BASE_TOPIC",
         "SNORT_KAFKA_TOPIC_IN",
         "SNORT_KAFKA_MESSAGE_FIELD",
+        "SNORT_CONSUMER_KAFKA_ENABLE_AUTO_COMMIT",
         "SNORT_CONSUMER_KAFKA_ALLOW_AUTO_CREATE_TOPICS",
         "SNORT_ALERT_TAP_IFACE",
     },
@@ -810,6 +823,63 @@ def validate_snort3_dependency_state(collection: Optional[Collection]) -> Tuple[
     return True, ""
 
 
+# Dependency map for tools that require upstream dependencies
+DEPENDENCY_MAP = {
+    "snort3": {"upstream_tool": "tshark", "required_topic": "TSHARK_BASE_TOPIC"},
+    "flow_module": {"upstream_tool": "tshark", "required_topic": "TSHARK_BASE_TOPIC"},
+}
+
+
+def validate_dependency_state(tool_name: str, collection: Optional[Collection]) -> Tuple[bool, str]:
+    """
+    Generic validation for tools that depend on upstream tools and topics.
+    Ensures the tool can only be deployed when the upstream tool is actively running
+    and the required topic is available in MongoDB CM.
+    """
+    if tool_name not in DEPENDENCY_MAP:
+        return True, ""  # No dependency, allow
+
+    dep_config = DEPENDENCY_MAP[tool_name]
+    upstream_tool = dep_config["upstream_tool"]
+    required_topic = dep_config["required_topic"]
+
+    upstream_runtime = get_tool_runtime_state(upstream_tool)
+    if upstream_runtime.get("status") != "success":
+        return False, str(upstream_runtime.get("message", f"Could not determine {upstream_tool} runtime state."))
+
+    if not bool(upstream_runtime.get("is_active")):
+        container_name = str(upstream_runtime.get("container_name", f"{upstream_tool}_robust6g"))
+        runtime_status = str(upstream_runtime.get("runtime_status", "unknown"))
+        tool_display_name = "Snort3" if tool_name == "snort3" else "Flow"  # User-friendly names
+        upstream_display_name = "tshark"
+        return (
+            False,
+            f"{tool_display_name} requires {upstream_display_name} to be actively deployed first. "
+            f"Container '{container_name}' is currently '{runtime_status}'.",
+        )
+
+    if collection is None:
+        tool_display_name = "Snort3" if tool_name == "snort3" else "Flow"
+        upstream_display_name = "tshark"
+        return (
+            False,
+            f"{tool_display_name} requires MongoDB CM to resolve {upstream_display_name} topics, but MongoDB CM is unavailable.",
+        )
+
+    stored_topics = get_kafka_topics_from_mongo(collection)
+    topic_value = str(stored_topics.get(required_topic, "")).strip()
+    if not topic_value:
+        tool_display_name = "Snort3" if tool_name == "snort3" else "Flow"
+        upstream_display_name = "tshark"
+        return (
+            False,
+            f"{tool_display_name} requires the {upstream_display_name} topic to be present in MongoDB CM. "
+            "Deploy tshark first through the Configuration Manager.",
+        )
+
+    return True, ""
+
+
 def validate_rules_contract_for_non_snort3(tool_name: str, request: Any) -> Tuple[bool, str]:
     """Reject Snort3-only rules fields for tools that do not support them."""
     if tool_name != "snort3" and request_uses_rules_contract(request):
@@ -1008,8 +1078,8 @@ def process_deploy_request(
 
     collection = get_mongo_collection()
 
-    if tool_name == "snort3":
-        dependency_ok, dependency_error = validate_snort3_dependency_state(collection)
+    if tool_name in DEPENDENCY_MAP:
+        dependency_ok, dependency_error = validate_dependency_state(tool_name, collection)
         if not dependency_ok:
             return {"status": "error", "message": dependency_error}
 
@@ -1159,8 +1229,8 @@ def process_update_configuration(
     if not are_rules_fields_valid:
         return {"status": "error", "message": rules_error_msg}
 
-    if tool_name == "snort3":
-        dependency_ok, dependency_error = validate_snort3_dependency_state(collection)
+    if tool_name in DEPENDENCY_MAP:
+        dependency_ok, dependency_error = validate_dependency_state(tool_name, collection)
         if not dependency_ok:
             return {"status": "error", "message": dependency_error}
 
