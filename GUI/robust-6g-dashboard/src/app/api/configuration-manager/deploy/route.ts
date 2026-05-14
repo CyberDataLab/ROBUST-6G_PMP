@@ -112,7 +112,7 @@ export async function POST(request: Request) {
     configuration,
   };
 
-  if (toolName === "snort3") {
+  if (toolName === "snort3" || toolName === "falco") {
     if (body.rules !== undefined) {
       if (
         !Array.isArray(body.rules) ||

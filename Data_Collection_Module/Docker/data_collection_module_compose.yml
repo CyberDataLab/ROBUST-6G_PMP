@@ -98,6 +98,7 @@ services:
       - TZ=${TZ}
       - MACHINE_ID=${MACHINE_ID}
       - SKIP_DRIVER_LOADER=${FALCO_SKIP_DRIVER_LOADER}
+      - FALCO_RULES_PATHS=${FALCO_RULES_PATHS}
     extra_hosts:
       - "${KAFKA_LAN_HOSTNAME:-kafka-host}:host-gateway"
     network_mode: "${NETWORK_MODE}"
@@ -133,6 +134,23 @@ services:
       - "${FALCO_EXPORTER_PORT:-9376}:9376"
     restart: unless-stopped
 
+  falco_rules_validator:
+    image: falco_robust6g:latest
+    build:
+      context: ${PFD}
+      dockerfile: Data_Collection_Module/Docker/Dockerfiles/falco.dockerfile
+    profiles: ["collection_module.validator"]
+    environment:
+      - TZ=${TZ}
+      - MACHINE_ID=${MACHINE_ID}
+      - SKIP_DRIVER_LOADER=${FALCO_SKIP_DRIVER_LOADER}
+      - FALCO_RULES_PATHS=${FALCO_RULES_PATHS}
+      - FALCO_VALIDATE_PATHS=${FALCO_VALIDATE_PATHS}
+    entrypoint: ["/entrypoint_falco.sh", "--validate"]
+    volumes:
+      - ${PFD}/Data_Collection_Module/Configuration_Files/Falco:/etc/Falco:ro
+    restart: "no"
+
 # Autodiscovery using HTTP-SD. Prometheus will read the information to identify dinamically this device.
   device-info:
     image: device_info_robust6g:latest
@@ -154,4 +172,3 @@ services:
     ports:
       - "${DEVICE_INFO_PORT:-9999}:${DEVICE_INFO_PORT:-9999}"
     restart: unless-stopped
-

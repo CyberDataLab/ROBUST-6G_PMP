@@ -29,6 +29,15 @@ from pydantic import BaseModel, Field
 from pymongo import MongoClient
 from pymongo.collection import Collection
 from pymongo.errors import ServerSelectionTimeoutError
+from falco_rules_manager import (
+    apply_falco_rules_files,
+    apply_falco_rules_update,
+    build_default_falco_rules_config,
+    build_falco_rules_config_for_deploy,
+    build_falco_rules_paths_env,
+    capture_falco_final_rules_state,
+    restore_falco_final_rules_state,
+)
 from snort_rules_manager import (
     apply_snort3_rules_files,
     apply_snort3_rules_update,
@@ -43,7 +52,8 @@ from snort_rules_manager import (
 # Path to start_containers.py
 # ---------------------------------------------------------------------------
 LAUNCHER_PATH = Path(__file__).resolve().parent.parent.parent / "Launcher" / "start_containers.py"
-INTERNAL_ONLY_ENV_VARS = {"SNORT_RULES_PATHS"}
+INTERNAL_ONLY_ENV_VARS = {"SNORT_RULES_PATHS", "FALCO_RULES_PATHS"}
+RULES_SUPPORTED_TOOLS = {"snort3", "falco"}
 
 # ---------------------------------------------------------------------------
 # MongoDB Configuration Manager connection.
@@ -380,8 +390,8 @@ class DeployRequest(BaseModel):
 
     Note:
     - 'rules' and 'include_default_rules' are declared in this base request on purpose,
-      even though only snort3 supports them.
-    - This allows non-snort3 endpoints to detect that the client sent rules-related
+      even though only falco and snort3 support them.
+    - This allows non-rules endpoints to detect that the client sent rules-related
       fields and return a controlled business error (400), instead of silently ignoring
       them during request parsing.
     """
@@ -409,6 +419,7 @@ class UpdateConfigurationRequest(BaseModel):
     rules_action: Optional[Literal["add", "remove", "replace"]] = None
     rules: Optional[List[str]] = None
     rule_sids: Optional[List[str]] = None
+    rule_names: Optional[List[str]] = None
     include_default_rules: Optional[bool] = None
 
 
@@ -455,14 +466,21 @@ def save_deployment_to_mongo(
     created_at = existing_document.get("created_at", now_iso)
 
     rules_config = None
-    if tool_name == "snort3":
+    if tool_name in RULES_SUPPORTED_TOOLS:
         existing_rules_config = existing_document.get("rules_config", {})
         source_rules_config = rules_config_override if rules_config_override is not None else existing_rules_config
         rules_config = {
             "include_default_rules": bool(source_rules_config.get("include_default_rules", True)),
             "custom_rules": [str(rule) for rule in source_rules_config.get("custom_rules", [])],
-            "custom_rule_sids": [str(sid) for sid in source_rules_config.get("custom_rule_sids", [])],
         }
+        if tool_name == "snort3":
+            rules_config["custom_rule_sids"] = [
+                str(sid) for sid in source_rules_config.get("custom_rule_sids", [])
+            ]
+        elif tool_name == "falco":
+            rules_config["custom_rule_names"] = [
+                str(rule_name) for rule_name in source_rules_config.get("custom_rule_names", [])
+            ]
 
     version_payload: Dict[str, Any] = {
         "endpoint": endpoint,
@@ -719,7 +737,7 @@ def request_uses_rules_contract(request: Any) -> bool:
     """Return True if the request includes any rules-related fields."""
     return any(
         getattr(request, field_name, None) is not None
-        for field_name in ("rules", "rule_sids", "rules_action", "include_default_rules")
+        for field_name in ("rules", "rule_sids", "rule_names", "rules_action", "include_default_rules")
     )
 
 
@@ -880,11 +898,11 @@ def validate_dependency_state(tool_name: str, collection: Optional[Collection]) 
     return True, ""
 
 
-def validate_rules_contract_for_non_snort3(tool_name: str, request: Any) -> Tuple[bool, str]:
-    """Reject Snort3-only rules fields for tools that do not support them."""
-    if tool_name != "snort3" and request_uses_rules_contract(request):
+def validate_rules_contract_for_unsupported_tools(tool_name: str, request: Any) -> Tuple[bool, str]:
+    """Reject rules-related fields for tools that do not support them."""
+    if tool_name not in RULES_SUPPORTED_TOOLS and request_uses_rules_contract(request):
         return False, (
-            f"Rules-related fields are only supported for tool 'snort3'. "
+            f"Rules-related fields are only supported for tools {sorted(RULES_SUPPORTED_TOOLS)}. "
             f"Received rules contract fields for tool '{tool_name}'."
         )
     return True, ""
@@ -1072,7 +1090,7 @@ def process_deploy_request(
             )
         }
 
-    are_rules_fields_valid, rules_error_msg = validate_rules_contract_for_non_snort3(tool_name, request)
+    are_rules_fields_valid, rules_error_msg = validate_rules_contract_for_unsupported_tools(tool_name, request)
     if not are_rules_fields_valid:
         return {"status": "error", "message": rules_error_msg}
 
@@ -1112,6 +1130,24 @@ def process_deploy_request(
             return {"status": "error", "message": rules_files_error}
 
         resolved_env["SNORT_RULES_PATHS"] = build_snort3_rules_paths_env(rules_config)
+    elif tool_name == "falco":
+        previous_final_rules_exists, previous_final_rules_content = capture_falco_final_rules_state()
+        is_valid_rules, rules_error_msg, rules_config = build_falco_rules_config_for_deploy(
+            rules=request.rules,
+            include_default_rules=request.include_default_rules,
+        )
+        if not is_valid_rules:
+            return {"status": "error", "message": rules_error_msg}
+
+        should_validate_custom_rules = bool(request.rules)
+        are_rules_files_ready, rules_files_error = apply_falco_rules_files(
+            rules_config=rules_config,
+            validate_custom_rules=should_validate_custom_rules,
+        )
+        if not are_rules_files_ready:
+            return {"status": "error", "message": rules_files_error}
+
+        resolved_env["FALCO_RULES_PATHS"] = build_falco_rules_paths_env(rules_config)
     # If this tool produces Kafka topics, persist them so consumers can find them later
     persist_producer_topics(tool_name, resolved_env, collection)
 
@@ -1154,6 +1190,12 @@ def process_deploy_request(
                     previous_final_rules_content,
                 )
                 mongo_error = append_rollback_error(mongo_error, "" if rollback_ok else rollback_error)
+            elif tool_name == "falco":
+                rollback_ok, rollback_error = restore_falco_final_rules_state(
+                    previous_final_rules_exists,
+                    previous_final_rules_content,
+                )
+                mongo_error = append_rollback_error(mongo_error, "" if rollback_ok else rollback_error)
             return {"status": "error", "message": mongo_error}
 
     success, error_msg = call_start_containers(
@@ -1171,6 +1213,12 @@ def process_deploy_request(
             error_msg = append_rollback_error(error_msg, "" if rollback_mongo_ok else rollback_mongo_error)
         if tool_name == "snort3":
             rollback_rules_ok, rollback_rules_error = restore_snort3_final_rules_state(
+                previous_final_rules_exists,
+                previous_final_rules_content,
+            )
+            error_msg = append_rollback_error(error_msg, "" if rollback_rules_ok else rollback_rules_error)
+        elif tool_name == "falco":
+            rollback_rules_ok, rollback_rules_error = restore_falco_final_rules_state(
                 previous_final_rules_exists,
                 previous_final_rules_content,
             )
@@ -1214,7 +1262,14 @@ def process_update_configuration(
     base_env: Dict[str, str] = dict(existing.get("resolved_env", {}))
     endpoint: str = existing.get("endpoint", "unknown")
     stored_tool_name: str = existing.get("tool_name", tool_name)
-    existing_rules_config: Dict[str, Any] = dict(existing.get("rules_config", build_default_snort3_rules_config()))
+    default_rules_config = (
+        build_default_snort3_rules_config()
+        if tool_name == "snort3"
+        else build_default_falco_rules_config()
+        if tool_name == "falco"
+        else {}
+    )
+    existing_rules_config: Dict[str, Any] = dict(existing.get("rules_config", default_rules_config))
 
     if stored_tool_name != tool_name:
         return {
@@ -1225,7 +1280,7 @@ def process_update_configuration(
             )
         }
 
-    are_rules_fields_valid, rules_error_msg = validate_rules_contract_for_non_snort3(tool_name, request)
+    are_rules_fields_valid, rules_error_msg = validate_rules_contract_for_unsupported_tools(tool_name, request)
     if not are_rules_fields_valid:
         return {"status": "error", "message": rules_error_msg}
 
@@ -1238,6 +1293,8 @@ def process_update_configuration(
     previous_final_rules_content: Optional[str] = None
     if tool_name == "snort3":
         previous_final_rules_exists, previous_final_rules_content = capture_snort3_final_rules_state()
+    elif tool_name == "falco":
+        previous_final_rules_exists, previous_final_rules_content = capture_falco_final_rules_state()
 
     partial_env: Dict[str, str] = {}
     if request.configuration:
@@ -1272,13 +1329,47 @@ def process_update_configuration(
         )
         if not are_rules_files_ready:
             return {"status": "error", "message": rules_files_error}
+    elif tool_name == "falco" and rules_contract_used:
+        if request.rules_action is None:
+            return {"status": "error", "message": "The 'rules_action' field is required when rules-related fields are sent for falco."}
+
+        if request.rule_sids is not None:
+            return {"status": "error", "message": "The 'rule_sids' field is not supported for falco. Use 'rule_names' instead."}
+
+        is_valid_rules, rules_error_msg, updated_rules_config = apply_falco_rules_update(
+            existing_rules_config=existing_rules_config,
+            rules_action=request.rules_action,
+            rules=request.rules,
+            rule_names=request.rule_names,
+            include_default_rules=request.include_default_rules,
+        )
+        if not is_valid_rules:
+            return {"status": "error", "message": rules_error_msg}
+
+        should_validate_custom_rules = request.rules_action in {"add", "replace"}
+        are_rules_files_ready, rules_files_error = apply_falco_rules_files(
+            rules_config=updated_rules_config,
+            validate_custom_rules=should_validate_custom_rules,
+        )
+        if not are_rules_files_ready:
+            return {"status": "error", "message": rules_files_error}
 
     if tool_name == "snort3":
         effective_rules_config = updated_rules_config if updated_rules_config is not None else existing_rules_config
         base_env["SNORT_RULES_PATHS"] = build_snort3_rules_paths_env(effective_rules_config)
+    elif tool_name == "falco":
+        effective_rules_config = updated_rules_config if updated_rules_config is not None else existing_rules_config
+        base_env["FALCO_RULES_PATHS"] = build_falco_rules_paths_env(effective_rules_config)
 
     if not partial_env and updated_rules_config is None:
-        return {"status": "error", "message": "No configuration values or valid snort3 rules changes were provided to update."}
+        rules_tool_hint = (
+            " or valid snort3 rules changes"
+            if tool_name == "snort3"
+            else " or valid falco rules changes"
+            if tool_name == "falco"
+            else ""
+        )
+        return {"status": "error", "message": f"No configuration values{rules_tool_hint} were provided to update."}
 
     base_env.update(partial_env)
 
@@ -1318,6 +1409,12 @@ def process_update_configuration(
                 previous_final_rules_content,
             )
             mongo_error = append_rollback_error(mongo_error, "" if rollback_ok else rollback_error)
+        elif tool_name == "falco":
+            rollback_ok, rollback_error = restore_falco_final_rules_state(
+                previous_final_rules_exists,
+                previous_final_rules_content,
+            )
+            mongo_error = append_rollback_error(mongo_error, "" if rollback_ok else rollback_error)
         return {"status": "error", "message": mongo_error}
 
     success, error_msg = call_start_containers(
@@ -1334,6 +1431,12 @@ def process_update_configuration(
         error_msg = append_rollback_error(error_msg, "" if rollback_mongo_ok else rollback_mongo_error)
         if tool_name == "snort3":
             rollback_rules_ok, rollback_rules_error = restore_snort3_final_rules_state(
+                previous_final_rules_exists,
+                previous_final_rules_content,
+            )
+            error_msg = append_rollback_error(error_msg, "" if rollback_rules_ok else rollback_rules_error)
+        elif tool_name == "falco":
+            rollback_rules_ok, rollback_rules_error = restore_falco_final_rules_state(
                 previous_final_rules_exists,
                 previous_final_rules_content,
             )

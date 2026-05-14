@@ -364,6 +364,7 @@ def build_default_env(
     enable_falco                = "1"
     falco_skip_driver_loader    = "1"
     falco_exporter_port         = "9376"
+    falco_rules_path            = "/etc/Falco/falco_community_rules.yaml"
 
     # Info
     device_info_port            = "9999"
@@ -550,6 +551,7 @@ def build_default_env(
         "ENABLE_FALCO":                 enable_falco,
         "FALCO_SKIP_DRIVER_LOADER":     falco_skip_driver_loader,
         "FALCO_EXPORTER_PORT":          falco_exporter_port,
+        "FALCO_RULES_PATHS":            falco_rules_path,
 
         # Info
         "DEVICE_INFO_PORT":             device_info_port,
@@ -719,6 +721,7 @@ TOOL_ENV_VARS: Dict[str, List[str]] = {
         "FALCO_BASE_TOPIC",
         "FALCO_SKIP_DRIVER_LOADER",
         "FALCO_EXPORTER_PORT",
+        "FALCO_RULES_PATHS",
     ],
     "info": [
         "DEVICE_INFO_PORT",

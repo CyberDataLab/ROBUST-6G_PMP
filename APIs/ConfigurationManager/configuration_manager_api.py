@@ -278,7 +278,7 @@ async def update_configuration_endpoint(
     Only the variables explicitly sent are overridden; the rest keep their stored values.
 
     - toolName: query parameter indicating which tool's config model to use for validation.
-    - Body: JSON with config_id, optional configuration overrides and optional snort3 rules contract.
+    - Body: JSON with config_id, optional configuration overrides and optional managed-rules contract.
 
     Example:
         PUT /ConfigurationManager/updateConfiguration?toolName=tshark

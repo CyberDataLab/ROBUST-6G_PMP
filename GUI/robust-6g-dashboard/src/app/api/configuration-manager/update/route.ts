@@ -121,7 +121,7 @@ export async function PUT(request: Request) {
     configuration,
   };
 
-  if (toolName === "snort3") {
+  if (toolName === "snort3" || toolName === "falco") {
     if (body.rules_action !== undefined) {
       const rulesAction =
         typeof body.rules_action === "string" ? body.rules_action.trim() : "";
@@ -155,6 +155,16 @@ export async function PUT(request: Request) {
     }
 
     if (body.rule_sids !== undefined) {
+      if (toolName !== "snort3") {
+        return NextResponse.json(
+          {
+            status: "error",
+            message: "rule_sids is only supported for snort3.",
+          },
+          { status: 400 },
+        );
+      }
+
       if (
         !Array.isArray(body.rule_sids) ||
         body.rule_sids.some((sid) => typeof sid !== "string")
@@ -169,6 +179,33 @@ export async function PUT(request: Request) {
       }
 
       backendPayload.rule_sids = body.rule_sids;
+    }
+
+    if (body.rule_names !== undefined) {
+      if (toolName !== "falco") {
+        return NextResponse.json(
+          {
+            status: "error",
+            message: "rule_names is only supported for falco.",
+          },
+          { status: 400 },
+        );
+      }
+
+      if (
+        !Array.isArray(body.rule_names) ||
+        body.rule_names.some((ruleName) => typeof ruleName !== "string")
+      ) {
+        return NextResponse.json(
+          {
+            status: "error",
+            message: "rule_names must be an array of strings when provided.",
+          },
+          { status: 400 },
+        );
+      }
+
+      backendPayload.rule_names = body.rule_names;
     }
 
     if (body.include_default_rules !== undefined) {

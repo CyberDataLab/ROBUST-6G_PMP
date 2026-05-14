@@ -67,6 +67,7 @@ type UpdatePayload = {
   rules_action?: "add" | "remove" | "replace";
   rules?: string[];
   rule_sids?: string[];
+  rule_names?: string[];
   include_default_rules?: boolean;
 };
 
@@ -157,6 +158,47 @@ function parseSnortRulesInput(rulesInput: string) {
     .filter(Boolean);
 }
 
+function parseFalcoRulesInput(rulesInput: string) {
+  const trimmedInput = rulesInput.trim();
+  if (!trimmedInput) {
+    return [];
+  }
+
+  const blocks: string[] = [];
+  let currentBlock = "";
+  let seenTopLevelItem = false;
+
+  for (const line of trimmedInput.split(/\r?\n/)) {
+    if (line.startsWith("- ")) {
+      if (currentBlock.trim()) {
+        blocks.push(currentBlock.trim());
+      }
+      currentBlock = line;
+      seenTopLevelItem = true;
+      continue;
+    }
+
+    if (!seenTopLevelItem) {
+      if (!line.trim() || line.trim().startsWith("#")) {
+        continue;
+      }
+    }
+
+    if (!currentBlock) {
+      currentBlock = line;
+      continue;
+    }
+
+    currentBlock += `\n${line}`;
+  }
+
+  if (currentBlock.trim()) {
+    blocks.push(currentBlock.trim());
+  }
+
+  return blocks;
+}
+
 function parseCommaSeparatedInput(input: string) {
   return input
     .split(",")
@@ -168,22 +210,33 @@ function buildDeployPayload(
   toolName: ToolApiName,
   configuration: JsonObject,
   snortRulesInput: string,
-  includeDefaultRules: boolean,
+  snortIncludeDefaultRules: boolean,
+  falcoRulesInput: string,
+  falcoIncludeDefaultRules: boolean,
 ): DeployPayload {
   const payload: DeployPayload = {
     toolName,
     configuration,
   };
 
-  if (toolName !== "snort3") {
+  if (toolName === "snort3") {
+    const parsedRules = parseSnortRulesInput(snortRulesInput);
+
+    if (parsedRules.length > 0) {
+      payload.rules = parsedRules;
+      payload.include_default_rules = snortIncludeDefaultRules;
+    }
+
     return payload;
   }
 
-  const parsedRules = parseSnortRulesInput(snortRulesInput);
+  if (toolName === "falco") {
+    const parsedRules = parseFalcoRulesInput(falcoRulesInput);
 
-  if (parsedRules.length > 0) {
-    payload.rules = parsedRules;
-    payload.include_default_rules = includeDefaultRules;
+    if (parsedRules.length > 0) {
+      payload.rules = parsedRules;
+      payload.include_default_rules = falcoIncludeDefaultRules;
+    }
   }
 
   return payload;
@@ -285,6 +338,49 @@ function snortRulesUpdateMatchesStoredState(
   }
 
   return parsedRuleSids.every((sid) => !storedCustomRuleSids.includes(sid));
+}
+
+function falcoRulesUpdateMatchesStoredState(
+  rulesAction: SnortRulesAction,
+  rulesInput: string,
+  ruleNamesInput: string,
+  includeDefaultRules: boolean,
+  storedRulesConfig: Record<string, unknown>,
+): boolean {
+  if (!rulesAction) {
+    return true;
+  }
+
+  const storedCustomRules = Array.isArray(storedRulesConfig.custom_rules)
+    ? storedRulesConfig.custom_rules.filter(
+        (rule): rule is string => typeof rule === "string",
+      )
+    : [];
+  const storedCustomRuleNames = Array.isArray(storedRulesConfig.custom_rule_names)
+    ? storedRulesConfig.custom_rule_names.filter(
+        (ruleName): ruleName is string => typeof ruleName === "string",
+      )
+    : [];
+  const parsedRules = parseFalcoRulesInput(rulesInput);
+  const parsedRuleNames = parseCommaSeparatedInput(ruleNamesInput);
+  const storedIncludeDefaultRules =
+    typeof storedRulesConfig.include_default_rules === "boolean"
+      ? storedRulesConfig.include_default_rules
+      : true;
+
+  if (rulesAction === "add") {
+    return parsedRules.every((rule) => storedCustomRules.includes(rule));
+  }
+
+  if (rulesAction === "replace") {
+    return (
+      storedIncludeDefaultRules === includeDefaultRules &&
+      storedCustomRules.length === parsedRules.length &&
+      storedCustomRules.every((rule, index) => rule === parsedRules[index])
+    );
+  }
+
+  return parsedRuleNames.every((ruleName) => !storedCustomRuleNames.includes(ruleName));
 }
 
 // ─── KPI Card ───────────────────────────────────────────────
@@ -489,6 +585,12 @@ function MonitoringToolConfigurationBox({
   snortRulesAction,
   currentSnortRules,
   currentSnortRuleSids,
+  falcoRulesInput,
+  falcoRuleNamesInput,
+  falcoIncludeDefaultRules,
+  falcoRulesAction,
+  currentFalcoRules,
+  currentFalcoRuleNames,
   toolDependencyStatus,
   toolDependencyMessage,
   onPostureChange,
@@ -499,6 +601,10 @@ function MonitoringToolConfigurationBox({
   onSnortRuleSidsInputChange,
   onSnortIncludeDefaultRulesChange,
   onSnortRulesActionChange,
+  onFalcoRulesInputChange,
+  onFalcoRuleNamesInputChange,
+  onFalcoIncludeDefaultRulesChange,
+  onFalcoRulesActionChange,
   onLaunchClick,
   onReconfigureClick,
   onLoadCurrentConfigClick,
@@ -519,6 +625,12 @@ function MonitoringToolConfigurationBox({
   snortRulesAction: SnortRulesAction;
   currentSnortRules: string[];
   currentSnortRuleSids: string[];
+  falcoRulesInput: string;
+  falcoRuleNamesInput: string;
+  falcoIncludeDefaultRules: boolean;
+  falcoRulesAction: SnortRulesAction;
+  currentFalcoRules: string[];
+  currentFalcoRuleNames: string[];
   toolDependencyStatus: ToolDependencyStatus;
   toolDependencyMessage: string;
   onPostureChange: (posture: string) => void;
@@ -529,6 +641,10 @@ function MonitoringToolConfigurationBox({
   onSnortRuleSidsInputChange: (value: string) => void;
   onSnortIncludeDefaultRulesChange: (value: boolean) => void;
   onSnortRulesActionChange: (value: SnortRulesAction) => void;
+  onFalcoRulesInputChange: (value: string) => void;
+  onFalcoRuleNamesInputChange: (value: string) => void;
+  onFalcoIncludeDefaultRulesChange: (value: boolean) => void;
+  onFalcoRulesActionChange: (value: SnortRulesAction) => void;
   onLaunchClick: () => void;
   onReconfigureClick: () => void;
   onLoadCurrentConfigClick: () => void;
@@ -541,13 +657,21 @@ function MonitoringToolConfigurationBox({
   const isSupportedInPoc = Boolean(selectedApiToolName);
   const isToolWithDependency = selectedApiToolName === "snort3" || selectedApiToolName === "flow_module";
   const isSnortTool = selectedApiToolName === "snort3";
+  const isFalcoTool = selectedApiToolName === "falco";
   const parsedSnortRules = isSnortTool
     ? parseSnortRulesInput(snortRulesInput)
     : [];
   const parsedSnortRuleSids = isSnortTool
     ? parseCommaSeparatedInput(snortRuleSidsInput)
     : [];
+  const parsedFalcoRules = isFalcoTool
+    ? parseFalcoRulesInput(falcoRulesInput)
+    : [];
+  const parsedFalcoRuleNames = isFalcoTool
+    ? parseCommaSeparatedInput(falcoRuleNamesInput)
+    : [];
   const snortHasCustomRules = parsedSnortRules.length > 0;
+  const falcoHasCustomRules = parsedFalcoRules.length > 0;
   const deployPayload =
     draftConfig && selectedApiToolName
       ? buildDeployPayload(
@@ -555,6 +679,8 @@ function MonitoringToolConfigurationBox({
           draftConfig,
           snortRulesInput,
           snortIncludeDefaultRules,
+          falcoRulesInput,
+          falcoIncludeDefaultRules,
         )
       : null;
   const updatePayload =
@@ -577,6 +703,18 @@ function MonitoringToolConfigurationBox({
             } else if (snortRulesAction === "remove") {
               payload.rules_action = "remove";
               payload.rule_sids = parsedSnortRuleSids;
+            }
+          } else if (selectedApiToolName === "falco") {
+            if (falcoRulesAction === "add") {
+              payload.rules_action = "add";
+              payload.rules = parsedFalcoRules;
+            } else if (falcoRulesAction === "replace") {
+              payload.rules_action = "replace";
+              payload.rules = parsedFalcoRules;
+              payload.include_default_rules = falcoIncludeDefaultRules;
+            } else if (falcoRulesAction === "remove") {
+              payload.rules_action = "remove";
+              payload.rule_names = parsedFalcoRuleNames;
             }
           }
 
@@ -623,6 +761,25 @@ function MonitoringToolConfigurationBox({
       if (snortRulesAction === "remove" && parsedSnortRuleSids.length === 0) {
         setDeployMessage(
           "The 'remove' action requires at least one Snort3 SID separated by commas.",
+        );
+        return;
+      }
+    }
+
+    if (selectedApiToolName === "falco" && editorMode === "update") {
+      if (
+        (falcoRulesAction === "add" || falcoRulesAction === "replace") &&
+        parsedFalcoRules.length === 0
+      ) {
+        setDeployMessage(
+          `The '${falcoRulesAction}' action requires at least one Falco custom YAML block.`,
+        );
+        return;
+      }
+
+      if (falcoRulesAction === "remove" && parsedFalcoRuleNames.length === 0) {
+        setDeployMessage(
+          "The 'remove' action requires at least one Falco rule name separated by commas.",
         );
         return;
       }
@@ -714,14 +871,23 @@ function MonitoringToolConfigurationBox({
               recoveryResolvedEnv,
             );
             const didRulesPersist =
-              selectedApiToolName !== "snort3" ||
-              snortRulesUpdateMatchesStoredState(
-                snortRulesAction,
-                snortRulesInput,
-                snortRuleSidsInput,
-                snortIncludeDefaultRules,
-                recoveryRulesConfig,
-              );
+              selectedApiToolName === "snort3"
+                ? snortRulesUpdateMatchesStoredState(
+                    snortRulesAction,
+                    snortRulesInput,
+                    snortRuleSidsInput,
+                    snortIncludeDefaultRules,
+                    recoveryRulesConfig,
+                  )
+                : selectedApiToolName === "falco"
+                  ? falcoRulesUpdateMatchesStoredState(
+                      falcoRulesAction,
+                      falcoRulesInput,
+                      falcoRuleNamesInput,
+                      falcoIncludeDefaultRules,
+                      recoveryRulesConfig,
+                    )
+                  : true;
 
             if (didConfigPersist && didRulesPersist) {
               setDeployMessage(
@@ -1190,6 +1356,203 @@ function MonitoringToolConfigurationBox({
                       )}
                     </div>
                   )}
+
+                  {isFalcoTool && (
+                    <div className="rounded-lg border border-amber-500/20 bg-amber-500/5 p-4">
+                      <div className="mb-3">
+                        <h5 className="text-sm font-semibold text-white">
+                          {editorMode === "update"
+                            ? "Falco Rules Update"
+                            : "Falco Custom Rules"}
+                        </h5>
+                        <p className="mt-1 text-xs text-gray-400">
+                          {editorMode === "update"
+                            ? "Current custom YAML blocks are shown below. Select an action only if you want to change the Falco rules contract."
+                            : "Paste one or more Falco YAML top-level items. The Configuration Manager validator will reject invalid YAML or invalid Falco rules."}
+                        </p>
+                      </div>
+
+                      {editorMode === "update" ? (
+                        <div className="space-y-4">
+                          <div className="rounded-lg border border-gray-800 bg-[#08101d] p-4">
+                            <p className="text-xs font-medium uppercase tracking-[0.2em] text-cyan-300">
+                              Current custom rules
+                            </p>
+                            <pre className="mt-3 max-h-48 overflow-auto whitespace-pre-wrap rounded-lg border border-gray-800 bg-[#0b1120] px-4 py-3 font-mono text-sm text-white">
+                              {currentFalcoRules.length > 0
+                                ? currentFalcoRules.join("\n\n")
+                                : "No current custom Falco rules."}
+                            </pre>
+                            <p className="mt-3 text-xs text-gray-400">
+                              Current rule names:{" "}
+                              {currentFalcoRuleNames.length > 0
+                                ? currentFalcoRuleNames.join(", ")
+                                : "none"}
+                            </p>
+                          </div>
+
+                          <div className="space-y-2">
+                            <label
+                              htmlFor="falco-rules-action"
+                              className="block text-xs font-medium uppercase tracking-[0.2em] text-cyan-300"
+                            >
+                              Rules action
+                            </label>
+                            <select
+                              id="falco-rules-action"
+                              value={falcoRulesAction}
+                              onChange={(event) =>
+                                onFalcoRulesActionChange(
+                                  event.target.value as SnortRulesAction,
+                                )
+                              }
+                              className="w-full rounded-lg border border-cyan-500/30 bg-white px-4 py-3 text-sm text-black outline-none transition-all focus:border-cyan-400 focus:ring-2 focus:ring-cyan-500/20"
+                            >
+                              <option value="">Do not change rules</option>
+                              <option value="add">add</option>
+                              <option value="replace">replace</option>
+                              <option value="remove">remove</option>
+                            </select>
+                          </div>
+
+                          {(falcoRulesAction === "add" ||
+                            falcoRulesAction === "replace") && (
+                            <div className="space-y-2">
+                              <label
+                                htmlFor="falco-rules-input"
+                                className="block text-xs font-medium uppercase tracking-[0.2em] text-cyan-300"
+                              >
+                                New custom YAML blocks
+                              </label>
+                              <textarea
+                                id="falco-rules-input"
+                                value={falcoRulesInput}
+                                onChange={(event) =>
+                                  onFalcoRulesInputChange(event.target.value)
+                                }
+                                placeholder={`- rule: Falco test rule\n  desc: Example custom Falco rule\n  condition: evt.type = execve\n  output: \"Falco test\"\n  priority: WARNING`}
+                                spellCheck={false}
+                                rows={10}
+                                className="w-full rounded-lg border border-cyan-500/30 bg-white px-4 py-3 font-mono text-sm text-black outline-none transition-all focus:border-cyan-400 focus:ring-2 focus:ring-cyan-500/20"
+                              />
+                              <p className="text-xs text-gray-400">
+                                Write one or more top-level YAML items. The '{falcoRulesAction}'
+                                action requires at least one block.
+                              </p>
+                            </div>
+                          )}
+
+                          {falcoRulesAction === "replace" && (
+                            <label className="flex items-start gap-3 rounded-lg border border-cyan-500/20 bg-[#08101d] p-3">
+                              <input
+                                type="checkbox"
+                                checked={falcoIncludeDefaultRules}
+                                onChange={(event) =>
+                                  onFalcoIncludeDefaultRulesChange(
+                                    event.target.checked,
+                                  )
+                                }
+                                className="mt-1 h-4 w-4 rounded border-gray-600"
+                              />
+                              <div>
+                                <p className="text-sm font-medium text-white">
+                                  Include default/community Falco rules
+                                </p>
+                                <p className="mt-1 text-xs text-gray-400">
+                                  This flag is applied only with the 'replace'
+                                  action.
+                                </p>
+                              </div>
+                            </label>
+                          )}
+
+                          {falcoRulesAction === "remove" && (
+                            <div className="space-y-2">
+                              <label
+                                htmlFor="falco-rule-names-input"
+                                className="block text-xs font-medium uppercase tracking-[0.2em] text-cyan-300"
+                              >
+                                Rule names to remove
+                              </label>
+                              <input
+                                id="falco-rule-names-input"
+                                type="text"
+                                value={falcoRuleNamesInput}
+                                onChange={(event) =>
+                                  onFalcoRuleNamesInputChange(
+                                    event.target.value,
+                                  )
+                                }
+                                placeholder="Rule name 1, Rule name 2"
+                                className="w-full rounded-lg border border-cyan-500/30 bg-white px-4 py-3 font-mono text-sm text-black outline-none transition-all focus:border-cyan-400 focus:ring-2 focus:ring-cyan-500/20"
+                              />
+                              <p className="text-xs text-gray-400">
+                                Enter one or more current Falco rule names separated by commas.
+                              </p>
+                            </div>
+                          )}
+                        </div>
+                      ) : (
+                        <div className="space-y-4">
+                          <label className="flex items-start gap-3 rounded-lg border border-cyan-500/20 bg-[#08101d] p-3">
+                            <input
+                              type="checkbox"
+                              checked={
+                                falcoHasCustomRules
+                                  ? falcoIncludeDefaultRules
+                                  : true
+                              }
+                              disabled={!falcoHasCustomRules}
+                              onChange={(event) =>
+                                onFalcoIncludeDefaultRulesChange(
+                                  event.target.checked,
+                                )
+                              }
+                              className="mt-1 h-4 w-4 rounded border-gray-600"
+                            />
+                            <div>
+                              <p className="text-sm font-medium text-white">
+                                Include default/community Falco rules
+                              </p>
+                              <p className="mt-1 text-xs text-gray-400">
+                                {falcoHasCustomRules
+                                  ? "Checked: deploy custom YAML together with the default Falco rules set."
+                                  : "When no custom YAML is provided, Falco deploys with the default rules set only."}
+                              </p>
+                            </div>
+                          </label>
+
+                          <div className="space-y-2">
+                            <label
+                              htmlFor="falco-rules-input"
+                              className="block text-xs font-medium uppercase tracking-[0.2em] text-cyan-300"
+                            >
+                              Custom YAML blocks
+                            </label>
+                            <textarea
+                              id="falco-rules-input"
+                              value={falcoRulesInput}
+                              onChange={(event) =>
+                                onFalcoRulesInputChange(event.target.value)
+                              }
+                              placeholder={`- rule: Falco test rule\n  desc: Example custom Falco rule\n  condition: evt.type = execve\n  output: \"Falco test\"\n  priority: WARNING`}
+                              spellCheck={false}
+                              rows={10}
+                              className="w-full rounded-lg border border-cyan-500/30 bg-white px-4 py-3 font-mono text-sm text-black outline-none transition-all focus:border-cyan-400 focus:ring-2 focus:ring-cyan-500/20"
+                            />
+                            <div className="flex items-center justify-between text-xs text-gray-400">
+                              <span>One or more top-level YAML items.</span>
+                              <span>
+                                {falcoHasCustomRules
+                                  ? `${parsedFalcoRules.length} custom block${parsedFalcoRules.length === 1 ? "" : "s"} ready`
+                                  : "Default-rules-only deploy"}
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
                 <div className="space-y-2">
                   <label className="block text-xs font-medium uppercase tracking-[0.2em] text-cyan-300">
@@ -1252,6 +1615,12 @@ function AdminDashboard() {
   const [snortRulesAction, setSnortRulesAction] = useState<SnortRulesAction>("");
   const [currentSnortRules, setCurrentSnortRules] = useState<string[]>([]);
   const [currentSnortRuleSids, setCurrentSnortRuleSids] = useState<string[]>([]);
+  const [falcoRulesInput, setFalcoRulesInput] = useState("");
+  const [falcoRuleNamesInput, setFalcoRuleNamesInput] = useState("");
+  const [falcoIncludeDefaultRules, setFalcoIncludeDefaultRules] = useState(true);
+  const [falcoRulesAction, setFalcoRulesAction] = useState<SnortRulesAction>("");
+  const [currentFalcoRules, setCurrentFalcoRules] = useState<string[]>([]);
+  const [currentFalcoRuleNames, setCurrentFalcoRuleNames] = useState<string[]>([]);
   const [toolDependencyStatus, setToolDependencyStatus] =
     useState<ToolDependencyStatus>("idle");
   const [toolDependencyMessage, setToolDependencyMessage] = useState("");
@@ -1263,6 +1632,12 @@ function AdminDashboard() {
     setSnortRulesAction("");
     setCurrentSnortRules([]);
     setCurrentSnortRuleSids([]);
+    setFalcoRulesInput("");
+    setFalcoRuleNamesInput("");
+    setFalcoIncludeDefaultRules(true);
+    setFalcoRulesAction("");
+    setCurrentFalcoRules([]);
+    setCurrentFalcoRuleNames([]);
     setToolDependencyStatus("idle");
     setToolDependencyMessage("");
   };
@@ -1616,6 +1991,33 @@ function AdminDashboard() {
         if (apiToolName === "snort3" || apiToolName === "flow_module") {
           await loadToolDependencyStatus(apiToolName);
         }
+      } else if (apiToolName === "falco") {
+        const rulesConfig =
+          typeof configurationData.rules_config === "object" &&
+          configurationData.rules_config !== null
+            ? (configurationData.rules_config as Record<string, unknown>)
+            : {};
+        const customRules = Array.isArray(rulesConfig.custom_rules)
+          ? rulesConfig.custom_rules.filter(
+              (rule): rule is string => typeof rule === "string",
+            )
+          : [];
+        const customRuleNames = Array.isArray(rulesConfig.custom_rule_names)
+          ? rulesConfig.custom_rule_names.filter(
+              (ruleName): ruleName is string => typeof ruleName === "string",
+            )
+          : [];
+        const includeDefaultRules =
+          typeof rulesConfig.include_default_rules === "boolean"
+            ? rulesConfig.include_default_rules
+            : true;
+
+        setCurrentFalcoRules(customRules);
+        setCurrentFalcoRuleNames(customRuleNames);
+        setFalcoIncludeDefaultRules(includeDefaultRules);
+        setFalcoRulesAction("");
+        setFalcoRulesInput("");
+        setFalcoRuleNamesInput("");
       }
     } catch (error) {
       setDraftConfig(null);
@@ -1790,6 +2192,12 @@ function AdminDashboard() {
           snortRulesAction={snortRulesAction}
           currentSnortRules={currentSnortRules}
           currentSnortRuleSids={currentSnortRuleSids}
+          falcoRulesInput={falcoRulesInput}
+          falcoRuleNamesInput={falcoRuleNamesInput}
+          falcoIncludeDefaultRules={falcoIncludeDefaultRules}
+          falcoRulesAction={falcoRulesAction}
+          currentFalcoRules={currentFalcoRules}
+          currentFalcoRuleNames={currentFalcoRuleNames}
           toolDependencyStatus={toolDependencyStatus}
           toolDependencyMessage={toolDependencyMessage}
           onReconfigureConfigIdChange={setReconfigureConfigId}
@@ -1797,6 +2205,10 @@ function AdminDashboard() {
           onSnortRuleSidsInputChange={setSnortRuleSidsInput}
           onSnortIncludeDefaultRulesChange={setSnortIncludeDefaultRules}
           onSnortRulesActionChange={setSnortRulesAction}
+          onFalcoRulesInputChange={setFalcoRulesInput}
+          onFalcoRuleNamesInputChange={setFalcoRuleNamesInput}
+          onFalcoIncludeDefaultRulesChange={setFalcoIncludeDefaultRules}
+          onFalcoRulesActionChange={setFalcoRulesAction}
           onLaunchClick={() => {
             void loadToolDefaultConfiguration();
           }}
