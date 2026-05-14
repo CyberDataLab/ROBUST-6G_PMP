@@ -352,12 +352,12 @@ paths:
                         type: string
                       resolved_env:
                         type: object
-                        description: "Resolved environment variables persisted for the deployment. Internal-only variables such as SNORT_RULES_PATHS are not exposed."
+                        description: "Resolved environment variables persisted for the deployment. Internal-only variables such as SNORT_RULES_PATHS and FALCO_RULES_PATHS are not exposed."
                         additionalProperties:
                           type: string
                       rules_config:
                         type: object
-                        description: "Present for snort3 only."
+                        description: "Present for tools that support managed rules such as snort3 and falco."
                         properties:
                           include_default_rules:
                             type: boolean
@@ -366,6 +366,10 @@ paths:
                             items:
                               type: string
                           custom_rule_sids:
+                            type: array
+                            items:
+                              type: string
+                          custom_rule_names:
                             type: array
                             items:
                               type: string
