@@ -8,7 +8,6 @@ import os
 import sys
 import time
 import socket
-import subprocess
 
 
 def check_tcp_connection(host: str, port: int, service_name: str, max_attempts: int = 30) -> bool:
@@ -59,14 +58,14 @@ def main():
     # Get configuration from environment (all required)
     redis_host = os.getenv("REDIS_HOST")
     redis_port = int(os.getenv("REDIS_PORT"))
-    kafka_bootstrap = os.getenv("KAFKA_BOOTSTRAP")
+    kafka_bootstrap = os.getenv("KAFKA_BOOTSTRAP_DOCKER") or os.getenv("KAFKA_BOOTSTRAP")
     
     # Parse Kafka host and port
     try:
         kafka_host, kafka_port_str = kafka_bootstrap.split(":")
         kafka_port = int(kafka_port_str)
     except ValueError:
-        print(f"❌ Invalid KAFKA_BOOTSTRAP format: {kafka_bootstrap}")
+        print(f"❌ Invalid Kafka bootstrap format: {kafka_bootstrap}")
         print("   Expected format: host:port")
         sys.exit(1)
     
@@ -88,18 +87,12 @@ def main():
     print(f"  Consumer Group: {os.getenv('KTRW_KAFKA_GROUP_ID')}")
     print()
     
-    # Execute the worker
-    try:
-        subprocess.run(
-            ["python3", "-u", "/home/redis_worker/kafka_redis_worker.py"],
-            check=True
-        )
-    except subprocess.CalledProcessError as e:
-        print(f"❌ Worker exited with error code {e.returncode}")
-        sys.exit(e.returncode)
-    except KeyboardInterrupt:
-        print("\n🛑 Worker interrupted by user")
-        sys.exit(0)
+    # Replace the entrypoint process with the worker so the container lifecycle
+    # and health checks reflect the actual long-running process.
+    os.execvp(
+        "python3",
+        ["python3", "-u", "/home/redis_worker/kafka_redis_worker.py"],
+    )
 
 
 if __name__ == "__main__":

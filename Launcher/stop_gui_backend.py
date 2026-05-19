@@ -21,6 +21,7 @@ from gui_backend_common import (
     INTERNAL_LOGS_DIR,
     LAUNCHER_ENV_FILE,
     MODULE_COMPOSE_FILES,
+    NRTDR_API_CONTAINER_NAME,
     REPO_ROOT,
     RUNTIME_DIR,
     STATE_FILE,
@@ -50,8 +51,9 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description=(
             "Stop the GUI backend environment: dashboard, Configuration Manager "
-            "API, API-launched tool containers, and optionally the base stack. "
-            "Without flags it stops the GUI, the API, and API-launched tool containers."
+            "API, NRTDR API, API-launched tool containers, and optionally the "
+            "base stack. Without flags it stops the GUI, both APIs, and "
+            "API-launched tool containers."
         ),
         epilog=(
             "Examples:\n"
@@ -78,6 +80,11 @@ def parse_args() -> argparse.Namespace:
         help="Stop the Configuration Manager API process.",
     )
     parser.add_argument(
+        "--stop-nrtdr-api",
+        action="store_true",
+        help="Stop the NRTDR API process.",
+    )
+    parser.add_argument(
         "--stop-api-tools",
         action="store_true",
         help="Remove containers launched dynamically through the API.",
@@ -85,7 +92,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--stop-base",
         action="store_true",
-        help="Stop the base containers: Kafka, Filebeat, MongoDB, MongoDB CM and GUI PostgreSQL.",
+        help="Stop the base containers: Kafka, Filebeat, MongoDB, MongoDB CM, GUI PostgreSQL, Redis and the Redis worker.",
     )
     parser.add_argument(
         "--stop-all",
@@ -278,17 +285,22 @@ def main() -> int:
     try:
         purge = args.purge
         stop_gui = args.stop_all or args.stop_gui or not any(
-            [args.stop_gui, args.stop_api, args.stop_api_tools, args.stop_base, args.purge]
+            [args.stop_gui, args.stop_api, args.stop_nrtdr_api, args.stop_api_tools, args.stop_base, args.purge]
         )
         if purge:
             stop_gui = True
         stop_api = args.stop_all or args.stop_api or not any(
-            [args.stop_gui, args.stop_api, args.stop_api_tools, args.stop_base, args.purge]
+            [args.stop_gui, args.stop_api, args.stop_nrtdr_api, args.stop_api_tools, args.stop_base, args.purge]
         )
         if purge:
             stop_api = True
+        stop_nrtdr_api = args.stop_all or args.stop_nrtdr_api or not any(
+            [args.stop_gui, args.stop_api, args.stop_nrtdr_api, args.stop_api_tools, args.stop_base, args.purge]
+        )
+        if purge:
+            stop_nrtdr_api = True
         stop_api_tools = args.stop_all or args.stop_api_tools or not any(
-            [args.stop_gui, args.stop_api, args.stop_api_tools, args.stop_base, args.purge]
+            [args.stop_gui, args.stop_api, args.stop_nrtdr_api, args.stop_api_tools, args.stop_base, args.purge]
         )
         if purge:
             stop_api_tools = True
@@ -309,6 +321,13 @@ def main() -> int:
             else:
                 terminate_pid(pid, logger, "Configuration Manager API")
                 remove_pid_file(API_PID_FILE)
+
+        if stop_nrtdr_api:
+            remove_docker_containers(
+                [NRTDR_API_CONTAINER_NAME],
+                logger,
+                "NRTDR API container",
+            )
 
         if stop_api_tools:
             remove_docker_containers(API_TOOL_CONTAINERS, logger, "API-launched tool containers")

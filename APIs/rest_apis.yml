@@ -1,0 +1,4 @@
+include:
+  - path: ${PFD}/APIs/Near_Real_time_Data_Retrieval_API/Docker/NRTDR_API_compose.yml
+  #- path: -> For data exporter
+  #- path: -> For historical Data Retrieval

@@ -32,6 +32,8 @@ from gui_backend_common import (
     LAUNCHER_ENV_FILE,
     LAUNCHER_INIT_ENV_FILE,
     LAUNCHER_DIR,
+    NRTDR_API_CONTAINER_NAME,
+    NRTDR_API_NAME,
     RUNTIME_DIR,
     STATE_FILE,
     ensure_runtime_directories,
@@ -55,7 +57,7 @@ DEFAULT_GUI_BASE_PROFILES = [
     "-m",
     "db_module",
     "-t",
-    "mongodb,mongodb_cm,postgres_gui",
+    "mongodb,mongodb_cm,postgres_gui,redis",
 ]
 BASE_CONTAINER_EXPECTATIONS = {
     "kafka_robust6g": "healthy",
@@ -63,6 +65,8 @@ BASE_CONTAINER_EXPECTATIONS = {
     "mongodb_robust6g": "healthy",
     "mongodb_cm_robust6g": "healthy",
     "postgres_gui_robust6g": "healthy",
+    "redis_robust6g": "healthy",
+    "redis_worker_robust6g": "healthy",
 }
 
 
@@ -86,15 +90,16 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description=(
             "Bootstrap the GUI backend stack: base containers, Configuration "
-            "Manager API, and the dashboard GUI. Without flags it starts the "
-            "base services, reuses or starts the API, prepares the GUI in auto "
-            "mode, and reuses or starts the dashboard."
+            "Manager API, NRTDR API, and the dashboard GUI. Without flags it "
+            "starts the base services, reuses or starts both APIs, prepares "
+            "the GUI in auto mode, and reuses or starts the dashboard."
         ),
         epilog=(
             "Examples:\n"
             "  python3 Launcher/bootstrap_gui_backend.py\n"
             "  python3 Launcher/bootstrap_gui_backend.py --gui-init-mode start-only\n"
             "  python3 Launcher/bootstrap_gui_backend.py --skip-base --skip-api\n"
+            "  python3 Launcher/bootstrap_gui_backend.py --skip-nrtdr-api\n"
         ),
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
@@ -133,6 +138,11 @@ def parse_args() -> argparse.Namespace:
         "--skip-api",
         action="store_true",
         help="Skip starting or checking the Configuration Manager API.",
+    )
+    parser.add_argument(
+        "--skip-nrtdr-api",
+        action="store_true",
+        help="Skip starting or checking the NRTDR API.",
     )
     parser.add_argument(
         "--skip-gui",
@@ -243,6 +253,13 @@ def is_our_configuration_manager_api(port: int) -> bool:
     if status != 200 or not isinstance(payload, dict):
         return False
     return payload.get("message") == "Configuration Manager API is running"
+
+
+def is_our_nrtdr_api(port: int) -> bool:
+    status, _, payload = http_request_json(f"http://localhost:{port}/")
+    if status != 200 or not isinstance(payload, dict):
+        return False
+    return payload.get("name") == "PMP Near Real-Time Data Streaming API"
 
 
 def is_our_gui(port: int) -> bool:
@@ -379,6 +396,12 @@ def load_launcher_database_values() -> Dict[str, str]:
         "POSTGRES_GUI_DB": values.get("POSTGRES_GUI_DB", DEFAULT_POSTGRES_DB),
         "POSTGRES_GUI_PORT": values.get("POSTGRES_GUI_PORT", DEFAULT_POSTGRES_PORT),
     }
+
+
+def load_launcher_runtime_values() -> Dict[str, str]:
+    values = read_simple_env(LAUNCHER_INIT_ENV_FILE)
+    values.update(read_simple_env(LAUNCHER_ENV_FILE))
+    return values
 
 
 def build_gui_env(api_port: int, gui_port: int) -> Dict[str, str]:
@@ -536,6 +559,37 @@ def start_configuration_manager_api(
     return "started"
 
 
+def start_nrtdr_api(
+    nrtdr_api_port: int,
+    logger: BootstrapLogger,
+) -> str:
+    if ensure_port_available_or_owned(
+        nrtdr_api_port,
+        logger,
+        NRTDR_API_NAME,
+        is_our_nrtdr_api,
+    ):
+        return "reused"
+
+    command = [
+        sys.executable,
+        str(LAUNCHER_DIR / "start_containers.py"),
+        "-m",
+        "apis_module",
+        "-t",
+        "nrtdr_api",
+    ]
+    run_command(
+        command,
+        logger,
+        cwd=LAUNCHER_DIR.parent,
+    )
+    logger.log(
+        f"Ensured NRTDR API container {NRTDR_API_CONTAINER_NAME} is started on port {nrtdr_api_port}.",
+    )
+    return "started"
+
+
 def start_gui(gui_port: int, logger: BootstrapLogger, logs_dir: Path) -> str:
     if ensure_port_available_or_owned(gui_port, logger, GUI_PROCESS_NAME, is_our_gui):
         return "reused"
@@ -562,23 +616,28 @@ def start_gui(gui_port: int, logger: BootstrapLogger, logs_dir: Path) -> str:
 def write_state_file(
     *,
     api_port: int,
+    nrtdr_api_port: int,
     gui_port: int,
     logs_dir: Path,
     logger: BootstrapLogger,
     api_status: str,
+    nrtdr_api_status: str,
     gui_status: str,
 ) -> None:
     state = {
         "updated_at": datetime.now().isoformat(),
         "api_port": api_port,
+        "nrtdr_api_port": nrtdr_api_port,
         "gui_port": gui_port,
         "logs_dir": str(logs_dir),
         "bootstrap_log": str(logs_dir / BOOTSTRAP_LOG_FILE.name),
         "api_log": str(logs_dir / CONFIGURATION_MANAGER_LOG_FILE.name),
+        "nrtdr_api_container": NRTDR_API_CONTAINER_NAME,
         "gui_log": str(logs_dir / GUI_LOG_FILE.name),
         "api_pid_file": str(API_PID_FILE),
         "gui_pid_file": str(GUI_PID_FILE),
         "api_status": api_status,
+        "nrtdr_api_status": nrtdr_api_status,
         "gui_status": gui_status,
         "base_containers": BASE_CONTAINERS,
     }
@@ -608,7 +667,10 @@ def main() -> int:
             raise BootstrapError("uvicorn is not available in PATH.")
 
         api_status = "skipped"
+        nrtdr_api_status = "skipped"
         gui_status = "skipped"
+        launcher_values = load_launcher_runtime_values()
+        nrtdr_api_port = int(launcher_values.get("NRTDR_API_PORT", "8001"))
 
         if not args.skip_base:
             start_base_services(logger)
@@ -626,6 +688,17 @@ def main() -> int:
             )
         else:
             logger.log("Skipping Configuration Manager API startup as requested.")
+
+        if not args.skip_nrtdr_api:
+            nrtdr_api_status = start_nrtdr_api(nrtdr_api_port, logger)
+            wait_for_http_service(
+                url=f"http://localhost:{nrtdr_api_port}/",
+                validator=lambda: is_our_nrtdr_api(nrtdr_api_port),
+                logger=logger,
+                label="NRTDR API",
+            )
+        else:
+            logger.log("Skipping NRTDR API startup as requested.")
 
         if not args.skip_gui:
             gui_is_running = ensure_port_available_or_owned(
@@ -657,16 +730,19 @@ def main() -> int:
 
         write_state_file(
             api_port=args.api_port,
+            nrtdr_api_port=nrtdr_api_port,
             gui_port=args.gui_port,
             logs_dir=logs_dir,
             logger=logger,
             api_status=api_status,
+            nrtdr_api_status=nrtdr_api_status,
             gui_status=gui_status,
         )
 
         logger.log("Bootstrap completed successfully.")
         logger.log(f"Dashboard URL: http://localhost:{args.gui_port}")
         logger.log(f"Configuration Manager API URL: http://localhost:{args.api_port}")
+        logger.log(f"NRTDR API URL: http://localhost:{nrtdr_api_port}")
         return 0
     except BootstrapError as exc:
         logger.log(f"Bootstrap failed: {exc}")

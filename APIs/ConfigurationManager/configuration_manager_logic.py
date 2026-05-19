@@ -275,7 +275,7 @@ class RedisConfig(BaseModel):
 
     REDIS_HOST:                             str = "redis_robust6g"
     REDIS_PORT:                             str = "6379"
-    REDIS_USER:                             str = "0"
+    REDIS_DB:                               str = "0"
     REDIS_PASSWORD:                         str = ""
     REDIS_MAXMEMORY_SAMPLES:                str = "5"
     REDIS_IO_THREADS:                       str = "4"

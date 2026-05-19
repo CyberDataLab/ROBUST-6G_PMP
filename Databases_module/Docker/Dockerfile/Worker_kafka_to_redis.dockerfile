@@ -19,9 +19,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 RUN pip install --no-cache-dir \
     confluent-kafka==2.6.0 \
-    redis==5.2.0
+    redis==5.2.0 \
+    pymongo==4.10.1
 
 COPY Databases_module/Scripts/kafka_redis_worker.py /home/redis_worker/
+COPY Databases_module/Scripts/worker_payload_helpers.py /home/redis_worker/
 COPY Databases_module/Docker/Entrypoints/entrypoint_worker.py /home/redis_worker/
 
 # Create non-root user for security
@@ -30,9 +32,5 @@ RUN useradd -m -u 1000 redisworker && \
     chmod +x /home/redis_worker/entrypoint_worker.py
 
 USER redisworker
-
-# Health check
-HEALTHCHECK --interval=30s --timeout=10s --start-period=10s --retries=3 \
-    CMD pgrep -f /home/redis_worker/kafka_redis_worker.py || exit 1
 
 ENTRYPOINT ["python3", "/home/redis_worker/entrypoint_worker.py"]

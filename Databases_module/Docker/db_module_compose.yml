@@ -100,28 +100,26 @@ services:
       dockerfile: Databases_module/Docker/Dockerfile/Worker_kafka_to_redis.dockerfile
     container_name: redis_worker_robust6g
     profiles: ["db_module.redis"]
-    depends_on:
-      redis_robust6g:
-        condition: service_healthy
-      kafka_robust6g:
-        condition: service_healthy
     environment:
       - TZ=${TZ}
       # Kafka Configuration
-      - KAFKA_BOOTSTRAP=${KAFKA_BOOTSTRAP}
+      - KAFKA_BOOTSTRAP_DOCKER=${KAFKA_BOOTSTRAP_DOCKER}
       - KTRW_KAFKA_GROUP_ID=${KTRW_KAFKA_GROUP_ID}
       - KTRW_KAFKA_AUTO_OFFSET_RESET=${KTRW_KAFKA_AUTO_OFFSET_RESET}
       - KTRW_KAFKA_ENABLE_AUTO_COMMIT=${KTRW_KAFKA_ENABLE_AUTO_COMMIT}
       # Redis Configuration
       - REDIS_HOST=${REDIS_HOST}
       - REDIS_PORT=${REDIS_PORT:-6379}
-      - REDIS_USER=${REDIS_USER}
+      - REDIS_DB=${REDIS_DB:-0}
       - REDIS_PASSWORD=${REDIS_PASSWORD}
+      - MONGO_CM_URI_DOCKER=${MONGO_CM_URI_DOCKER}
       # Stream Configuration
       - KTRW_REDIS_MAX_STREAM_LENGTH=${KTRW_REDIS_MAX_STREAM_LENGTH}
       - KTRW_REDIS_STREAM_TTL_SECONDS=${KTRW_REDIS_STREAM_TTL_SECONDS}
       # Topic Discovery Configuration
       - KTRW_KAFKA_TOPIC_REFRESH_INTERVAL=${KTRW_KAFKA_TOPIC_REFRESH_INTERVAL}
+      - KTRW_CM_TOPICS_REFRESH_INTERVAL=${KTRW_CM_TOPICS_REFRESH_INTERVAL}
+      - KTRW_TOPIC_MAP_CACHE_FILE=${KTRW_TOPIC_MAP_CACHE_FILE}
       # Memory Management Configuration
       - KTRW_REDIS_CLEANUP_INTERVAL=${KTRW_REDIS_CLEANUP_INTERVAL}
       - KTRW_REDIS_RETENTION_HOURS=${KTRW_REDIS_RETENTION_HOURS}
@@ -135,6 +133,18 @@ services:
       - TSHARK_BASE_TOPIC=${TSHARK_BASE_TOPIC}
       - SNORT_KAFKA_TOPIC_OUT=${SNORT_KAFKA_TOPIC_OUT}
       - CIC_KAFKA_BASE_TOPIC_OUT=${CIC_KAFKA_BASE_TOPIC_OUT}
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python3",
+          "-c",
+          "import sys; cmdline = open('/proc/1/cmdline', 'rb').read().decode('utf-8', errors='ignore'); sys.exit(0 if 'kafka_redis_worker.py' in cmdline else 1)",
+        ]
+      interval: 30s
+      timeout: 10s
+      start_period: 10s
+      retries: 3
     restart: unless-stopped
     extra_hosts:
       - "${KAFKA_LAN_HOSTNAME:-kafka-host}:host-gateway"

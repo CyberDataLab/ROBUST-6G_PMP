@@ -23,9 +23,14 @@ GUI_PID_FILE = RUNTIME_DIR / "gui_dashboard.pid"
 STATE_FILE = RUNTIME_DIR / "state.json"
 
 CONFIGURATION_MANAGER_API_NAME = "configuration_manager_api"
+NRTDR_API_NAME = "nrtdr_api"
+NRTDR_API_CONTAINER_NAME = "nrtdr_api_robust6g"
 GUI_PROCESS_NAME = "gui_dashboard"
 
 MODULE_COMPOSE_FILES = {
+    "apis_module": [
+        "APIs/rest_apis.yml",
+    ],
     "communication_module": [
         "Communication_Bus/Docker/communication_bus_compose.yml",
     ],
@@ -55,6 +60,8 @@ BASE_CONTAINERS = [
     "mongodb_robust6g",
     "mongodb_cm_robust6g",
     "postgres_gui_robust6g",
+    "redis_robust6g",
+    "redis_worker_robust6g",
 ]
 
 API_TOOL_CONTAINERS = [

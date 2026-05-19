@@ -18,6 +18,9 @@ MODULE_COMPOSE_FILES: Dict[str, List[str]] = {
     "communication_module": [
         "Communication_Bus/Docker/communication_bus_compose.yml",
     ],
+    "apis_module": [
+        "APIs/rest_apis.yml",
+    ],
     "alert_module": [
         "Alert_Module/Docker/alert_module_compose.yml",
     ],
@@ -47,6 +50,7 @@ class cmd_parser:
 
     MODULE_REGISTRY: Dict[str, List[str]] = {
         "alert_module":         ["alert_module"],
+        "apis_module":          ["nrtdr_api"],
         "communication_module": ["kafka", "filebeat"],
         "collection_module":    ["fluentd", "telegraf", "tshark", "falco", "info"],
         "flow_module":          ["flow_module"],
@@ -374,6 +378,7 @@ def build_default_env(
     kafka_port_external_lan     = "9094"
     kafka_bootstrap             = kafka_lan_hostname + ":" + kafka_port_external_lan
     kafka_port_internal         = "29092"
+    kafka_bootstrap_docker      = "kafka_robust6g:" + kafka_port_internal
     kafka_log_retention_ms      = "86400000"
     kafka_log_retention_bytes   = "1073741824"
     kafka_log_cleanup_policy    = "delete"
@@ -443,7 +448,7 @@ def build_default_env(
     # Redis
     redis_host                           = "redis_robust6g"
     redis_port                           = "6379"
-    redis_user                           = "0"
+    redis_db                             = "0"
     redis_password                       = ""
     redis_maxmemory_samples              = "5"
     redis_io_threads                     = "4"
@@ -459,6 +464,8 @@ def build_default_env(
     ktrw_session_timeout_ms              = "10000"
     ktrw_max_poll_interval_ms            = "300000"
     ktrw_kafka_topic_refresh_interval    = "30"
+    ktrw_cm_topics_refresh_interval      = "30"
+    ktrw_topic_map_cache_file            = "/home/redis_worker/topic_map_cache.json"
     ktrw_redis_cleanup_interval          = "300"
     ktrw_redis_retention_hours           = "2"
     ktrw_redis_emergency_retention_hours = "1"
@@ -503,12 +510,10 @@ def build_default_env(
 
     # NRTDR API
     nrtdr_api_port         = "8001"
-    if network_mode == "host":
-        nrtdr_api_host     = get_host_ip()
-    else:
-        nrtdr_api_host     = "nrtdr_api"
-    nrtdr_ws_poll_interval = "0.5"
-    nrtdr_ws_batch_size    = "10"
+    nrtdr_api_host         = "0.0.0.0"
+    nrtdr_ws_default_last_n = "10"
+    nrtdr_ws_max_last_n     = "100"
+    nrtdr_active_window_seconds = "60"
 
     # Thingsboard alarm collector
     tb_username  = "tenant@thingsboard.org"
@@ -558,6 +563,7 @@ def build_default_env(
 
         # Kafka
         "KAFKA_BOOTSTRAP":              kafka_bootstrap,
+        "KAFKA_BOOTSTRAP_DOCKER":       kafka_bootstrap_docker,
         "KAFKA_LAN_HOSTNAME":           kafka_lan_hostname,
         "KAFKA_PORT_EXTERNAL_LAN":      kafka_port_external_lan,
         "KAFKA_PORT_INTERNAL":          kafka_port_internal,
@@ -610,7 +616,7 @@ def build_default_env(
         # Redis
         "REDIS_HOST":                           redis_host,
         "REDIS_PORT":                           redis_port,
-        "REDIS_USER":                           redis_user,
+        "REDIS_DB":                             redis_db,
         "REDIS_PASSWORD":                       redis_password,
         "REDIS_MAXMEMORY_SAMPLES":              redis_maxmemory_samples,
         "REDIS_IO_THREADS":                     redis_io_threads,
@@ -626,6 +632,8 @@ def build_default_env(
         "KTRW_SESSION_TIMEOUT_MS":              ktrw_session_timeout_ms,
         "KTRW_MAX_POLL_INTERVAL_MS":            ktrw_max_poll_interval_ms,
         "KTRW_KAFKA_TOPIC_REFRESH_INTERVAL":    ktrw_kafka_topic_refresh_interval,
+        "KTRW_CM_TOPICS_REFRESH_INTERVAL":      ktrw_cm_topics_refresh_interval,
+        "KTRW_TOPIC_MAP_CACHE_FILE":            ktrw_topic_map_cache_file,
         "KTRW_REDIS_CLEANUP_INTERVAL":          ktrw_redis_cleanup_interval,
         "KTRW_REDIS_RETENTION_HOURS":           ktrw_redis_retention_hours,
         "KTRW_REDIS_EMERGENCY_RETENTION_HOURS": ktrw_redis_emergency_retention_hours,
@@ -669,10 +677,11 @@ def build_default_env(
         "FLOW_KAFKA_PRODUCER_COMPRESSION":                   flow_kafka_producer_compression,
 
         # NRTDR API
-        "NRTDR_API_PORT":         nrtdr_api_port,
-        "NRTDR_API_HOST":         nrtdr_api_host,
-        "NRTDR_WS_POLL_INTERVAL": nrtdr_ws_poll_interval,
-        "NRTDR_WS_BATCH_SIZE":    nrtdr_ws_batch_size,
+        "NRTDR_API_PORT":              nrtdr_api_port,
+        "NRTDR_API_HOST":              nrtdr_api_host,
+        "NRTDR_WS_DEFAULT_LAST_N":     nrtdr_ws_default_last_n,
+        "NRTDR_WS_MAX_LAST_N":         nrtdr_ws_max_last_n,
+        "NRTDR_ACTIVE_WINDOW_SECONDS": nrtdr_active_window_seconds,
 
         # Thingsboard alarm collector
         "TB_USERNAME":  tb_username,
@@ -692,6 +701,7 @@ ALWAYS_ENV_VARS: List[str] = [
     "COMPOSE_PROFILES",
     "TZ",
     "KAFKA_BOOTSTRAP",
+    "KAFKA_BOOTSTRAP_DOCKER",
     "KAFKA_LAN_HOSTNAME",   # needed by extra_hosts in many containers to resolve Kafka DNS
 ]
 
@@ -728,6 +738,7 @@ TOOL_ENV_VARS: Dict[str, List[str]] = {
     ],
     "kafka": [
         "KAFKA_BOOTSTRAP",
+        "KAFKA_BOOTSTRAP_DOCKER",
         "KAFKA_LAN_HOSTNAME",
         "KAFKA_PORT_EXTERNAL_LAN",
         "KAFKA_PORT_INTERNAL",
@@ -788,15 +799,17 @@ TOOL_ENV_VARS: Dict[str, List[str]] = {
         "POSTGRES_GUI_PORT",
     ],
     "redis": [
+        "KAFKA_BOOTSTRAP_DOCKER",
         "REDIS_HOST",
         "REDIS_PORT",
-        "REDIS_USER",
+        "REDIS_DB",
         "REDIS_PASSWORD",
         "REDIS_MAXMEMORY_SAMPLES",
         "REDIS_IO_THREADS",
         "REDIS_STREAM_NODE_MAX_BYTES",
         "REDIS_STREAM_NODE_MAX_ENTRIES",
         "REDIS_MAXCLIENTS",
+        "MONGO_CM_URI_DOCKER",
         "KTRW_KAFKA_AUTO_OFFSET_RESET",
         "KTRW_KAFKA_ENABLE_AUTO_COMMIT",
         "KTRW_KAFKA_GROUP_ID",
@@ -806,6 +819,8 @@ TOOL_ENV_VARS: Dict[str, List[str]] = {
         "KTRW_SESSION_TIMEOUT_MS",
         "KTRW_MAX_POLL_INTERVAL_MS",
         "KTRW_KAFKA_TOPIC_REFRESH_INTERVAL",
+        "KTRW_CM_TOPICS_REFRESH_INTERVAL",
+        "KTRW_TOPIC_MAP_CACHE_FILE",
         "KTRW_REDIS_CLEANUP_INTERVAL",
         "KTRW_REDIS_RETENTION_HOURS",
         "KTRW_REDIS_EMERGENCY_RETENTION_HOURS",
@@ -862,10 +877,15 @@ TOOL_ENV_VARS: Dict[str, List[str]] = {
         "SNORT_PRODUCER_KAFKA_PRODUCER_COMPRESSION",
     ],
     "nrtdr_api": [
+        "REDIS_HOST",
+        "REDIS_PORT",
+        "REDIS_DB",
+        "REDIS_PASSWORD",
         "NRTDR_API_PORT",
         "NRTDR_API_HOST",
-        "NRTDR_WS_POLL_INTERVAL",
-        "NRTDR_WS_BATCH_SIZE",
+        "NRTDR_WS_DEFAULT_LAST_N",
+        "NRTDR_WS_MAX_LAST_N",
+        "NRTDR_ACTIVE_WINDOW_SECONDS",
     ],
     "alarm_collector": [
         "TB_USERNAME",
