@@ -1034,6 +1034,7 @@ def launch(
         compose_env = os.environ.copy()
         for key in env_keys:
             compose_env.pop(key, None)
+        compose_env["COMPOSE_IGNORE_ORPHANS"] = "1"
 
         subprocess.run(compose_cmd, check=True, env=compose_env)
     except subprocess.CalledProcessError as e:

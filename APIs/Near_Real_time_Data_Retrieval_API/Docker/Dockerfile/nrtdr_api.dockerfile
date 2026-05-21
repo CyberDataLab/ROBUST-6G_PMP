@@ -5,13 +5,13 @@ WORKDIR /home/nrtdr_api
 # Environment variables
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
+    DEBIAN_FRONTEND=noninteractive \
     PIP_NO_CACHE_DIR=1 \
     PIP_DISABLE_PIP_VERSION_CHECK=1
 
 # Dependencies
 RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
-    netcat-openbsd \
     && rm -rf /var/lib/apt/lists/*
 
 RUN pip install --no-cache-dir \
