@@ -1,18 +1,22 @@
-import { NextApiRequest, NextApiResponse } from 'next';
+const DEFAULT_ALLOWED_DOMAINS = ["robust-6g.com", "robust-6g.org"];
 
-const ALLOWED_DOMAINS = ['robust-6g.com', 'robust-6g.org'];
+/** """Validates whether an email belongs to one of the allowed domains, including subdomains.""" */
+export function validateEmailDomain(
+  email: string,
+  allowedDomains: string[] = DEFAULT_ALLOWED_DOMAINS,
+): boolean {
+  const parts = email.split("@");
+  if (parts.length !== 2 || !parts[1]) {
+    return false;
+  }
 
-export const validateEmailDomain = (email: string): boolean => {
-    const domain = email.split('@')[1];
-    return ALLOWED_DOMAINS.includes(domain);
-};
+  const candidateDomain = parts[1].toLowerCase();
 
-export const emailDomainAffiliationPolicy = (req: NextApiRequest, res: NextApiResponse, next: () => void) => {
-    const email = req.body.email;
-
-    if (!email || !validateEmailDomain(email)) {
-        return res.status(403).json({ message: 'Email domain is not allowed.' });
-    }
-
-    next();
-};
+  return allowedDomains.some((domain) => {
+    const normalizedDomain = domain.toLowerCase();
+    return (
+      candidateDomain === normalizedDomain ||
+      candidateDomain.endsWith(`.${normalizedDomain}`)
+    );
+  });
+}

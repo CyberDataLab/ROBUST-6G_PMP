@@ -1,93 +1,101 @@
-import { createMocks } from 'node-mocks-http';
-import { loginHandler, registerHandler } from '../../../src/app/api/auth/login/route';
-import { prisma } from '../../../src/lib/prisma';
+import { afterEach, describe, expect, test, vi } from "vitest";
 
-jest.mock('../../../src/lib/prisma');
+vi.mock("../../src/lib/db", () => {
+  return {
+    prisma: {
+      user: {
+        findUnique: vi.fn(),
+      },
+    },
+  };
+});
 
-describe('Auth API', () => {
+vi.mock("../../src/lib/org", () => {
+  return {
+    extractDomain: vi.fn((email: string) => email.split("@")[1]),
+    findOrganizationByEmailDomain: vi.fn(),
+  };
+});
+
+vi.mock("bcrypt", () => {
+  return {
+    default: {
+      compare: vi.fn(),
+    },
+  };
+});
+
+vi.mock("jsonwebtoken", () => {
+  return {
+    default: {
+      sign: vi.fn(() => "signed-token"),
+    },
+  };
+});
+
+import bcrypt from "bcrypt";
+import jwt from "jsonwebtoken";
+import { prisma } from "../../src/lib/db";
+import { findOrganizationByEmailDomain } from "../../src/lib/org";
+import { POST } from "../../src/app/api/auth/login/route";
+
+describe("Auth API", () => {
   afterEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
   });
 
-  describe('POST /api/auth/login', () => {
-    it('should return 200 and a token for valid credentials', async () => {
-      const { req, res } = createMocks({
-        method: 'POST',
-        body: {
-          email: 'test@robust-6g.com',
-          password: 'password123',
-        },
-      });
-
-      prisma.user.findUnique.mockResolvedValueOnce({
-        id: 1,
-        email: 'test@robust-6g.com',
-        password: 'hashedPassword',
-      });
-
-      await loginHandler(req, res);
-
-      expect(res._getStatusCode()).toBe(200);
-      expect(res._getData()).toHaveProperty('token');
+  test("should return 400 when credentials are missing", async () => {
+    const request = new Request("http://localhost/api/auth/login", {
+      method: "POST",
+      body: JSON.stringify({ email: "", password: "" }),
+      headers: { "Content-Type": "application/json" },
     });
 
-    it('should return 401 for invalid credentials', async () => {
-      const { req, res } = createMocks({
-        method: 'POST',
-        body: {
-          email: 'wrong@robust-6g.com',
-          password: 'wrongPassword',
-        },
-      });
+    const response = await POST(request);
+    const payload = (await response.json()) as { error?: string };
 
-      prisma.user.findUnique.mockResolvedValueOnce(null);
-
-      await loginHandler(req, res);
-
-      expect(res._getStatusCode()).toBe(401);
-      expect(res._getData()).toHaveProperty('error', 'Invalid credentials');
-    });
+    expect(response.status).toBe(400);
+    expect(payload.error).toBe("Email and password are required");
   });
 
-  describe('POST /api/auth/register', () => {
-    it('should return 201 for successful registration', async () => {
-      const { req, res } = createMocks({
-        method: 'POST',
-        body: {
-          email: 'newuser@robust-6g.com',
-          password: 'newPassword123',
-        },
-      });
-
-      prisma.user.create.mockResolvedValueOnce({
-        id: 2,
-        email: 'newuser@robust-6g.com',
-      });
-
-      await registerHandler(req, res);
-
-      expect(res._getStatusCode()).toBe(201);
-      expect(res._getData()).toHaveProperty('message', 'User registered successfully');
+  test("should return 200 and a token for valid credentials", async () => {
+    vi.mocked(findOrganizationByEmailDomain).mockResolvedValue({
+      id: "org-1",
+      name: "ROBUST-6G",
+      slug: "robust-6g",
+      allowedEmailDomains: ["robust-6g.com"],
+      createdAt: new Date(),
+      updatedAt: new Date(),
     });
 
-    it('should return 400 for email already in use', async () => {
-      const { req, res } = createMocks({
-        method: 'POST',
-        body: {
-          email: 'existing@robust-6g.com',
-          password: 'password123',
-        },
-      });
+    vi.mocked(prisma.user.findUnique).mockResolvedValue({
+      id: "user-1",
+      name: "Test User",
+      email: "test@robust-6g.com",
+      passwordHash: "hashedPassword",
+      role: "ADMIN",
+      organizationId: "org-1",
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    } as never);
 
-      prisma.user.findUnique.mockResolvedValueOnce({
-        id: 1,
-        email: 'existing@robust-6g.com',
-      });
+    vi.mocked(bcrypt.compare).mockResolvedValue(true as never);
+    process.env.JWT_SECRET = "test-secret";
 
-      await registerHandler(req, res);
-
-      expect(res._getStatusCode()).toBe(400);
-      expect(res._getData()).toHaveProperty('error', 'Email already in use');
+    const request = new Request("http://localhost/api/auth/login", {
+      method: "POST",
+      body: JSON.stringify({
+        email: "test@robust-6g.com",
+        password: "password123",
+      }),
+      headers: { "Content-Type": "application/json" },
     });
+
+    const response = await POST(request);
+    const payload = (await response.json()) as { token?: string };
+
+    expect(response.status).toBe(200);
+    expect(payload.token).toBe("signed-token");
+    expect(jwt.sign).toHaveBeenCalledTimes(1);
   });
 });

@@ -563,12 +563,31 @@ def start_nrtdr_api(
     nrtdr_api_port: int,
     logger: BootstrapLogger,
 ) -> str:
+    """Reuses or starts the managed NRTDR API container before falling back to compose launch."""
     if ensure_port_available_or_owned(
         nrtdr_api_port,
         logger,
         NRTDR_API_NAME,
         is_our_nrtdr_api,
     ):
+        return "reused"
+
+    container_status = docker_container_status(NRTDR_API_CONTAINER_NAME)
+    if container_status in {"created", "exited"}:
+        run_command(
+            ["docker", "start", NRTDR_API_CONTAINER_NAME],
+            logger,
+            cwd=LAUNCHER_DIR.parent,
+        )
+        logger.log(
+            f"Started existing NRTDR API container {NRTDR_API_CONTAINER_NAME} without rebuild.",
+        )
+        return "started"
+
+    if container_status in {"running", "healthy"}:
+        logger.log(
+            f"NRTDR API container {NRTDR_API_CONTAINER_NAME} is already {container_status}; waiting for readiness.",
+        )
         return "reused"
 
     command = [

@@ -1,28 +1,24 @@
-import { NextResponse } from 'next/server';
-import { prisma } from '@/lib/prisma';
+import { NextResponse } from "next/server";
+import { prisma } from "@/lib/db";
 
+/** """Returns dashboard entries including owner and organization metadata.""" */
 export async function GET() {
-    try {
-        const dashboardData = await prisma.dashboard.findMany();
-        return NextResponse.json(dashboardData);
-    } catch (error) {
-        return NextResponse.error();
-    }
-}
+  try {
+    const dashboards = await prisma.dashboard.findMany({
+      include: {
+        organization: true,
+        user: true,
+      },
+      orderBy: {
+        updatedAt: "desc",
+      },
+    });
 
-export async function POST(request: Request) {
-    const data = await request.json();
-    
-    try {
-        const newDashboardEntry = await prisma.dashboard.create({
-            data: {
-                title: data.title,
-                content: data.content,
-                // Add other fields as necessary
-            },
-        });
-        return NextResponse.json(newDashboardEntry, { status: 201 });
-    } catch (error) {
-        return NextResponse.error();
-    }
+    return NextResponse.json(dashboards);
+  } catch {
+    return NextResponse.json(
+      { error: "Could not fetch dashboard entries" },
+      { status: 500 },
+    );
+  }
 }

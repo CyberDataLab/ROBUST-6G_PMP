@@ -10,20 +10,30 @@ export default function LoginPage() {
 
   const router = useRouter();
   const [mode, setMode] = useState<AuthMode>("signin");
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
   const [role, setRole] = useState<SignupRole>("USER");
   const [error, setError] = useState("");
   const [successMessage, setSuccessMessage] = useState("");
   const [loading, setLoading] = useState(false);
 
-  const handleSignIn = async (e: React.FormEvent) => {
+  /** """Reads credentials directly from form fields to support browser autofill reliably.""" */
+  const extractCredentials = (form: HTMLFormElement) => {
+    const formData = new FormData(form);
+    const email = String(formData.get("email") ?? "")
+      .trim()
+      .toLowerCase();
+    const password = String(formData.get("password") ?? "");
+    return { email, password };
+  };
+
+  /** """Handles sign-in requests and redirects to dashboard when credentials are valid.""" */
+  const handleSignIn = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setError("");
     setSuccessMessage("");
     setLoading(true);
 
     try {
+      const { email, password } = extractCredentials(e.currentTarget);
       const result = await signIn("credentials", {
         email,
         password,
@@ -43,13 +53,15 @@ export default function LoginPage() {
     }
   };
 
-  const handleSignUp = async (e: React.FormEvent) => {
+  /** """Handles account registration using current form values and selected role.""" */
+  const handleSignUp = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setError("");
     setSuccessMessage("");
     setLoading(true);
 
     try {
+      const { email, password } = extractCredentials(e.currentTarget);
       const response = await fetch("/api/auth/register", {
         method: "POST",
         headers: {
@@ -69,9 +81,9 @@ export default function LoginPage() {
       }
 
       setSuccessMessage("Account created successfully. You can now sign in.");
-      setPassword("");
       setRole("USER");
       setMode("signin");
+      e.currentTarget.reset();
     } catch (err) {
       setError("An unexpected error occurred. Please try again.");
     } finally {
@@ -83,7 +95,6 @@ export default function LoginPage() {
     setMode(nextMode);
     setError("");
     setSuccessMessage("");
-    setPassword("");
     if (nextMode === "signup") {
       setRole("USER");
     }
@@ -170,9 +181,8 @@ export default function LoginPage() {
               </label>
               <input
                 id="email"
+                name="email"
                 type="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
                 required
                 autoComplete="email"
                 placeholder="you@robust-6g.eu"
@@ -189,9 +199,8 @@ export default function LoginPage() {
               </label>
               <input
                 id="password"
+                name="password"
                 type="password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
                 required
                 autoComplete="current-password"
                 placeholder="••••••••"

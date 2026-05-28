@@ -1,22 +1,26 @@
-import React from 'react';
+import React from "react";
 
 interface StatsCardProps {
   title: string;
   value: number | string;
-  icon: React.ReactNode;
+  icon?: React.ReactNode;
   description?: string;
 }
 
-const StatsCard: React.FC<StatsCardProps> = ({ title, value, icon, description }) => {
+/** """Displays a compact metric card with an optional icon and supporting text.""" */
+const StatsCard: React.FC<StatsCardProps> = ({
+  title,
+  value,
+  icon,
+  description,
+}) => {
   return (
-    <div className="bg-white shadow-md rounded-lg p-4 flex items-center">
-      <div className="mr-4 text-blue-500">
-        {icon}
-      </div>
+    <div className="flex items-center rounded-lg bg-white p-4 shadow-md">
+      {icon ? <div className="mr-4 text-blue-500">{icon}</div> : null}
       <div>
         <h2 className="text-lg font-semibold">{title}</h2>
         <p className="text-2xl font-bold">{value}</p>
-        {description && <p className="text-gray-600">{description}</p>}
+        {description ? <p className="text-gray-600">{description}</p> : null}
       </div>
     </div>
   );

@@ -1,40 +1,36 @@
-import React from 'react';
-import { useQuery } from 'react-query';
-import { PrismaClient } from '@prisma/client';
-import Table from '../ui/Table';
+import React from "react";
+import Table from "../ui/Table";
 
-const prisma = new PrismaClient();
+interface UserItem {
+  id: string;
+  name: string;
+  email: string;
+  role: string;
+}
 
-const UserTable: React.FC = () => {
-  const { data: users, isLoading, error } = useQuery('users', async () => {
-    return await prisma.user.findMany();
+interface UserTableProps {
+  users?: UserItem[];
+}
+
+const USER_TABLE_HEADERS = ["ID", "Name", "Email", "Role"];
+
+/** """Transforms API user entities into the generic table row format.""" */
+function mapUsersToRows(users: UserItem[]): Array<Record<string, string>> {
+  return users.map((user) => {
+    return {
+      ID: user.id,
+      Name: user.name,
+      Email: user.email,
+      Role: user.role,
+    };
   });
+}
 
-  if (isLoading) return <div>Loading...</div>;
-  if (error) return <div>Error loading users</div>;
+/** """Displays a users table using pre-fetched data from parent components.""" */
+const UserTable: React.FC<UserTableProps> = ({ users = [] }) => {
+  const data = mapUsersToRows(users);
 
-  return (
-    <Table>
-      <thead>
-        <tr>
-          <th>ID</th>
-          <th>Name</th>
-          <th>Email</th>
-          <th>Role</th>
-        </tr>
-      </thead>
-      <tbody>
-        {users.map(user => (
-          <tr key={user.id}>
-            <td>{user.id}</td>
-            <td>{user.name}</td>
-            <td>{user.email}</td>
-            <td>{user.role}</td>
-          </tr>
-        ))}
-      </tbody>
-    </Table>
-  );
+  return <Table headers={USER_TABLE_HEADERS} data={data} />;
 };
 
 export default UserTable;

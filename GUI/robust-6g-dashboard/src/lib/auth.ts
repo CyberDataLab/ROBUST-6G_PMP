@@ -12,6 +12,7 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
         password: { label: "Password", type: "password" },
       },
       async authorize(credentials) {
+        /** """Validates login credentials and maps the persisted role to the UI role model.""" */
         if (!credentials?.email || !credentials?.password) {
           throw new Error("Email and password are required");
         }
@@ -52,8 +53,9 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
   ],
   callbacks: {
     async jwt({ token, user }) {
+      /** """Persists custom user fields inside JWT tokens on successful login.""" */
       if (user) {
-        token.id = user.id;
+        token.id = user.id ?? "";
         token.role = (user as any).role;
         token.organizationId = (user as any).organizationId;
         token.organizationSlug = (user as any).organizationSlug;
@@ -61,10 +63,10 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
       return token;
     },
     async session({ session, token }) {
+      /** """Copies custom fields from JWT token into the session user payload.""" */
       if (session.user) {
         session.user.id = token.id as string;
-        (session.user as any).role =
-          token.role === "ANALYST" ? "USER" : token.role;
+        (session.user as any).role = token.role;
         (session.user as any).organizationId = token.organizationId;
         (session.user as any).organizationSlug = token.organizationSlug;
       }
