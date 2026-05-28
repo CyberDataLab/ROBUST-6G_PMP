@@ -486,7 +486,6 @@ def run_snort_rules_validator() -> Tuple[bool, str]:
         str(ALERT_MODULE_COMPOSE_PATH),
         "run",
         "--rm",
-        "--build",
         "--no-deps",
         VALIDATOR_SERVICE_NAME,
     ]

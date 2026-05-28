@@ -673,7 +673,6 @@ def run_falco_rules_validator(rules_config: Dict[str, Any]) -> Tuple[bool, str]:
         str(DATA_COLLECTION_COMPOSE_PATH),
         "run",
         "--rm",
-        "--build",
         "--no-deps",
         VALIDATOR_SERVICE_NAME,
     ]

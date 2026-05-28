@@ -54,6 +54,7 @@ type ToolDependencyStatus =
   | "ready"
   | "not_ready"
   | "error";
+type JobStatus = "queued" | "running" | "succeeded" | "failed" | "canceled";
 type DeployPayload = {
   toolName: ToolApiName;
   configuration: JsonObject;
@@ -789,6 +790,88 @@ function MonitoringToolConfigurationBox({
     setDeployMessage("");
 
     try {
+      const pollJobUntilFinished = async (jobId: string) => {
+        const maxPollCycles = 900;
+        let polls = 0;
+
+        while (polls < maxPollCycles) {
+          polls += 1;
+          const jobResponse = await fetch(
+            `/api/configuration-manager/internal/jobs?job_id=${encodeURIComponent(jobId)}`,
+            { cache: "no-store" },
+          );
+          const jobPayload = await jobResponse.json().catch(() => null);
+
+          if (!jobResponse.ok) {
+            throw new Error(
+              getErrorMessage(
+                jobPayload,
+                `Could not read job status (HTTP ${jobResponse.status}).`,
+              ),
+            );
+          }
+
+          const jobStatus =
+            jobPayload &&
+            typeof jobPayload === "object" &&
+            "status" in jobPayload &&
+            typeof jobPayload.status === "string"
+              ? (jobPayload.status as JobStatus)
+              : null;
+          const jobStage =
+            jobPayload &&
+            typeof jobPayload === "object" &&
+            "stage" in jobPayload &&
+            typeof jobPayload.stage === "string"
+              ? jobPayload.stage
+              : "queued";
+          const jobAttempt =
+            jobPayload &&
+            typeof jobPayload === "object" &&
+            "attempt" in jobPayload &&
+            typeof jobPayload.attempt === "number"
+              ? jobPayload.attempt
+              : 1;
+          const jobMaxAttempts =
+            jobPayload &&
+            typeof jobPayload === "object" &&
+            "max_attempts" in jobPayload &&
+            typeof jobPayload.max_attempts === "number"
+              ? jobPayload.max_attempts
+              : 3;
+
+          if (jobStatus === "queued" || jobStatus === "running") {
+            setDeployMessage(
+              `Job ${jobId} is ${jobStatus} (${jobStage}). Attempt ${jobAttempt} of ${jobMaxAttempts}.`,
+            );
+            await new Promise((resolve) => setTimeout(resolve, 2000));
+            continue;
+          }
+
+          if (jobStatus === "succeeded") {
+            return jobPayload;
+          }
+
+          const errorPayload =
+            jobPayload &&
+            typeof jobPayload === "object" &&
+            "error" in jobPayload &&
+            typeof jobPayload.error === "object" &&
+            jobPayload.error !== null
+              ? (jobPayload.error as Record<string, unknown>)
+              : {};
+          const userMessage =
+            typeof errorPayload.user_message === "string"
+              ? errorPayload.user_message
+              : editorMode === "update"
+                ? "Update failed."
+                : "Deploy failed.";
+          throw new Error(userMessage);
+        }
+
+        throw new Error("The job did not finish within the expected time.");
+      };
+
       const response = await fetch(
         editorMode === "update"
           ? "/api/configuration-manager/update"
@@ -812,12 +895,32 @@ function MonitoringToolConfigurationBox({
         );
       }
 
-      const configId =
+      let finalPayload = payload;
+
+      const isAcceptedJobResponse =
         payload &&
         typeof payload === "object" &&
-        "config_id" in payload &&
-        typeof payload.config_id === "string"
-          ? payload.config_id
+        "status" in payload &&
+        payload.status === "accepted" &&
+        "job_id" in payload &&
+        typeof payload.job_id === "string";
+      if (isAcceptedJobResponse) {
+        finalPayload = await pollJobUntilFinished(payload.job_id as string);
+      }
+
+      const successPayload =
+        finalPayload &&
+        typeof finalPayload === "object" &&
+        "result" in finalPayload &&
+        typeof finalPayload.result === "object" &&
+        finalPayload.result !== null
+          ? (finalPayload.result as Record<string, unknown>)
+          : finalPayload && typeof finalPayload === "object"
+            ? (finalPayload as Record<string, unknown>)
+            : {};
+      const configId =
+        typeof successPayload.config_id === "string"
+          ? successPayload.config_id
           : undefined;
 
       setDeployMessage(

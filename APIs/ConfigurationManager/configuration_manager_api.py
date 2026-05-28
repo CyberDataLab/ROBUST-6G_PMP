@@ -25,7 +25,10 @@ Example request:
     Body: {}
 """
 
+from typing import Optional
+
 from fastapi import FastAPI, HTTPException, Query
+from fastapi.encoders import jsonable_encoder
 from fastapi.responses import JSONResponse
 
 from configuration_manager_logic import (
@@ -36,9 +39,8 @@ from configuration_manager_logic import (
     get_configuration_by_id,
     get_kafka_topics_state,
     get_tool_runtime_state,
-    process_deploy_request,
-    process_update_configuration,
 )
+from job_manager import check_jobs_backend_ready, get_job_manager
 
 app = FastAPI(
     title="Configuration Manager API",
@@ -92,17 +94,27 @@ async def deploy_network_tool(
     if request is None:
         request = DeployRequest()
 
-    result = process_deploy_request(
-        tool_name=toolName,
-        request=request,
+    if toolName not in NETWORK_TOOLS:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f"Tool '{toolName}' is not valid for endpoint 'DeployNetworkTool'. "
+                f"Allowed tools: {NETWORK_TOOLS}"
+            ),
+        )
+
+    is_ready, readiness_error = check_jobs_backend_ready()
+    if not is_ready:
+        raise HTTPException(status_code=503, detail=readiness_error)
+
+    job_manager = get_job_manager()
+    result = job_manager.enqueue_deploy_job(
         endpoint="DeployNetworkTool",
-        allowed_tool_names=NETWORK_TOOLS
+        tool_name=toolName,
+        request_payload=request.model_dump(),
+        allowed_tool_names=NETWORK_TOOLS,
     )
-
-    if result.get("status") == "error":
-        raise HTTPException(status_code=400, detail=result["message"])
-
-    return JSONResponse(status_code=200, content=result)
+    return JSONResponse(status_code=202, content=result)
 
 
 @app.post("/ConfigurationManager/DeployInfrastructureTool")
@@ -123,17 +135,27 @@ async def deploy_infrastructure_tool(
     if request is None:
         request = DeployRequest()
 
-    result = process_deploy_request(
-        tool_name=toolName,
-        request=request,
+    if toolName not in INFRASTRUCTURE_TOOLS:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f"Tool '{toolName}' is not valid for endpoint 'DeployInfrastructureTool'. "
+                f"Allowed tools: {INFRASTRUCTURE_TOOLS}"
+            ),
+        )
+
+    is_ready, readiness_error = check_jobs_backend_ready()
+    if not is_ready:
+        raise HTTPException(status_code=503, detail=readiness_error)
+
+    job_manager = get_job_manager()
+    result = job_manager.enqueue_deploy_job(
         endpoint="DeployInfrastructureTool",
-        allowed_tool_names=INFRASTRUCTURE_TOOLS
+        tool_name=toolName,
+        request_payload=request.model_dump(),
+        allowed_tool_names=INFRASTRUCTURE_TOOLS,
     )
-
-    if result.get("status") == "error":
-        raise HTTPException(status_code=400, detail=result["message"])
-
-    return JSONResponse(status_code=200, content=result)
+    return JSONResponse(status_code=202, content=result)
 
 
 @app.post("/ConfigurationManager/DeployServiceTool")
@@ -154,17 +176,27 @@ async def deploy_service_tool(
     if request is None:
         request = DeployRequest()
 
-    result = process_deploy_request(
-        tool_name=toolName,
-        request=request,
+    if toolName not in SERVICE_TOOLS:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f"Tool '{toolName}' is not valid for endpoint 'DeployServiceTool'. "
+                f"Allowed tools: {SERVICE_TOOLS}"
+            ),
+        )
+
+    is_ready, readiness_error = check_jobs_backend_ready()
+    if not is_ready:
+        raise HTTPException(status_code=503, detail=readiness_error)
+
+    job_manager = get_job_manager()
+    result = job_manager.enqueue_deploy_job(
         endpoint="DeployServiceTool",
-        allowed_tool_names=SERVICE_TOOLS
+        tool_name=toolName,
+        request_payload=request.model_dump(),
+        allowed_tool_names=SERVICE_TOOLS,
     )
-
-    if result.get("status") == "error":
-        raise HTTPException(status_code=400, detail=result["message"])
-
-    return JSONResponse(status_code=200, content=result)
+    return JSONResponse(status_code=202, content=result)
 
 
 @app.post("/ConfigurationManager/DeploySecurityTool")
@@ -185,17 +217,27 @@ async def deploy_security_tool(
     if request is None:
         request = DeploySecurityRequest()
 
-    result = process_deploy_request(
-        tool_name=toolName,
-        request=request,
+    if toolName not in SECURITY_TOOLS:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f"Tool '{toolName}' is not valid for endpoint 'DeploySecurityTool'. "
+                f"Allowed tools: {SECURITY_TOOLS}"
+            ),
+        )
+
+    is_ready, readiness_error = check_jobs_backend_ready()
+    if not is_ready:
+        raise HTTPException(status_code=503, detail=readiness_error)
+
+    job_manager = get_job_manager()
+    result = job_manager.enqueue_deploy_job(
         endpoint="DeploySecurityTool",
-        allowed_tool_names=SECURITY_TOOLS
+        tool_name=toolName,
+        request_payload=request.model_dump(),
+        allowed_tool_names=SECURITY_TOOLS,
     )
-
-    if result.get("status") == "error":
-        raise HTTPException(status_code=400, detail=result["message"])
-
-    return JSONResponse(status_code=200, content=result)
+    return JSONResponse(status_code=202, content=result)
 
 
 @app.get("/ConfigurationManager/getConfigurationOptions")
@@ -287,15 +329,61 @@ async def update_configuration_endpoint(
     if request is None:
         raise HTTPException(status_code=422, detail="Request body with config_id is required.")
 
-    result = process_update_configuration(
+    if not isSupportedToolName(toolName):
+        raise HTTPException(status_code=400, detail=f"Unknown toolName '{toolName}'.")
+
+    is_ready, readiness_error = check_jobs_backend_ready()
+    if not is_ready:
+        raise HTTPException(status_code=503, detail=readiness_error)
+
+    job_manager = get_job_manager()
+    result = job_manager.enqueue_update_job(
         tool_name=toolName,
-        request=request
+        request_payload=request.model_dump(),
     )
+    return JSONResponse(status_code=202, content=result)
 
-    if result.get("status") == "error":
-        raise HTTPException(status_code=400, detail=result["message"])
 
-    return JSONResponse(status_code=200, content=result)
+@app.get("/ConfigurationManager/internal/jobs/{job_id}")
+async def get_internal_job_status(job_id: str):
+    job_manager = get_job_manager()
+    job = job_manager.get_job(job_id)
+    if job is None:
+        raise HTTPException(status_code=404, detail=f"Job '{job_id}' was not found.")
+    return JSONResponse(status_code=200, content=jsonable_encoder(job))
+
+
+@app.get("/ConfigurationManager/internal/jobs")
+async def list_internal_jobs(
+    status: Optional[str] = Query(default=None, description="Optional status filter."),
+    limit: int = Query(default=50, ge=1, le=200, description="Maximum number of jobs to return."),
+):
+    job_manager = get_job_manager()
+    jobs = job_manager.list_jobs(status=status, limit=limit)
+    return JSONResponse(status_code=200, content=jsonable_encoder({"status": "success", "data": jobs}))
+
+
+@app.post("/ConfigurationManager/internal/jobs/{job_id}/cancel")
+async def cancel_internal_job(job_id: str):
+    job_manager = get_job_manager()
+    canceled, error_message = job_manager.cancel_job(job_id)
+    if not canceled:
+        raise HTTPException(status_code=400, detail=error_message)
+    return JSONResponse(status_code=200, content={"status": "success", "message": f"Job '{job_id}' canceled."})
+
+
+@app.on_event("startup")
+async def startup_job_manager():
+    get_job_manager().start()
+
+
+def isSupportedToolName(tool_name: str) -> bool:
+    return (
+        tool_name in NETWORK_TOOLS
+        or tool_name in INFRASTRUCTURE_TOOLS
+        or tool_name in SERVICE_TOOLS
+        or tool_name in SECURITY_TOOLS
+    )
 
 
 if __name__ == "__main__":
