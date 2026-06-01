@@ -9,7 +9,7 @@ ENV VIRTUAL_ENV=/opt/venv
 RUN python3 -m venv $VIRTUAL_ENV
 ENV PATH="$VIRTUAL_ENV/bin:$PATH"
 
-RUN pip install flask
+RUN pip install fastapi uvicorn
 
 COPY Data_Collection_Module/Docker/Entrypoints/entrypoint_device_info.py /usr/local/bin/entrypoint_device_info.py
 

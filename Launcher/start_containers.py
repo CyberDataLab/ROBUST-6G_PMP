@@ -372,6 +372,11 @@ def build_default_env(
 
     # Info
     device_info_port            = "9999"
+    device_info_probe_timeout   = "2"
+    device_info_refresh_interval = "15"
+    telegraf_probe_host         = "telegraf"
+    fluentd_probe_host          = "fluentd"
+    falco_probe_host            = "falco-exporter"
 
     # Kafka
     kafka_lan_hostname          = "kafka_robust6g-node1.lan"
@@ -560,6 +565,11 @@ def build_default_env(
 
         # Info
         "DEVICE_INFO_PORT":             device_info_port,
+        "DEVICE_INFO_PROBE_TIMEOUT":    device_info_probe_timeout,
+        "DEVICE_INFO_REFRESH_INTERVAL": device_info_refresh_interval,
+        "TELEGRAF_PROBE_HOST":          telegraf_probe_host,
+        "FLUENTD_PROBE_HOST":           fluentd_probe_host,
+        "FALCO_PROBE_HOST":             falco_probe_host,
 
         # Kafka
         "KAFKA_BOOTSTRAP":              kafka_bootstrap,
@@ -735,6 +745,11 @@ TOOL_ENV_VARS: Dict[str, List[str]] = {
     ],
     "info": [
         "DEVICE_INFO_PORT",
+        "DEVICE_INFO_PROBE_TIMEOUT",
+        "DEVICE_INFO_REFRESH_INTERVAL",
+        "TELEGRAF_PROBE_HOST",
+        "FLUENTD_PROBE_HOST",
+        "FALCO_PROBE_HOST",
     ],
     "kafka": [
         "KAFKA_BOOTSTRAP",
