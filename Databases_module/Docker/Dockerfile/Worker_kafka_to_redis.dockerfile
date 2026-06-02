@@ -23,6 +23,7 @@ RUN pip install --no-cache-dir \
     pymongo==4.10.1
 
 COPY Databases_module/Scripts/kafka_redis_worker.py /home/redis_worker/
+COPY Databases_module/Scripts/worker_kafka_bootstrap_helpers.py /home/redis_worker/
 COPY Databases_module/Scripts/worker_payload_helpers.py /home/redis_worker/
 COPY Databases_module/Docker/Entrypoints/entrypoint_worker.py /home/redis_worker/
 

@@ -28,6 +28,11 @@ from confluent_kafka import Consumer, KafkaError
 from confluent_kafka.admin import AdminClient
 from pymongo import MongoClient
 from pymongo.errors import PyMongoError, ServerSelectionTimeoutError
+from worker_kafka_bootstrap_helpers import (
+    commit_group_offsets,
+    consume_new_topic_bootstrap,
+    find_partitions_without_group_offsets,
+)
 from worker_payload_helpers import (
     extract_machine_id_from_payload_dict,
     parse_json_bytes,
@@ -53,6 +58,9 @@ KTRW_KAFKA_TOPIC_REFRESH_INTERVAL = int(
 )
 KTRW_CM_TOPICS_REFRESH_INTERVAL = int(
     os.getenv("KTRW_CM_TOPICS_REFRESH_INTERVAL", "30")
+)
+KTRW_NEW_TOPIC_BOOTSTRAP_MAX_MESSAGES = int(
+    os.getenv("KTRW_NEW_TOPIC_BOOTSTRAP_MAX_MESSAGES", "10")
 )
 
 # Redis configuration
@@ -405,7 +413,68 @@ def discover_matching_topics(admin_client: AdminClient) -> Set[str]:
         return set()
 
 
-def topic_discovery_worker(consumer: Consumer, admin_client: AdminClient) -> None:
+def bootstrap_new_topic(
+    admin_client: AdminClient,
+    redis_client: redis.Redis,
+    topic: str,
+) -> None:
+    bootstrap_partitions = find_partitions_without_group_offsets(
+        admin_client=admin_client,
+        group_id=KTRW_KAFKA_GROUP_ID,
+        topic=topic,
+    )
+    if not bootstrap_partitions:
+        logger.info("ℹ️  Topic %s already has committed offsets for group %s", topic, KTRW_KAFKA_GROUP_ID)
+        return
+
+    logger.info(
+        "🚀 Running initial bootstrap for new topic %s on %s partition(s), max %s messages/partition",
+        topic,
+        len(bootstrap_partitions),
+        KTRW_NEW_TOPIC_BOOTSTRAP_MAX_MESSAGES,
+    )
+
+    records, committed_offsets = consume_new_topic_bootstrap(
+        admin_client=admin_client,
+        bootstrap_servers=KAFKA_BOOTSTRAP,
+        topic=topic,
+        topic_partitions=bootstrap_partitions,
+        max_messages_per_partition=KTRW_NEW_TOPIC_BOOTSTRAP_MAX_MESSAGES,
+    )
+
+    pushed = 0
+    for record in records:
+        descriptor = get_topic_descriptor(record.topic, log_missing=False)
+        if descriptor is None:
+            continue
+        machine_id = extract_machine_id(record.value, descriptor)
+        if push_to_redis(
+            redis_client=redis_client,
+            descriptor=descriptor,
+            machine_id=machine_id,
+            message_bytes=record.value,
+            topic=record.topic,
+        ):
+            pushed += 1
+
+    commit_group_offsets(
+        admin_client=admin_client,
+        group_id=KTRW_KAFKA_GROUP_ID,
+        topic_partitions=committed_offsets,
+    )
+    logger.info(
+        "✅ New topic bootstrap completed for %s: bootstrapped=%s, committed_partitions=%s",
+        topic,
+        pushed,
+        len(committed_offsets),
+    )
+
+
+def topic_discovery_worker(
+    consumer: Consumer,
+    admin_client: AdminClient,
+    redis_client: redis.Redis,
+) -> None:
     global shutdown_flag
 
     logger.info(
@@ -432,6 +501,15 @@ def topic_discovery_worker(consumer: Consumer, admin_client: AdminClient) -> Non
 
                 if new_topics:
                     logger.info("➕ New topics discovered: %s", new_topics)
+                    for topic in sorted(new_topics):
+                        try:
+                            bootstrap_new_topic(
+                                admin_client=admin_client,
+                                redis_client=redis_client,
+                                topic=topic,
+                            )
+                        except Exception as exc:
+                            logger.error("❌ Error bootstrapping newly discovered topic %s: %s", topic, exc)
                 if removed_topics:
                     logger.info("➖ Topics removed: %s", removed_topics)
 
@@ -748,6 +826,10 @@ def main() -> None:
     logger.info("   - Retention: %sh", KTRW_REDIS_RETENTION_HOURS)
     logger.info("   - Kafka topic refresh: %ss", KTRW_KAFKA_TOPIC_REFRESH_INTERVAL)
     logger.info("   - CM topic refresh: %ss", KTRW_CM_TOPICS_REFRESH_INTERVAL)
+    logger.info(
+        "   - New topic bootstrap max messages/partition: %s",
+        KTRW_NEW_TOPIC_BOOTSTRAP_MAX_MESSAGES,
+    )
 
     kafka_consumer = create_kafka_consumer()
     kafka_admin = create_kafka_admin_client()
@@ -765,7 +847,7 @@ def main() -> None:
 
     topic_discovery_thread = threading.Thread(
         target=topic_discovery_worker,
-        args=(kafka_consumer, kafka_admin),
+        args=(kafka_consumer, kafka_admin, redis_client),
         daemon=True,
     )
     topic_discovery_thread.start()

@@ -470,6 +470,7 @@ def build_default_env(
     ktrw_max_poll_interval_ms            = "300000"
     ktrw_kafka_topic_refresh_interval    = "30"
     ktrw_cm_topics_refresh_interval      = "30"
+    ktrw_new_topic_bootstrap_max_messages = "10"
     ktrw_topic_map_cache_file            = "/home/redis_worker/topic_map_cache.json"
     ktrw_redis_cleanup_interval          = "300"
     ktrw_redis_retention_hours           = "2"
@@ -643,6 +644,7 @@ def build_default_env(
         "KTRW_MAX_POLL_INTERVAL_MS":            ktrw_max_poll_interval_ms,
         "KTRW_KAFKA_TOPIC_REFRESH_INTERVAL":    ktrw_kafka_topic_refresh_interval,
         "KTRW_CM_TOPICS_REFRESH_INTERVAL":      ktrw_cm_topics_refresh_interval,
+        "KTRW_NEW_TOPIC_BOOTSTRAP_MAX_MESSAGES": ktrw_new_topic_bootstrap_max_messages,
         "KTRW_TOPIC_MAP_CACHE_FILE":            ktrw_topic_map_cache_file,
         "KTRW_REDIS_CLEANUP_INTERVAL":          ktrw_redis_cleanup_interval,
         "KTRW_REDIS_RETENTION_HOURS":           ktrw_redis_retention_hours,
@@ -835,6 +837,7 @@ TOOL_ENV_VARS: Dict[str, List[str]] = {
         "KTRW_MAX_POLL_INTERVAL_MS",
         "KTRW_KAFKA_TOPIC_REFRESH_INTERVAL",
         "KTRW_CM_TOPICS_REFRESH_INTERVAL",
+        "KTRW_NEW_TOPIC_BOOTSTRAP_MAX_MESSAGES",
         "KTRW_TOPIC_MAP_CACHE_FILE",
         "KTRW_REDIS_CLEANUP_INTERVAL",
         "KTRW_REDIS_RETENTION_HOURS",
