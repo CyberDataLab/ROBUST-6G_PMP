@@ -62,6 +62,7 @@ BASE_CONTAINERS = [
     "postgres_gui_robust6g",
     "redis_robust6g",
     "redis_worker_robust6g",
+    "prometheus_server_robust6g",
 ]
 
 API_TOOL_CONTAINERS = [
@@ -77,10 +78,11 @@ API_TOOL_CONTAINERS = [
     "opensearch_robust6g",
     "opensearch-dashboards_robust6g",
     "logstash_robust6g",
-    # Keep both names for compatibility while the tool is still managed
-    # manually outside Configuration Manager.
-    "alarm_collector_robust6g",
     "thingsboard_collector_robust6g",
+]
+
+ASSOCIATED_CONTAINERS = [
+    "discovery_agent_robust6g", # This container is associated with Promtheus, but it is not an API tool itself
 ]
 
 

@@ -398,7 +398,7 @@ def build_default_env(
     prometheus_port                    = "9090"
     discovery_agent_scan_port          = device_info_port
     discovery_agent_scan_timeout       = "0.2"
-    discovery_agent_refresh_interval   = "30"
+    discovery_agent_refresh_interval   = "10"
     discovery_agent_port               = "8100"
 
     # OpenSearch

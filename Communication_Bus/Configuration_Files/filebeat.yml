@@ -48,7 +48,7 @@ filebeat.inputs:
       - "/results/falco/logs/falco_events.json" #"/falco/logs/falco_events.json"
     tags: ["falco_events"]
     fields:
-      kafka_topic: "${FALCO_BASE_TOPIC:falco_events}" # Primero "${FALCO_BASE_TOPIC}" solo y luego cuando meta más cambios esto "${FALCO_BASE_TOPIC}_${MACHINE_ID}"
+      kafka_topic: "${FALCO_BASE_TOPIC:falco_events}"
     fields_under_root: true
 
 output.kafka:

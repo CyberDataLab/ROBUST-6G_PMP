@@ -33,6 +33,11 @@ services:
         condition: service_completed_successfully
       discovery-agent:
         condition: service_started
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:${PROMETHEUS_PORT:-9090}/-/ready"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
     environment:
       - TZ=${TZ}
     extra_hosts:
@@ -60,14 +65,12 @@ services:
     container_name: discovery_agent_robust6g
     profiles: ["aggregation_module.prometheus"] #Same profile because Prometheus needs this microservice
     environment:
+      - TZ=${TZ}
       - DISCOVERY_AGENT_SCAN_PORT=${DISCOVERY_AGENT_SCAN_PORT:-9999}
       - DISCOVERY_AGENT_SCAN_TIMEOUT=${DISCOVERY_AGENT_SCAN_TIMEOUT}
       - DISCOVERY_AGENT_REFRESH_INTERVAL=${DISCOVERY_AGENT_REFRESH_INTERVAL}
-      - TZ=${TZ}
       - DISCOVERY_AGENT_PORT=${DISCOVERY_AGENT_PORT:-8100}
     network_mode: "${NETWORK_MODE}"
-    volumes:
-      - ${PFD}/Aggregation_Normalisation_Module/Scripts:/opt/discovery
     restart: unless-stopped
 
   init-opensearch:

@@ -13,8 +13,8 @@ ENV PATH="$VIRTUAL_ENV/bin:$PATH"
 
 RUN pip install flask netaddr requests
 
-COPY Aggregation_Normalisation_Module/Scripts/discovery_agent.py /opt/discovery/discovery_agent.py
+COPY Aggregation_Normalisation_Module/Docker/Entrypoints/entrypoint_discovery_agent.py /opt/discovery/entrypoint_discovery_agent.py
 
 WORKDIR /opt/discovery
 
-ENTRYPOINT ["python3", "/opt/discovery/discovery_agent.py"]
+ENTRYPOINT ["python3", "/opt/discovery/entrypoint_discovery_agent.py"]

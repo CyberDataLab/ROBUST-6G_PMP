@@ -93,7 +93,7 @@ def background_scanner():
         cached_results = results
         print("[DISCOVERY] Scan complete. Cache updated.")
         
-        # Esperar para el siguiente escaneo
+        # Wait for the next scan
         time.sleep(REFRESH_INTERVAL)
 
 

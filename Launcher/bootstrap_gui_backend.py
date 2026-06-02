@@ -58,6 +58,10 @@ DEFAULT_GUI_BASE_PROFILES = [
     "db_module",
     "-t",
     "mongodb,mongodb_cm,postgres_gui,redis",
+    "-m",
+    "aggregation_module",
+    "-t",
+    "prometheus",
 ]
 BASE_CONTAINER_EXPECTATIONS = {
     "kafka_robust6g": "healthy",
@@ -67,6 +71,7 @@ BASE_CONTAINER_EXPECTATIONS = {
     "postgres_gui_robust6g": "healthy",
     "redis_robust6g": "healthy",
     "redis_worker_robust6g": "healthy",
+    "prometheus_server_robust6g" : "healthy",
 }
 
 
