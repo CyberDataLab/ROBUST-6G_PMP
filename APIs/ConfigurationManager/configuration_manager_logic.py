@@ -9,9 +9,8 @@ Changes from v3:
 - When a consumer tool is deployed (flow_module, snort3, opensearch/logstash), the real topic
   values are read from that document before calling launch(), so the .env always has the
   correct topic names even if they differ from the defaults.
-- If MongoDB CM is unreachable the Pydantic model defaults are used as fallback (no crash).
-- PRODUCER_TOPIC_VARS and CONSUMER_TOPIC_VARS are imported from start_containers.py so the
-  dependency map lives in a single place.
+- If MongoDB CM is unreachable the Pydantic defaults are used as a fallback.
+- Producer and consumer topic maps now live in the shared launcher models module.
 """
 
 import hashlib
@@ -19,6 +18,7 @@ import importlib.util
 import json
 import os
 import subprocess
+import sys
 from collections import OrderedDict
 from datetime import datetime, timezone
 from pathlib import Path
@@ -48,8 +48,18 @@ from snort_rules_manager import (
     restore_snort3_final_rules_state,
 )
 
+LAUNCHER_DIR = Path(__file__).resolve().parent.parent.parent / "Launcher"
+if str(LAUNCHER_DIR) not in sys.path:
+    sys.path.insert(0, str(LAUNCHER_DIR))
+
+from internal_external_tools_models import (  # noqa: E402
+    CONSUMER_TOPIC_VARS,
+    PUBLIC_TOOL_MODELS,
+    PRODUCER_TOPIC_VARS,
+)
+
 # ---------------------------------------------------------------------------
-# Path to start_containers.py
+# Path to the launcher entrypoint used by the Configuration Manager.
 # ---------------------------------------------------------------------------
 LAUNCHER_PATH = Path(__file__).resolve().parent.parent.parent / "Launcher" / "start_containers.py"
 INTERNAL_ONLY_ENV_VARS = {"SNORT_RULES_PATHS", "FALCO_RULES_PATHS"}
@@ -57,7 +67,7 @@ RULES_SUPPORTED_TOOLS = {"snort3", "falco"}
 
 # ---------------------------------------------------------------------------
 # MongoDB Configuration Manager connection.
-# MONGO_CM_URI is written to .init_pmp_env by start_containers.py on first run.
+# MONGO_CM_URI is written to .init_pmp_env by the launcher on first run.
 # ---------------------------------------------------------------------------
 ENV_PATH = Path(__file__).resolve().parent.parent.parent / "Launcher" / ".init_pmp_env"
 load_dotenv(ENV_PATH, override=True)
@@ -72,7 +82,7 @@ MONGO_CM_COLLECTION = "deployments"
 KAFKA_TOPICS_DOC_ID = "kafka_topics"   # fixed _id for the topics state document
 
 # ---------------------------------------------------------------------------
-# ALWAYS_ENV_VARS - mirrors start_containers.py, used to protect internal vars
+# ALWAYS_ENV_VARS - kept in sync with the launcher to protect internal vars.
 # ---------------------------------------------------------------------------
 ALWAYS_ENV_VARS: List[str] = [
     "MACHINE_ID",
@@ -85,7 +95,7 @@ ALWAYS_ENV_VARS: List[str] = [
 ]
 
 # ---------------------------------------------------------------------------
-# Mapping: toolName as received in API -> (module, tool in MODULE_REGISTRY)
+# Mapping: toolName received by the API -> (launcher module, launcher profile).
 # ---------------------------------------------------------------------------
 TOOL_NAME_TO_MODULE: Dict[str, Tuple[str, str]] = {
     "tshark":           ("collection_module",    "tshark"),
@@ -105,7 +115,7 @@ TOOL_NAME_TO_MODULE: Dict[str, Tuple[str, str]] = {
 }
 
 # ---------------------------------------------------------------------------
-# Mapping: Co-deployments (tools that must be restarted when a producer is updated)
+# Co-deployments: tools that must be restarted when a producer is updated.
 # ---------------------------------------------------------------------------
 CO_DEPLOY_TOOLS: Dict[str, List[str]] = {
     "tshark":   ["filebeat"],
@@ -151,230 +161,8 @@ NON_CONFIGURABLE_ENV_VARS: Dict[str, set[str]] = {
 }
 
 
-# ===========================================================================
-# Pydantic models for each tool.
-# Every field carries its default value. extra="forbid" rejects unknown fields.
-# ===========================================================================
-
-class TelegrafConfig(BaseModel):
-    """Pydantic model for Telegraf configurable environment variables."""
-    model_config = {"extra": "forbid"}
-
-    ENABLE_TELEGRAF:                str = "1"
-    TELEGRAF_TO_PROMETHEUS_PORT:    str = "9273"
-    TELEGRAF_BASE_TOPIC:            str = "telegraf_metrics"
-    TELEGRAF_GENERAL_INTERVAL:      str = "30s"
-
-
-class TsharkConfig(BaseModel):
-    """Pydantic model for Tshark configurable environment variables."""
-    model_config = {"extra": "forbid"}
-
-    TSHARK_BASE_TOPIC:              str = "tshark_traces"
-    TSHARK_SIZE_LIMIT_ROTATION:     str = "31457280"
-    TSHARK_INTERFACE:               str = "no_interface"
-
-
-class FluentdConfig(BaseModel):
-    """Pydantic model for Fluentd configurable environment variables."""
-    model_config = {"extra": "forbid"}
-
-    ENABLE_FLUENTD:                 str = "1"
-    FLUENTD_TO_PROMETHEUS_PORT:     str = "24231"
-    FLUENTD_INTERNAL_PORT:          str = "24220"
-    FLUENTD_FILE_SIZE_LIMIT:        str = "20971520"
-    FLUENTD_SYSLOG_BASE_TOPIC:      str = "syslog_logs"
-    FLUENTD_SYSTEMD_BASE_TOPIC:     str = "systemd_logs"
-
-
-class FalcoConfig(BaseModel):
-    """Pydantic model for Falco configurable environment variables."""
-    model_config = {"extra": "forbid"}
-
-    ENABLE_FALCO:                   str = "1"
-    FALCO_BASE_TOPIC:               str = "falco_events"
-    FALCO_SKIP_DRIVER_LOADER:       str = "1"
-    FALCO_EXPORTER_PORT:            str = "9376"
-
-
-class KafkaConfig(BaseModel):
-    """Pydantic model for Kafka configurable environment variables."""
-    model_config = {"extra": "forbid"}
-
-    KAFKA_BOOTSTRAP:                str = "kafka_robust6g-node1.lan:9094"
-    KAFKA_LAN_HOSTNAME:             str = "kafka_robust6g-node1.lan"
-    KAFKA_PORT_EXTERNAL_LAN:        str = "9094"
-    KAFKA_PORT_INTERNAL:            str = "29092"
-    KAFKA_LOG_RETENTION_MS:         str = "86400000"
-    KAFKA_LOG_RETENTION_BYTES:      str = "1073741824"
-    KAFKA_LOG_CLEANUP_POLICY:       str = "delete"
-    KAFKA_LOG_SEGMENT_BYTES:        str = "268435456"
-    KAFKA_LOG_ROLL_MS:              str = "3600000"
-
-
-class FilebeatConfig(BaseModel):
-    """Pydantic model for Filebeat configurable environment variables."""
-    model_config = {"extra": "forbid"}
-
-    FILEBEAT_BULK_MAX_SIZE:         str = "4096"
-    FILEBEAT_COMPRESION:            str = "lz4"
-    FLUENTD_SYSLOG_BASE_TOPIC:      str = FluentdConfig.model_fields["FLUENTD_SYSLOG_BASE_TOPIC"].default
-    FLUENTD_SYSTEMD_BASE_TOPIC:     str = FluentdConfig.model_fields["FLUENTD_SYSTEMD_BASE_TOPIC"].default
-    TSHARK_BASE_TOPIC:              str = TsharkConfig.model_fields["TSHARK_BASE_TOPIC"].default
-    FALCO_BASE_TOPIC:               str = FalcoConfig.model_fields["FALCO_BASE_TOPIC"].default
-
-
-class PrometheusConfig(BaseModel):
-    """Pydantic model for Prometheus configurable environment variables."""
-    model_config = {"extra": "forbid"}
-
-    PROMETHEUS_PORT:                    str = "9090"
-    DISCOVERY_AGENT_SCAN_PORT:          str = "9999"
-    DISCOVERY_AGENT_SCAN_TIMEOUT:       str = "0.2"
-    DISCOVERY_AGENT_REFRESH_INTERVAL:   str = "30"
-    DISCOVERY_AGENT_PORT:               str = "8100"
-
-
-class OpenSearchConfig(BaseModel):
-    """Pydantic model for OpenSearch + Logstash configurable environment variables."""
-    model_config = {"extra": "forbid"}
-
-    OPENSEARCH_HOST:                str = "opensearch-node"
-    OPENSEARCH_CLUSTER_NAME:        str = "robust6g-cluster"
-    OPENSEARCH_NODE_NAME:           str = "opensearch"
-    OPENSEARCH_REST_API_PORT:       str = "9200"
-    OPENSEARCH_ANALYSER_PORT:       str = "9600"
-    OPENSEARCH_DASHBOARD_PORT:      str = "5601"
-    # Logstash topic defaults - overridden with real values from MongoDB CM at deploy time
-    TELEGRAF_BASE_TOPIC:            str = "telegraf_metrics"
-    TSHARK_BASE_TOPIC:              str = "tshark_traces"
-    FLUENTD_SYSLOG_BASE_TOPIC:      str = "syslog_logs"
-    FLUENTD_SYSTEMD_BASE_TOPIC:     str = "systemd_logs"
-    FALCO_BASE_TOPIC:               str = "falco_events"
-
-
-class MongoDBConfig(BaseModel):
-    """Pydantic model for MongoDB main instance configurable environment variables."""
-    model_config = {"extra": "forbid"}
-
-    MONGO_INITDB_ROOT_USERNAME:     str = "admin"
-    MONGO_PORT:                     str = "27017"
-
-
-class MongoDBCMConfig(BaseModel):
-    """Pydantic model for MongoDB Configuration Manager instance configurable environment variables."""
-    model_config = {"extra": "forbid"}
-
-    MONGO_CM_INITDB_ROOT_USERNAME:  str = "admin"
-    MONGO_CM_PORT:                  str = "27018"
-
-
-class RedisConfig(BaseModel):
-    """Pydantic model for Redis configurable environment variables."""
-    model_config = {"extra": "forbid"}
-
-    REDIS_HOST:                             str = "redis_robust6g"
-    REDIS_PORT:                             str = "6379"
-    REDIS_DB:                               str = "0"
-    REDIS_PASSWORD:                         str = ""
-    REDIS_MAXMEMORY_SAMPLES:                str = "5"
-    REDIS_IO_THREADS:                       str = "4"
-    REDIS_STREAM_NODE_MAX_BYTES:            str = "4096"
-    REDIS_STREAM_NODE_MAX_ENTRIES:          str = "100"
-    REDIS_MAXCLIENTS:                       str = "10000"
-    KTRW_KAFKA_AUTO_OFFSET_RESET:           str = "latest"
-    KTRW_KAFKA_ENABLE_AUTO_COMMIT:          str = "true"
-    KTRW_KAFKA_GROUP_ID:                    str = "redis-streamer"
-    KTRW_REDIS_MAX_STREAM_LENGTH:           str = "1000"
-    KTRW_REDIS_STREAM_TTL_SECONDS:          str = "21600"
-    KTRW_PARTITION_ASSIGNMENT_STRATEGY:     str = "cooperative-sticky"
-    KTRW_SESSION_TIMEOUT_MS:                str = "10000"
-    KTRW_MAX_POLL_INTERVAL_MS:              str = "300000"
-    KTRW_KAFKA_TOPIC_REFRESH_INTERVAL:      str = "30"
-    KTRW_REDIS_CLEANUP_INTERVAL:            str = "300"
-    KTRW_REDIS_RETENTION_HOURS:             str = "2"
-    KTRW_REDIS_EMERGENCY_RETENTION_HOURS:   str = "1"
-    KTRW_REDIS_MEMORY_THRESHOLD:            str = "0.85"
-
-
-class FlowModuleConfig(BaseModel):
-    """Pydantic model for Flow Module configurable environment variables."""
-    model_config = {"extra": "forbid"}
-
-    # TSHARK_BASE_TOPIC default here is the fallback if MongoDB CM is unreachable.
-    # The real value is resolved from MongoDB CM before launch() is called.
-    TSHARK_BASE_TOPIC:                                  str = "tshark_traces"
-    CIC_KAFKA_BASE_TOPIC_OUT:                           str = "cic_flow"
-    FLOW_KAFKA_GROUP:                                   str = "flow-module"
-    FLOW_PCAP_ROTATE_SIZE_MB:                           str = "102400"
-    FLOW_CIC_ROTATE_SIZE_MB:                            str = "51200"
-    FLOW_ROTATE_TIME_SEC:                               str = "0.5"
-    FLOW_PACKET_QUEUE_MAX:                              str = "100000"
-    FLOW_WRITER_FLUSH_EVERY:                            str = "100"
-    FLOW_WATCHDOG_STALL_SECS:                           str = "120"
-    FLOW_KAFKA_CONSUMER_AUTO_OFFSET_RESET:              str = "earliest"
-    FLOW_KAFKA_CONSUMER_ENABLE_AUTO_COMMIT:             str = "true"
-    FLOW_KAFKA_CONSUMER_PARTITION_ASSIGNMENT_STRATEGY:  str = "cooperative-sticky"
-    FLOW_KAFKA_CONSUMER_ENABLE_PARTITION_EOF:           str = "true"
-    FLOW_KAFKA_CONSUMER_ALLOW_AUTO_CREATE_TOPICS:       str = "true"
-    FLOW_KAFKA_PRODUCER_LINGER_MS:                      str = "5"
-    FLOW_KAFKA_PRODUCER_BATCH_SIZE:                     str = "32768"
-    FLOW_KAFKA_PRODUCER_COMPRESSION:                    str = "zstd"
-
-
-class Snort3Config(BaseModel):
-    """Pydantic model for Snort3 (alert_module) configurable environment variables."""
-    model_config = {"extra": "forbid"}
-
-    # TSHARK_BASE_TOPIC default here is the fallback if MongoDB CM is unreachable.
-    # The real value is resolved from MongoDB CM before launch() is called.
-    TSHARK_BASE_TOPIC:                                      str = "tshark_traces"
-    SNORT_KAFKA_GROUP_ID:                                   str = "alert-module"
-    SNORT_KAFKA_TOPIC_IN:                                   str = "tshark_traces"
-    SNORT_KAFKA_TOPIC_OUT:                                  str = "snort_alerts"
-    SNORT_ALERT_TAP_IFACE:                                  str = "tap0"
-    SNORT_KAFKA_MESSAGE_FIELD:                              str = "_source"
-    SNORT_CONSUMER_KAFKA_AUTO_OFFSET_RESET:                 str = "earliest"
-    SNORT_CONSUMER_KAFKA_ENABLE_AUTO_COMMIT:                str = "true"
-    SNORT_CONSUMER_KAFKA_PARTITION_ASSIGNMENT_STRATEGY:     str = "cooperative-sticky"
-    SNORT_CONSUMER_KAFKA_ENABLE_PARTITION_EOF:              str = "true"
-    SNORT_CONSUMER_KAFKA_ALLOW_AUTO_CREATE_TOPICS:          str = "true"
-    SNORT_CONSUMER_FETCH_MIN_BYTES:                         str = "1048576"
-    SNORT_CONSUMER_FETCH_WAIT_MAX_MS:                       str = "50"
-    SNORT_CONSUMER_QUEUED_MAX_MESSAGES_KBYTES:              str = "262144"
-    SNORT_CONSUMER_MAX_POLL_INTERVAL_MS:                    str = "900000"
-    SNORT_CONSUMER_SESSION_TIMEOUT_MS:                      str = "10000"
-    SNORT_PRODUCER_KAFKA_PRODUCER_LINGER_MS:                str = "5"
-    SNORT_PRODUCER_BATCH_NUM_MESSAGES:                      str = "10000"
-    SNORT_PRODUCER_KAFKA_PRODUCER_BATCH_SIZE:               str = "32768"
-    SNORT_PRODUCER_KAFKA_PRODUCER_COMPRESSION:              str = "zstd"
-
-
-class AlarmCollectorConfig(BaseModel):
-    """Pydantic model for ThingsBoard alarm collector configurable environment variables."""
-    model_config = {"extra": "forbid"}
-
-    TB_USERNAME:    str = "tenant@thingsboard.org"
-    TB_PASSWORD:    str = "tenant"
-    TB_USE_HTTPS:   str = "false"
-
-
-# Map toolName -> its Pydantic config class
 TOOL_CONFIG_MODELS: Dict[str, type] = {
-    "tshark":           TsharkConfig,
-    "flow_module":      FlowModuleConfig,
-    "telegraf":         TelegrafConfig,
-    "fluentd":          FluentdConfig,
-    "falco":            FalcoConfig,
-    "snort3":           Snort3Config,
-    "kafka":            KafkaConfig,
-    "filebeat":         FilebeatConfig,
-    "mongodb":          MongoDBConfig,
-    "mongodb_cm":       MongoDBCMConfig,
-    "redis":            RedisConfig,
-    "prometheus":       PrometheusConfig,
-    "opensearch":       OpenSearchConfig,
-    "alarm_collector":  AlarmCollectorConfig,
+    **PUBLIC_TOOL_MODELS,
 }
 
 
@@ -598,25 +386,9 @@ def get_kafka_topics_from_mongo(collection: Collection) -> Dict[str, str]:
 
 def _load_producer_consumer_maps() -> Tuple[Dict[str, List[str]], Dict[str, List[str]]]:
     """
-    Import PRODUCER_TOPIC_VARS and CONSUMER_TOPIC_VARS from start_containers.py.
-    Returns (producer_map, consumer_map). Falls back to empty dicts on import error.
+    Return the producer and consumer topic maps from the shared models module.
     """
-    spec = importlib.util.spec_from_file_location("start_containers", str(LAUNCHER_PATH))
-
-    if spec is None or spec.loader is None:
-        print(f"Warning: could not load start_containers.py from {LAUNCHER_PATH}")
-        return {}, {}
-
-    module = importlib.util.module_from_spec(spec)
-    try:
-        spec.loader.exec_module(module)
-    except Exception as e:
-        print(f"Warning: could not exec start_containers.py: {e}")
-        return {}, {}
-
-    producer_map = getattr(module, "PRODUCER_TOPIC_VARS", {})
-    consumer_map = getattr(module, "CONSUMER_TOPIC_VARS", {})
-    return producer_map, consumer_map
+    return PRODUCER_TOPIC_VARS, CONSUMER_TOPIC_VARS
 
 
 def normalize_empty_string_config_values(
@@ -1026,7 +798,7 @@ def build_config_id(
 
 def build_selected_from_tool_name(tool_name: str) -> "OrderedDict[str, List[str]]":
     """
-    Build the OrderedDict[module -> tools] structure expected by start_containers.py
+    Build the OrderedDict[module -> tools] structure expected by the launcher.
     from a single toolName string as received via the API query parameter.
     """
     selected: OrderedDict[str, List[str]] = OrderedDict()
@@ -1045,7 +817,7 @@ def call_start_containers(
     env_overrides: Dict[str, str]
 ) -> Tuple[bool, str]:
     """
-    Import and call launch() from start_containers.py with resolved selected modules and env overrides.
+    Import and call launch() from the launcher with resolved selected modules and env overrides.
     Returns (success, error_message).
     """
     spec = importlib.util.spec_from_file_location("start_containers", str(LAUNCHER_PATH))

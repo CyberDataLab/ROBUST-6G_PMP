@@ -14,6 +14,16 @@ from collections import OrderedDict
 from typing import Dict, Iterable, List, Tuple, Optional
 from urllib.parse import quote_plus
 
+LAUNCHER_DIR = Path(__file__).resolve().parent
+if str(LAUNCHER_DIR) not in sys.path:
+    sys.path.insert(0, str(LAUNCHER_DIR))
+
+from internal_external_tools_models import (  # noqa: E402
+    DEFAULT_ENV_MODEL_CLASSES,
+    combine_model_defaults,
+    TOOL_ENV_VARS,
+)
+
 MODULE_COMPOSE_FILES: Dict[str, List[str]] = {
     "communication_module": [
         "Communication_Bus/Docker/communication_bus_compose.yml",
@@ -334,105 +344,53 @@ def build_default_env(
     env_file_path: Path
 ) -> Dict[str, str]:
     """
-    Build and return the complete DEFAULT_ENV dictionary with all variable defaults.
-    This function is imported by configuration_manager_logic.py to avoid duplicating defaults.
-    env_file_path is used to read previously generated passwords so they are not regenerated.
+    Build and return the runtime environment dictionary used by the launcher.
+    The base values come from the shared Pydantic models, while passwords and
+    host-dependent values are resolved dynamically from the local environment.
     """
     container_timezone = "UTC"
+    default_env = combine_model_defaults(*DEFAULT_ENV_MODEL_CLASSES)
 
-    # Kafka topics
-    tshark_base_topic           = "tshark_traces"
-    fluentd_syslog_base_topic   = "syslog_logs"
-    fluentd_systemd_base_topic  = "systemd_logs"
-    falco_base_topic            = "falco_events"
-    telegraf_base_topic         = "telegraf_metrics"
-    cic_kafka_base_topic_out    = "cic_flow"
-    snort_kafka_topic_out       = "snort_alerts"
+    kafka_lan_hostname = default_env["KAFKA_LAN_HOSTNAME"]
+    kafka_port_external_lan = default_env["KAFKA_PORT_EXTERNAL_LAN"]
+    kafka_port_internal = default_env["KAFKA_PORT_INTERNAL"]
+    kafka_bootstrap = f"{kafka_lan_hostname}:{kafka_port_external_lan}"
+    kafka_bootstrap_docker = f"kafka_robust6g:{kafka_port_internal}"
 
-    # Telegraf
-    enable_telegraf             = "1"
-    telegraf_to_prometheus_port = "9273"
-    telegraf_general_interval   = "30s"
-
-    # Tshark (30 MiB pre-calculated)
-    tshark_size_limit_rotation  = "31457280"
-    tshark_interface            = "no_interface"
-
-    # Fluentd (20 MiB pre-calculated)
-    enable_fluentd              = "1"
-    fluentd_to_prometheus_port  = "24231"
-    fluentd_internal_port       = "24220"
-    fluentd_file_size_limit     = "20971520"
-
-    # Falco
-    enable_falco                = "1"
-    falco_skip_driver_loader    = "1"
-    falco_exporter_port         = "9376"
-    falco_rules_path            = "/etc/Falco/falco_community_rules.yaml"
-
-    # Info
-    device_info_port            = "9999"
-    device_info_probe_timeout   = "2"
-    device_info_refresh_interval = "15"
-    telegraf_probe_host         = "telegraf"
-    fluentd_probe_host          = "fluentd"
-    falco_probe_host            = "falco-exporter"
-
-    # Kafka
-    kafka_lan_hostname          = "kafka_robust6g-node1.lan"
-    kafka_port_external_lan     = "9094"
-    kafka_bootstrap             = kafka_lan_hostname + ":" + kafka_port_external_lan
-    kafka_port_internal         = "29092"
-    kafka_bootstrap_docker      = "kafka_robust6g:" + kafka_port_internal
-    kafka_log_retention_ms      = "86400000"
-    kafka_log_retention_bytes   = "1073741824"
-    kafka_log_cleanup_policy    = "delete"
-    kafka_log_segment_bytes     = "268435456"
-    kafka_log_roll_ms           = "3600000"
-
-    # Filebeat
-    filebeat_bulk_max_size      = "4096"
-    filebeat_compresion         = "lz4"
-
-    # Prometheus
-    prometheus_port                    = "9090"
-    discovery_agent_scan_port          = device_info_port
-    discovery_agent_scan_timeout       = "0.2"
-    discovery_agent_refresh_interval   = "10"
-    discovery_agent_port               = "8100"
-
-    # OpenSearch
-    opensearch_password = get_existing_password(env_path=env_file_path, password_tool="OPENSEARCH_PASSWORD=")
+    opensearch_password = get_existing_password(
+        env_path=env_file_path,
+        password_tool="OPENSEARCH_PASSWORD=",
+    )
     if not opensearch_password:
         opensearch_password = generate_secure_password()
+
     if network_mode == "host":
         opensearch_host = get_host_ip()
     else:
-        opensearch_host = "opensearch-node"
-    opensearch_cluster_name     = "robust6g-cluster"
-    opensearch_node_name        = "opensearch"
-    opensearch_rest_api_port    = "9200"
-    opensearch_analyser_port    = "9600"
-    opensearch_dashboard_port   = "5601"
+        opensearch_host = default_env["OPENSEARCH_HOST"]
 
-    # MongoDB main instance
-    mongo_initdb_root_username = "admin"
-    mongo_initdb_root_password = get_existing_password(env_path=env_file_path, password_tool="MONGO_INITDB_ROOT_PASSWORD=")
+    mongo_initdb_root_username = default_env["MONGO_INITDB_ROOT_USERNAME"]
+    mongo_initdb_root_password = get_existing_password(
+        env_path=env_file_path,
+        password_tool="MONGO_INITDB_ROOT_PASSWORD=",
+    )
     if not mongo_initdb_root_password:
         mongo_initdb_root_password = generate_secure_password()
-    mongo_port = "27017"
+    mongo_port = default_env["MONGO_PORT"]
     mongo_uri = (
         f"mongodb://{mongo_initdb_root_username}:"
         f"{quote_plus(mongo_initdb_root_password)}"
         f"@mongodb:{mongo_port}/?authSource=admin"
     )
 
-    # MongoDB Configuration Manager instance
-    mongo_cm_initdb_root_username = "admin"
-    mongo_cm_initdb_root_password = get_existing_password(env_path=env_file_path, password_tool="MONGO_CM_INITDB_ROOT_PASSWORD=")
+    mongo_cm_initdb_root_username = default_env["MONGO_CM_INITDB_ROOT_USERNAME"]
+    mongo_cm_initdb_root_password = get_existing_password(
+        env_path=env_file_path,
+        password_tool="MONGO_CM_INITDB_ROOT_PASSWORD=",
+    )
     if not mongo_cm_initdb_root_password:
         mongo_cm_initdb_root_password = generate_secure_password()
-    mongo_cm_port = "27018"
+    mongo_cm_port = default_env["MONGO_CM_PORT"]
     mongo_cm_uri_docker = (
         f"mongodb://{mongo_cm_initdb_root_username}:"
         f"{quote_plus(mongo_cm_initdb_root_password)}"
@@ -444,264 +402,32 @@ def build_default_env(
         f"@localhost:{mongo_cm_port}/?authSource=admin"
     )
 
-    # PostgreSQL GUI instance
-    postgres_gui_user = "robust6g_admin"
-    postgres_gui_password = "robust6g_pass"
-    postgres_gui_db = "robust6g_dashboard"
-    postgres_gui_port = "5432"
+    default_env.update(
+        {
+            "MACHINE_ID": mid,
+            "NETWORK_MODE": network_mode,
+            "PFD": str(PFD),
+            "COMPOSE_PROFILES": compose_profiles,
+            "TZ": container_timezone,
+            "KAFKA_BOOTSTRAP": kafka_bootstrap,
+            "KAFKA_BOOTSTRAP_DOCKER": kafka_bootstrap_docker,
+            "KAFKA_LAN_HOSTNAME": kafka_lan_hostname,
+            "KAFKA_PORT_EXTERNAL_LAN": kafka_port_external_lan,
+            "KAFKA_PORT_INTERNAL": kafka_port_internal,
+            "DISCOVERY_AGENT_SCAN_PORT": default_env["DEVICE_INFO_PORT"],
+            "DISCOVERY_AGENT_REFRESH_INTERVAL": default_env["DISCOVERY_AGENT_REFRESH_INTERVAL"],
+            "OPENSEARCH_PASSWORD": opensearch_password,
+            "OPENSEARCH_HOST": opensearch_host,
+            "MONGO_INITDB_ROOT_PASSWORD": mongo_initdb_root_password,
+            "MONGO_URI": mongo_uri,
+            "MONGO_CM_INITDB_ROOT_PASSWORD": mongo_cm_initdb_root_password,
+            "MONGO_CM_URI": mongo_cm_uri_docker,
+            "MONGO_CM_URI_DOCKER": mongo_cm_uri_docker,
+            "MONGO_CM_URI_HOST": mongo_cm_uri_host,
+        }
+    )
 
-    # Redis
-    redis_host                           = "redis_robust6g"
-    redis_port                           = "6379"
-    redis_db                             = "0"
-    redis_password                       = ""
-    redis_maxmemory_samples              = "5"
-    redis_io_threads                     = "4"
-    redis_stream_node_max_bytes          = "4096"
-    redis_stream_node_max_entries        = "100"
-    redis_maxclients                     = "10000"
-    ktrw_kafka_auto_offset_reset         = "latest"
-    ktrw_kafka_enable_auto_commit        = "true"
-    ktrw_kafka_group_id                  = "redis-streamer"
-    ktrw_redis_max_stream_length         = "1000"
-    ktrw_redis_stream_ttl_seconds        = "21600"
-    ktrw_partition_assignment_strategy   = "cooperative-sticky"
-    ktrw_session_timeout_ms              = "10000"
-    ktrw_max_poll_interval_ms            = "300000"
-    ktrw_kafka_topic_refresh_interval    = "30"
-    ktrw_cm_topics_refresh_interval      = "30"
-    ktrw_new_topic_bootstrap_max_messages = "10"
-    ktrw_topic_map_cache_file            = "/home/redis_worker/topic_map_cache.json"
-    ktrw_redis_cleanup_interval          = "300"
-    ktrw_redis_retention_hours           = "2"
-    ktrw_redis_emergency_retention_hours = "1"
-    ktrw_redis_memory_threshold          = "0.85"
-
-    # Alert module
-    snort_kafka_group_id                               = "alert-module"
-    snort_kafka_topic_in                               = tshark_base_topic
-    snort_alert_tap_iface                              = "tap0"
-    snort_kafka_message_field                          = "_source"
-    snort_consumer_kafka_auto_offset_reset             = "earliest"
-    snort_consumer_kafka_enable_auto_commit            = "true"
-    snort_consumer_kafka_partition_assignment_strategy = "cooperative-sticky"
-    snort_consumer_kafka_enable_partition_eof          = "true"
-    snort_consumer_kafka_allow_auto_create_topics      = "true"
-    snort_consumer_fetch_min_bytes                     = "1048576"
-    snort_consumer_fetch_wait_max_ms                   = "50"
-    snort_consumer_queued_max_messages_kbytes          = "262144"
-    snort_consumer_max_poll_interval_ms                = "900000"
-    snort_consumer_session_timeout_ms                  = "10000"
-    snort_producer_kafka_producer_linger_ms            = "5"
-    snort_producer_batch_num_messages                  = "10000"
-    snort_producer_kafka_producer_batch_size           = "32768"
-    snort_producer_kafka_producer_compression          = "zstd"
-
-    # Flow module (102400 = 100 KiB, 51200 = 50 KiB)
-    flow_kafka_group                                   = "flow-module"
-    flow_pcap_rotate_size_mb                           = "102400"
-    flow_cic_rotate_size_mb                            = "51200"
-    flow_rotate_time_sec                               = "0.5"
-    flow_packet_queue_max                              = "100000"
-    flow_writer_flush_every                            = "100"
-    flow_watchdog_stall_secs                           = "120"
-    flow_kafka_consumer_auto_offset_reset              = "earliest"
-    flow_kafka_consumer_enable_auto_commit             = "true"
-    flow_kafka_consumer_partition_assignment_strategy  = "cooperative-sticky"
-    flow_kafka_consumer_enable_partition_eof           = "true"
-    flow_kafka_consumer_allow_auto_create_topics       = "true"
-    flow_kafka_producer_linger_ms                      = "5"
-    flow_kafka_producer_batch_size                     = "32768"
-    flow_kafka_producer_compression                    = "zstd"
-
-    # NRTDR API
-    nrtdr_api_port         = "8001"
-    nrtdr_api_host         = "0.0.0.0"
-    nrtdr_ws_default_last_n = "10"
-    nrtdr_ws_max_last_n     = "100"
-    nrtdr_active_window_seconds = "60"
-
-    # Thingsboard alarm collector
-    tb_username  = "tenant@thingsboard.org"
-    tb_password  = "tenant"
-    tb_use_https = "false"
-
-    DEFAULT_ENV: Dict[str, str] = {
-        # Always present - generated internally, not overridable via API
-        "MACHINE_ID":       mid,
-        "NETWORK_MODE":     network_mode,
-        "PFD":              str(PFD),
-        "COMPOSE_PROFILES": compose_profiles,
-        "TZ":               container_timezone,
-
-        # Kafka topics
-        "TELEGRAF_BASE_TOPIC":          telegraf_base_topic,
-        "TSHARK_BASE_TOPIC":            tshark_base_topic,
-        "FLUENTD_SYSLOG_BASE_TOPIC":    fluentd_syslog_base_topic,
-        "FLUENTD_SYSTEMD_BASE_TOPIC":   fluentd_systemd_base_topic,
-        "FALCO_BASE_TOPIC":             falco_base_topic,
-        "CIC_KAFKA_BASE_TOPIC_OUT":     cic_kafka_base_topic_out,
-        "SNORT_KAFKA_TOPIC_OUT":        snort_kafka_topic_out,
-
-        # Telegraf
-        "ENABLE_TELEGRAF":              enable_telegraf,
-        "TELEGRAF_TO_PROMETHEUS_PORT":  telegraf_to_prometheus_port,
-        "TELEGRAF_GENERAL_INTERVAL":    telegraf_general_interval,
-
-        # Tshark
-        "TSHARK_SIZE_LIMIT_ROTATION":   tshark_size_limit_rotation,
-        "TSHARK_INTERFACE":             tshark_interface,
-
-        # Fluentd
-        "ENABLE_FLUENTD":               enable_fluentd,
-        "FLUENTD_TO_PROMETHEUS_PORT":   fluentd_to_prometheus_port,
-        "FLUENTD_INTERNAL_PORT":        fluentd_internal_port,
-        "FLUENTD_FILE_SIZE_LIMIT":      fluentd_file_size_limit,
-
-        # Falco
-        "ENABLE_FALCO":                 enable_falco,
-        "FALCO_SKIP_DRIVER_LOADER":     falco_skip_driver_loader,
-        "FALCO_EXPORTER_PORT":          falco_exporter_port,
-        "FALCO_RULES_PATHS":            falco_rules_path,
-
-        # Info
-        "DEVICE_INFO_PORT":             device_info_port,
-        "DEVICE_INFO_PROBE_TIMEOUT":    device_info_probe_timeout,
-        "DEVICE_INFO_REFRESH_INTERVAL": device_info_refresh_interval,
-        "TELEGRAF_PROBE_HOST":          telegraf_probe_host,
-        "FLUENTD_PROBE_HOST":           fluentd_probe_host,
-        "FALCO_PROBE_HOST":             falco_probe_host,
-
-        # Kafka
-        "KAFKA_BOOTSTRAP":              kafka_bootstrap,
-        "KAFKA_BOOTSTRAP_DOCKER":       kafka_bootstrap_docker,
-        "KAFKA_LAN_HOSTNAME":           kafka_lan_hostname,
-        "KAFKA_PORT_EXTERNAL_LAN":      kafka_port_external_lan,
-        "KAFKA_PORT_INTERNAL":          kafka_port_internal,
-        "KAFKA_LOG_RETENTION_MS":       kafka_log_retention_ms,
-        "KAFKA_LOG_RETENTION_BYTES":    kafka_log_retention_bytes,
-        "KAFKA_LOG_CLEANUP_POLICY":     kafka_log_cleanup_policy,
-        "KAFKA_LOG_SEGMENT_BYTES":      kafka_log_segment_bytes,
-        "KAFKA_LOG_ROLL_MS":            kafka_log_roll_ms,
-
-        # Filebeat
-        "FILEBEAT_BULK_MAX_SIZE":       filebeat_bulk_max_size,
-        "FILEBEAT_COMPRESION":          filebeat_compresion,
-
-        # Prometheus
-        "PROMETHEUS_PORT":                    prometheus_port,
-        "DISCOVERY_AGENT_SCAN_PORT":          discovery_agent_scan_port,
-        "DISCOVERY_AGENT_SCAN_TIMEOUT":       discovery_agent_scan_timeout,
-        "DISCOVERY_AGENT_REFRESH_INTERVAL":   discovery_agent_refresh_interval,
-        "DISCOVERY_AGENT_PORT":               discovery_agent_port,
-
-        # OpenSearch
-        "OPENSEARCH_PASSWORD":          opensearch_password,
-        "OPENSEARCH_HOST":              opensearch_host,
-        "OPENSEARCH_CLUSTER_NAME":      opensearch_cluster_name,
-        "OPENSEARCH_NODE_NAME":         opensearch_node_name,
-        "OPENSEARCH_REST_API_PORT":     opensearch_rest_api_port,
-        "OPENSEARCH_ANALYSER_PORT":     opensearch_analyser_port,
-        "OPENSEARCH_DASHBOARD_PORT":    opensearch_dashboard_port,
-
-        # MongoDB main instance
-        "MONGO_INITDB_ROOT_USERNAME":   mongo_initdb_root_username,
-        "MONGO_INITDB_ROOT_PASSWORD":   mongo_initdb_root_password,
-        "MONGO_PORT":                   mongo_port,
-        "MONGO_URI":                    mongo_uri,
-
-        # MongoDB Configuration Manager instance
-        "MONGO_CM_INITDB_ROOT_USERNAME": mongo_cm_initdb_root_username,
-        "MONGO_CM_INITDB_ROOT_PASSWORD": mongo_cm_initdb_root_password,
-        "MONGO_CM_PORT":                 mongo_cm_port,
-        "MONGO_CM_URI":                  mongo_cm_uri_docker,
-        "MONGO_CM_URI_DOCKER":           mongo_cm_uri_docker,
-        "MONGO_CM_URI_HOST":             mongo_cm_uri_host,
-
-        # PostgreSQL GUI instance
-        "POSTGRES_GUI_USER":             postgres_gui_user,
-        "POSTGRES_GUI_PASSWORD":         postgres_gui_password,
-        "POSTGRES_GUI_DB":               postgres_gui_db,
-        "POSTGRES_GUI_PORT":             postgres_gui_port,
-
-        # Redis
-        "REDIS_HOST":                           redis_host,
-        "REDIS_PORT":                           redis_port,
-        "REDIS_DB":                             redis_db,
-        "REDIS_PASSWORD":                       redis_password,
-        "REDIS_MAXMEMORY_SAMPLES":              redis_maxmemory_samples,
-        "REDIS_IO_THREADS":                     redis_io_threads,
-        "REDIS_STREAM_NODE_MAX_BYTES":          redis_stream_node_max_bytes,
-        "REDIS_STREAM_NODE_MAX_ENTRIES":        redis_stream_node_max_entries,
-        "REDIS_MAXCLIENTS":                     redis_maxclients,
-        "KTRW_KAFKA_AUTO_OFFSET_RESET":         ktrw_kafka_auto_offset_reset,
-        "KTRW_KAFKA_ENABLE_AUTO_COMMIT":        ktrw_kafka_enable_auto_commit,
-        "KTRW_KAFKA_GROUP_ID":                  ktrw_kafka_group_id,
-        "KTRW_REDIS_MAX_STREAM_LENGTH":         ktrw_redis_max_stream_length,
-        "KTRW_REDIS_STREAM_TTL_SECONDS":        ktrw_redis_stream_ttl_seconds,
-        "KTRW_PARTITION_ASSIGNMENT_STRATEGY":   ktrw_partition_assignment_strategy,
-        "KTRW_SESSION_TIMEOUT_MS":              ktrw_session_timeout_ms,
-        "KTRW_MAX_POLL_INTERVAL_MS":            ktrw_max_poll_interval_ms,
-        "KTRW_KAFKA_TOPIC_REFRESH_INTERVAL":    ktrw_kafka_topic_refresh_interval,
-        "KTRW_CM_TOPICS_REFRESH_INTERVAL":      ktrw_cm_topics_refresh_interval,
-        "KTRW_NEW_TOPIC_BOOTSTRAP_MAX_MESSAGES": ktrw_new_topic_bootstrap_max_messages,
-        "KTRW_TOPIC_MAP_CACHE_FILE":            ktrw_topic_map_cache_file,
-        "KTRW_REDIS_CLEANUP_INTERVAL":          ktrw_redis_cleanup_interval,
-        "KTRW_REDIS_RETENTION_HOURS":           ktrw_redis_retention_hours,
-        "KTRW_REDIS_EMERGENCY_RETENTION_HOURS": ktrw_redis_emergency_retention_hours,
-        "KTRW_REDIS_MEMORY_THRESHOLD":          ktrw_redis_memory_threshold,
-
-        # Alert module
-        "SNORT_KAFKA_GROUP_ID":                               snort_kafka_group_id,
-        "SNORT_KAFKA_TOPIC_IN":                               snort_kafka_topic_in,
-        "SNORT_ALERT_TAP_IFACE":                              snort_alert_tap_iface,
-        "SNORT_KAFKA_MESSAGE_FIELD":                          snort_kafka_message_field,
-        "SNORT_CONSUMER_KAFKA_AUTO_OFFSET_RESET":             snort_consumer_kafka_auto_offset_reset,
-        "SNORT_CONSUMER_KAFKA_ENABLE_AUTO_COMMIT":            snort_consumer_kafka_enable_auto_commit,
-        "SNORT_CONSUMER_KAFKA_PARTITION_ASSIGNMENT_STRATEGY": snort_consumer_kafka_partition_assignment_strategy,
-        "SNORT_CONSUMER_KAFKA_ENABLE_PARTITION_EOF":          snort_consumer_kafka_enable_partition_eof,
-        "SNORT_CONSUMER_KAFKA_ALLOW_AUTO_CREATE_TOPICS":      snort_consumer_kafka_allow_auto_create_topics,
-        "SNORT_CONSUMER_FETCH_MIN_BYTES":                     snort_consumer_fetch_min_bytes,
-        "SNORT_CONSUMER_FETCH_WAIT_MAX_MS":                   snort_consumer_fetch_wait_max_ms,
-        "SNORT_CONSUMER_QUEUED_MAX_MESSAGES_KBYTES":          snort_consumer_queued_max_messages_kbytes,
-        "SNORT_CONSUMER_MAX_POLL_INTERVAL_MS":                snort_consumer_max_poll_interval_ms,
-        "SNORT_CONSUMER_SESSION_TIMEOUT_MS":                  snort_consumer_session_timeout_ms,
-        "SNORT_PRODUCER_KAFKA_PRODUCER_LINGER_MS":            snort_producer_kafka_producer_linger_ms,
-        "SNORT_PRODUCER_BATCH_NUM_MESSAGES":                  snort_producer_batch_num_messages,
-        "SNORT_PRODUCER_KAFKA_PRODUCER_BATCH_SIZE":           snort_producer_kafka_producer_batch_size,
-        "SNORT_PRODUCER_KAFKA_PRODUCER_COMPRESSION":          snort_producer_kafka_producer_compression,
-
-        # Flow module
-        "FLOW_KAFKA_GROUP":                                  flow_kafka_group,
-        "FLOW_PCAP_ROTATE_SIZE_MB":                          flow_pcap_rotate_size_mb,
-        "FLOW_CIC_ROTATE_SIZE_MB":                           flow_cic_rotate_size_mb,
-        "FLOW_ROTATE_TIME_SEC":                              flow_rotate_time_sec,
-        "FLOW_PACKET_QUEUE_MAX":                             flow_packet_queue_max,
-        "FLOW_WRITER_FLUSH_EVERY":                           flow_writer_flush_every,
-        "FLOW_WATCHDOG_STALL_SECS":                          flow_watchdog_stall_secs,
-        "FLOW_KAFKA_CONSUMER_AUTO_OFFSET_RESET":             flow_kafka_consumer_auto_offset_reset,
-        "FLOW_KAFKA_CONSUMER_ENABLE_AUTO_COMMIT":            flow_kafka_consumer_enable_auto_commit,
-        "FLOW_KAFKA_CONSUMER_PARTITION_ASSIGNMENT_STRATEGY": flow_kafka_consumer_partition_assignment_strategy,
-        "FLOW_KAFKA_CONSUMER_ENABLE_PARTITION_EOF":          flow_kafka_consumer_enable_partition_eof,
-        "FLOW_KAFKA_CONSUMER_ALLOW_AUTO_CREATE_TOPICS":      flow_kafka_consumer_allow_auto_create_topics,
-        "FLOW_KAFKA_PRODUCER_LINGER_MS":                     flow_kafka_producer_linger_ms,
-        "FLOW_KAFKA_PRODUCER_BATCH_SIZE":                    flow_kafka_producer_batch_size,
-        "FLOW_KAFKA_PRODUCER_COMPRESSION":                   flow_kafka_producer_compression,
-
-        # NRTDR API
-        "NRTDR_API_PORT":              nrtdr_api_port,
-        "NRTDR_API_HOST":              nrtdr_api_host,
-        "NRTDR_WS_DEFAULT_LAST_N":     nrtdr_ws_default_last_n,
-        "NRTDR_WS_MAX_LAST_N":         nrtdr_ws_max_last_n,
-        "NRTDR_ACTIVE_WINDOW_SECONDS": nrtdr_active_window_seconds,
-
-        # Thingsboard alarm collector
-        "TB_USERNAME":  tb_username,
-        "TB_PASSWORD":  tb_password,
-        "TB_USE_HTTPS": tb_use_https,
-    }
-
-    return DEFAULT_ENV
+    return default_env
 
 
 # Variables that always go into every .env regardless of selected tools.
@@ -716,233 +442,6 @@ ALWAYS_ENV_VARS: List[str] = [
     "KAFKA_BOOTSTRAP_DOCKER",
     "KAFKA_LAN_HOSTNAME",   # needed by extra_hosts in many containers to resolve Kafka DNS
 ]
-
-# Tool -> list of env var names it requires in the .env
-TOOL_ENV_VARS: Dict[str, List[str]] = {
-    "telegraf": [
-        "ENABLE_TELEGRAF",
-        "TELEGRAF_TO_PROMETHEUS_PORT",
-        "TELEGRAF_BASE_TOPIC",
-        "TELEGRAF_GENERAL_INTERVAL",
-    ],
-    "tshark": [
-        "TSHARK_BASE_TOPIC",
-        "TSHARK_SIZE_LIMIT_ROTATION",
-        "TSHARK_INTERFACE",
-    ],
-    "fluentd": [
-        "ENABLE_FLUENTD",
-        "FLUENTD_TO_PROMETHEUS_PORT",
-        "FLUENTD_INTERNAL_PORT",
-        "FLUENTD_FILE_SIZE_LIMIT",
-        "FLUENTD_SYSLOG_BASE_TOPIC",
-        "FLUENTD_SYSTEMD_BASE_TOPIC",
-    ],
-    "falco": [
-        "ENABLE_FALCO",
-        "FALCO_BASE_TOPIC",
-        "FALCO_SKIP_DRIVER_LOADER",
-        "FALCO_EXPORTER_PORT",
-        "FALCO_RULES_PATHS",
-    ],
-    "info": [
-        "DEVICE_INFO_PORT",
-        "DEVICE_INFO_PROBE_TIMEOUT",
-        "DEVICE_INFO_REFRESH_INTERVAL",
-        "TELEGRAF_PROBE_HOST",
-        "FLUENTD_PROBE_HOST",
-        "FALCO_PROBE_HOST",
-    ],
-    "kafka": [
-        "KAFKA_BOOTSTRAP",
-        "KAFKA_BOOTSTRAP_DOCKER",
-        "KAFKA_LAN_HOSTNAME",
-        "KAFKA_PORT_EXTERNAL_LAN",
-        "KAFKA_PORT_INTERNAL",
-        "KAFKA_LOG_RETENTION_MS",
-        "KAFKA_LOG_RETENTION_BYTES",
-        "KAFKA_LOG_CLEANUP_POLICY",
-        "KAFKA_LOG_SEGMENT_BYTES",
-        "KAFKA_LOG_ROLL_MS",
-    ],
-    "filebeat": [
-        "FILEBEAT_BULK_MAX_SIZE",
-        "FILEBEAT_COMPRESION",
-        "FLUENTD_SYSLOG_BASE_TOPIC",
-        "FLUENTD_SYSTEMD_BASE_TOPIC",
-        "TSHARK_BASE_TOPIC",
-        "FALCO_BASE_TOPIC",
-    ],
-    "prometheus": [
-        "PROMETHEUS_PORT",
-        "DISCOVERY_AGENT_SCAN_PORT",
-        "DISCOVERY_AGENT_SCAN_TIMEOUT",
-        "DISCOVERY_AGENT_REFRESH_INTERVAL",
-        "DISCOVERY_AGENT_PORT",
-    ],
-    "opensearch": [
-        "OPENSEARCH_PASSWORD",
-        "OPENSEARCH_HOST",
-        "OPENSEARCH_CLUSTER_NAME",
-        "OPENSEARCH_NODE_NAME",
-        "OPENSEARCH_REST_API_PORT",
-        "OPENSEARCH_ANALYSER_PORT",
-        "OPENSEARCH_DASHBOARD_PORT",
-        # Logstash always deploys alongside opensearch and needs all producer topics
-        "TELEGRAF_BASE_TOPIC",
-        "TSHARK_BASE_TOPIC",
-        "FLUENTD_SYSLOG_BASE_TOPIC",
-        "FLUENTD_SYSTEMD_BASE_TOPIC",
-        "FALCO_BASE_TOPIC",
-    ],
-    "mongodb": [
-        "MONGO_INITDB_ROOT_USERNAME",
-        "MONGO_INITDB_ROOT_PASSWORD",
-        "MONGO_PORT",
-        "MONGO_URI",
-    ],
-    "mongodb_cm": [
-        "MONGO_CM_INITDB_ROOT_USERNAME",
-        "MONGO_CM_INITDB_ROOT_PASSWORD",
-        "MONGO_CM_PORT",
-        "MONGO_CM_URI",
-        "MONGO_CM_URI_DOCKER",
-        "MONGO_CM_URI_HOST",
-    ],
-    "postgres_gui": [
-        "POSTGRES_GUI_USER",
-        "POSTGRES_GUI_PASSWORD",
-        "POSTGRES_GUI_DB",
-        "POSTGRES_GUI_PORT",
-    ],
-    "redis": [
-        "KAFKA_BOOTSTRAP_DOCKER",
-        "REDIS_HOST",
-        "REDIS_PORT",
-        "REDIS_DB",
-        "REDIS_PASSWORD",
-        "REDIS_MAXMEMORY_SAMPLES",
-        "REDIS_IO_THREADS",
-        "REDIS_STREAM_NODE_MAX_BYTES",
-        "REDIS_STREAM_NODE_MAX_ENTRIES",
-        "REDIS_MAXCLIENTS",
-        "MONGO_CM_URI_DOCKER",
-        "KTRW_KAFKA_AUTO_OFFSET_RESET",
-        "KTRW_KAFKA_ENABLE_AUTO_COMMIT",
-        "KTRW_KAFKA_GROUP_ID",
-        "KTRW_REDIS_MAX_STREAM_LENGTH",
-        "KTRW_REDIS_STREAM_TTL_SECONDS",
-        "KTRW_PARTITION_ASSIGNMENT_STRATEGY",
-        "KTRW_SESSION_TIMEOUT_MS",
-        "KTRW_MAX_POLL_INTERVAL_MS",
-        "KTRW_KAFKA_TOPIC_REFRESH_INTERVAL",
-        "KTRW_CM_TOPICS_REFRESH_INTERVAL",
-        "KTRW_NEW_TOPIC_BOOTSTRAP_MAX_MESSAGES",
-        "KTRW_TOPIC_MAP_CACHE_FILE",
-        "KTRW_REDIS_CLEANUP_INTERVAL",
-        "KTRW_REDIS_RETENTION_HOURS",
-        "KTRW_REDIS_EMERGENCY_RETENTION_HOURS",
-        "KTRW_REDIS_MEMORY_THRESHOLD",
-    ],
-    "flow_module": [
-        # Cross-dependency: flow_module consumes from tshark's topic.
-        # The real value is resolved from MongoDB CM in configuration_manager_logic.py
-        # before launch() is called. This entry ensures it is written to the .env
-        # with whatever value arrives in env_overrides (real) or default (fallback).
-        "TSHARK_BASE_TOPIC",
-        "MONGO_URI",
-        "CIC_KAFKA_BASE_TOPIC_OUT",
-        "FLOW_KAFKA_GROUP",
-        "FLOW_PCAP_ROTATE_SIZE_MB",
-        "FLOW_CIC_ROTATE_SIZE_MB",
-        "FLOW_ROTATE_TIME_SEC",
-        "FLOW_PACKET_QUEUE_MAX",
-        "FLOW_WRITER_FLUSH_EVERY",
-        "FLOW_WATCHDOG_STALL_SECS",
-        "FLOW_KAFKA_CONSUMER_AUTO_OFFSET_RESET",
-        "FLOW_KAFKA_CONSUMER_ENABLE_AUTO_COMMIT",
-        "FLOW_KAFKA_CONSUMER_PARTITION_ASSIGNMENT_STRATEGY",
-        "FLOW_KAFKA_CONSUMER_ENABLE_PARTITION_EOF",
-        "FLOW_KAFKA_CONSUMER_ALLOW_AUTO_CREATE_TOPICS",
-        "FLOW_KAFKA_PRODUCER_LINGER_MS",
-        "FLOW_KAFKA_PRODUCER_BATCH_SIZE",
-        "FLOW_KAFKA_PRODUCER_COMPRESSION",
-    ],
-    "alert_module": [
-        # Cross-dependency: alert_module (snort3) consumes from tshark's topic.
-        # Same resolution strategy as flow_module above.
-        "TSHARK_BASE_TOPIC",
-        "MONGO_URI",
-        "SNORT_RULES_PATHS",
-        "SNORT_KAFKA_GROUP_ID",
-        "SNORT_KAFKA_TOPIC_IN",
-        "SNORT_KAFKA_TOPIC_OUT",
-        "SNORT_ALERT_TAP_IFACE",
-        "SNORT_KAFKA_MESSAGE_FIELD",
-        "SNORT_CONSUMER_KAFKA_AUTO_OFFSET_RESET",
-        "SNORT_CONSUMER_KAFKA_ENABLE_AUTO_COMMIT",
-        "SNORT_CONSUMER_KAFKA_PARTITION_ASSIGNMENT_STRATEGY",
-        "SNORT_CONSUMER_KAFKA_ENABLE_PARTITION_EOF",
-        "SNORT_CONSUMER_KAFKA_ALLOW_AUTO_CREATE_TOPICS",
-        "SNORT_CONSUMER_FETCH_MIN_BYTES",
-        "SNORT_CONSUMER_FETCH_WAIT_MAX_MS",
-        "SNORT_CONSUMER_QUEUED_MAX_MESSAGES_KBYTES",
-        "SNORT_CONSUMER_MAX_POLL_INTERVAL_MS",
-        "SNORT_CONSUMER_SESSION_TIMEOUT_MS",
-        "SNORT_PRODUCER_KAFKA_PRODUCER_LINGER_MS",
-        "SNORT_PRODUCER_BATCH_NUM_MESSAGES",
-        "SNORT_PRODUCER_KAFKA_PRODUCER_BATCH_SIZE",
-        "SNORT_PRODUCER_KAFKA_PRODUCER_COMPRESSION",
-    ],
-    "nrtdr_api": [
-        "REDIS_HOST",
-        "REDIS_PORT",
-        "REDIS_DB",
-        "REDIS_PASSWORD",
-        "NRTDR_API_PORT",
-        "NRTDR_API_HOST",
-        "NRTDR_WS_DEFAULT_LAST_N",
-        "NRTDR_WS_MAX_LAST_N",
-        "NRTDR_ACTIVE_WINDOW_SECONDS",
-    ],
-    "alarm_collector": [
-        "TB_USERNAME",
-        "TB_PASSWORD",
-        "TB_USE_HTTPS",
-    ],
-}
-
-# Topic variables that producer tools publish to Kafka.
-# Used by configuration_manager_logic.py to update the kafka_topics document in MongoDB CM.
-PRODUCER_TOPIC_VARS: Dict[str, List[str]] = {
-    "tshark":       ["TSHARK_BASE_TOPIC"],
-    "telegraf":     ["TELEGRAF_BASE_TOPIC"],
-    "fluentd":      ["FLUENTD_SYSLOG_BASE_TOPIC", "FLUENTD_SYSTEMD_BASE_TOPIC"],
-    "falco":        ["FALCO_BASE_TOPIC"],
-    "flow_module":  ["CIC_KAFKA_BASE_TOPIC_OUT"],
-    "snort3":       ["SNORT_KAFKA_TOPIC_OUT"],
-}
-
-# Topic variables that consumer tools need to read from Kafka.
-# Used by configuration_manager_logic.py to inject the real topic values from MongoDB CM.
-CONSUMER_TOPIC_VARS: Dict[str, List[str]] = {
-    "flow_module":  ["TSHARK_BASE_TOPIC"],
-    "snort3":       ["TSHARK_BASE_TOPIC"],
-    "opensearch":   [
-        "TELEGRAF_BASE_TOPIC",
-        "TSHARK_BASE_TOPIC",
-        "FLUENTD_SYSLOG_BASE_TOPIC",
-        "FLUENTD_SYSTEMD_BASE_TOPIC",
-        "FALCO_BASE_TOPIC",
-    ],
-    "filebeat": [
-        "TSHARK_BASE_TOPIC",
-        "FLUENTD_SYSLOG_BASE_TOPIC",
-        "FLUENTD_SYSTEMD_BASE_TOPIC",
-        "FALCO_BASE_TOPIC",
-    ],
-    
-}
 
 
 def launch(
@@ -981,7 +480,7 @@ def launch(
     print("Selected:", selected)
     print("COMPOSE_PROFILES:", compose_profiles_list)
 
-    # build_default_env reads existing passwords from init_env_file_path to avoid regenerating them
+    # build_default_env reads existing passwords from init_env_file_path to avoid regenerating them.
     default_env = build_default_env(
         mid=mid,
         network_mode=network_mode,
