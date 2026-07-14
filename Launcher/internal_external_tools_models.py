@@ -94,16 +94,35 @@ class FilebeatConfig(BaseModel):
     TSHARK_BASE_TOPIC:              str = TsharkConfig.model_fields["TSHARK_BASE_TOPIC"].default
     FALCO_BASE_TOPIC:               str = FalcoConfig.model_fields["FALCO_BASE_TOPIC"].default
 
+class MimirConfig(BaseModel):
+    """Pydantic model for Grafana Mimir historical storage configuration."""
+    model_config = {"extra": "forbid"}
+
+    MIMIR_HOST:                              str = "mimir_robust6g-node1.lan"
+    MIMIR_PORT:                              str = "8080"
+
+class InfoConfig(BaseModel):
+    """Pydantic model for device-info configurable environment variables."""
+    model_config = {"extra": "forbid"}
+
+    DEVICE_INFO_PORT:               str = "9999"
+    DEVICE_INFO_PROBE_TIMEOUT:      str = "2"
+    DEVICE_INFO_REFRESH_INTERVAL:   str = "15"
+    TELEGRAF_PROBE_HOST:            str = "telegraf"
+    FLUENTD_PROBE_HOST:             str = "fluentd"
+    FALCO_PROBE_HOST:               str = "falco-exporter"
 
 class PrometheusConfig(BaseModel):
     """Pydantic model for Prometheus configurable environment variables."""
     model_config = {"extra": "forbid"}
 
     PROMETHEUS_PORT:                    str = "9090"
-    DISCOVERY_AGENT_SCAN_PORT:          str = "9999"
+    DISCOVERY_AGENT_SCAN_PORT:          str = InfoConfig.model_fields["DEVICE_INFO_PORT"].default
     DISCOVERY_AGENT_SCAN_TIMEOUT:       str = "0.2"
     DISCOVERY_AGENT_REFRESH_INTERVAL:   str = "10"
     DISCOVERY_AGENT_PORT:               str = "8100"
+    MIMIR_HOST:                         str = MimirConfig.model_fields["MIMIR_HOST"].default
+    MIMIR_PORT:                         str = MimirConfig.model_fields["MIMIR_PORT"].default
 
 
 class OpenSearchConfig(BaseModel):
@@ -117,11 +136,14 @@ class OpenSearchConfig(BaseModel):
     OPENSEARCH_REST_API_PORT:       str = "9200"
     OPENSEARCH_ANALYSER_PORT:       str = "9600"
     OPENSEARCH_DASHBOARD_PORT:      str = "5601"
-    TELEGRAF_BASE_TOPIC:            str = "telegraf_metrics"
-    TSHARK_BASE_TOPIC:              str = "tshark_traces"
-    FLUENTD_SYSLOG_BASE_TOPIC:      str = "syslog_logs"
-    FLUENTD_SYSTEMD_BASE_TOPIC:     str = "systemd_logs"
-    FALCO_BASE_TOPIC:               str = "falco_events"
+    TELEGRAF_BASE_TOPIC:            str = TelegrafConfig.model_fields["TELEGRAF_BASE_TOPIC"].default
+    TSHARK_BASE_TOPIC:              str = TsharkConfig.model_fields["TSHARK_BASE_TOPIC"].default
+    FLUENTD_SYSLOG_BASE_TOPIC:      str = FluentdConfig.model_fields["FLUENTD_SYSLOG_BASE_TOPIC"].default
+    FLUENTD_SYSTEMD_BASE_TOPIC:     str = FluentdConfig.model_fields["FLUENTD_SYSTEMD_BASE_TOPIC"].default
+    FALCO_BASE_TOPIC:               str = FalcoConfig.model_fields["FALCO_BASE_TOPIC"].default
+
+
+
 
 
 class MongoDBConfig(BaseModel):
@@ -177,18 +199,6 @@ class RedisConfig(BaseModel):
     KTRW_REDIS_MEMORY_THRESHOLD:            str = "0.85"
 
 
-class InfoConfig(BaseModel):
-    """Pydantic model for discovery-info configurable environment variables."""
-    model_config = {"extra": "forbid"}
-
-    DEVICE_INFO_PORT:               str = "9999"
-    DEVICE_INFO_PROBE_TIMEOUT:      str = "2"
-    DEVICE_INFO_REFRESH_INTERVAL:   str = "15"
-    TELEGRAF_PROBE_HOST:            str = "telegraf"
-    FLUENTD_PROBE_HOST:             str = "fluentd"
-    FALCO_PROBE_HOST:               str = "falco-exporter"
-
-
 class PostgresGuiConfig(BaseModel):
     """Pydantic model for PostgreSQL GUI configurable environment variables."""
     model_config = {"extra": "forbid"}
@@ -214,7 +224,7 @@ class FlowModuleConfig(BaseModel):
     """Pydantic model for Flow Module configurable environment variables."""
     model_config = {"extra": "forbid"}
 
-    TSHARK_BASE_TOPIC:                                  str = "tshark_traces"
+    TSHARK_BASE_TOPIC:                                  str = TsharkConfig.model_fields["TSHARK_BASE_TOPIC"].default
     CIC_KAFKA_BASE_TOPIC_OUT:                           str = "cic_flow"
     FLOW_KAFKA_GROUP:                                   str = "flow-module"
     FLOW_PCAP_ROTATE_SIZE_MB:                           str = "102400"
@@ -237,9 +247,8 @@ class Snort3Config(BaseModel):
     """Pydantic model for Snort3 (alert_module) configurable environment variables."""
     model_config = {"extra": "forbid"}
 
-    TSHARK_BASE_TOPIC:                                      str = "tshark_traces"
     SNORT_KAFKA_GROUP_ID:                                   str = "alert-module"
-    SNORT_KAFKA_TOPIC_IN:                                   str = "tshark_traces"
+    SNORT_KAFKA_TOPIC_IN:                                   str = TsharkConfig.model_fields["TSHARK_BASE_TOPIC"].default
     SNORT_KAFKA_TOPIC_OUT:                                  str = "snort_alerts"
     SNORT_ALERT_TAP_IFACE:                                  str = "tap0"
     SNORT_KAFKA_MESSAGE_FIELD:                              str = "_source"
@@ -284,6 +293,7 @@ INTERNAL_TOOL_MODELS = {
     "mongodb":           MongoDBConfig,
     "mongodb_cm":        MongoDBCMConfig,
     "redis":             RedisConfig,
+    "mimir":             MimirConfig,
     "prometheus":        PrometheusConfig,
     "opensearch":        OpenSearchConfig,
     "alarm_collector":   AlarmCollectorConfig,
@@ -306,6 +316,7 @@ DEFAULT_ENV_MODEL_CLASSES = (
     FilebeatConfig,
     PrometheusConfig,
     OpenSearchConfig,
+    MimirConfig,
     MongoDBConfig,
     MongoDBCMConfig,
     RedisConfig,
@@ -379,6 +390,12 @@ TOOL_ENV_VARS = {
         "DISCOVERY_AGENT_SCAN_TIMEOUT",
         "DISCOVERY_AGENT_REFRESH_INTERVAL",
         "DISCOVERY_AGENT_PORT",
+        "MIMIR_HOST",
+        "MIMIR_PORT",
+    ],
+    "mimir": [
+        "MIMIR_HOST",
+        "MIMIR_PORT",
     ],
     "opensearch": [
         "OPENSEARCH_PASSWORD",
@@ -464,7 +481,6 @@ TOOL_ENV_VARS = {
         "FLOW_KAFKA_PRODUCER_COMPRESSION",
     ],
     "alert_module": [
-        "TSHARK_BASE_TOPIC",
         "MONGO_URI",
         "SNORT_RULES_PATHS",
         "SNORT_KAFKA_GROUP_ID",

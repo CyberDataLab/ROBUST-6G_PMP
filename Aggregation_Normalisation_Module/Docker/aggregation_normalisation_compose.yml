@@ -16,10 +16,12 @@ services:
     profiles: ["aggregation_module.prometheus"]
     environment:
       - DISCOVERY_AGENT_PORT=${DISCOVERY_AGENT_PORT:-8100}
+      - MIMIR_HOST=${MIMIR_HOST}
+      - MIMIR_PORT=${MIMIR_PORT:-8080}
     volumes:
       - ${PFD}/Aggregation_Normalisation_Module/Configuration_Files/Prometheus/prometheus.yml.tmpl:/tmpl/prometheus.yml.tmpl:ro
       - ${PFD}/Aggregation_Normalisation_Module/Configuration_Files/Prometheus/generated:/out
-    command: sh -c 'sed "s|\$${DISCOVERY_AGENT_PORT}|$${DISCOVERY_AGENT_PORT}|g" /tmpl/prometheus.yml.tmpl > /out/prometheus.yml && cat /out/prometheus.yml'
+    command: sh -c 'sed -e "s|\$${DISCOVERY_AGENT_PORT}|$${DISCOVERY_AGENT_PORT}|g" -e "s|\$${MIMIR_HOST}|$${MIMIR_HOST}|g" -e "s|\$${MIMIR_PORT}|$${MIMIR_PORT}|g" /tmpl/prometheus.yml.tmpl > /out/prometheus.yml && cat /out/prometheus.yml'
     restart: "no"
   
   prometheus:
@@ -42,6 +44,7 @@ services:
       - TZ=${TZ}
     extra_hosts:
       - "discovery-agent:host-gateway"
+      - "${MIMIR_HOST}:host-gateway"
     volumes:
          #Mounting prometheus template with the environment variable expended
       - ${PFD}/Aggregation_Normalisation_Module/Configuration_Files/Prometheus/prometheus.yml.tmpl:/etc/prometheus/prometheus.yml.tmpl:ro

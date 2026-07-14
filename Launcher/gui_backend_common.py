@@ -62,6 +62,7 @@ BASE_CONTAINERS = [
     "postgres_gui_robust6g",
     "redis_robust6g",
     "redis_worker_robust6g",
+    "mimir_robust6g",
     "prometheus_server_robust6g",
 ]
 

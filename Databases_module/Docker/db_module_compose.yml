@@ -153,3 +153,43 @@ services:
       resources:
         limits:
           memory: 512M
+
+  init-mimir:
+    image: busybox:latest
+    container_name: init_mimir
+    profiles: ["db_module.mimir"]
+    command: sh -c "chown -R 10001:10001 /data"
+    volumes:
+      - ${PFD}/Persistence/mimir_data:/data
+    restart: "no"
+
+  mimir:
+    image: grafana/mimir:3.1.2
+    container_name: mimir_robust6g
+    profiles: ["db_module.mimir"]
+    depends_on:
+      init-mimir:
+        condition: service_completed_successfully
+    environment:
+      - TZ=${TZ}
+    command:
+      - -target=all
+      - -auth.multitenancy-enabled=false
+      - -ingester.ring.replication-factor=1
+      - -blocks-storage.backend=filesystem
+      - -blocks-storage.filesystem.dir=/data/blocks
+      - -blocks-storage.tsdb.dir=/data/tsdb
+      - -compactor.data-dir=/data/compactor
+      - -ruler-storage.backend=filesystem
+      - -ruler-storage.filesystem.dir=/data/rules
+      - -alertmanager-storage.backend=filesystem
+      - -alertmanager-storage.filesystem.dir=/data/alertmanager
+      - -server.http-listen-port=${MIMIR_PORT:-8080}
+    # grafana/mimir is a distroless-style image (no shell, no wget/curl/ls),
+    # so an exec-based Docker healthcheck cannot run inside the container;
+    # readiness is checked externally against /ready instead (see bootstrap script).
+    volumes:
+      - ${PFD}/Persistence/mimir_data:/data
+    ports:
+      - "${MIMIR_PORT:-8080}:${MIMIR_PORT:-8080}"
+    restart: unless-stopped

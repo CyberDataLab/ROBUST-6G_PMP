@@ -128,6 +128,7 @@ CO_DEPLOY_TOOLS: Dict[str, List[str]] = {
 # ---------------------------------------------------------------------------
 TOOL_RUNTIME_CONTAINERS: Dict[str, str] = {
     "tshark": "tshark_robust6g",
+    "flow_module": "flow_module_robust6g",
     "snort3": "alert_module_robust6g",
 }
 

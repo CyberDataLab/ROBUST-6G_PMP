@@ -57,7 +57,7 @@ DEFAULT_GUI_BASE_PROFILES = [
     "-m",
     "db_module",
     "-t",
-    "mongodb,mongodb_cm,postgres_gui,redis",
+    "mongodb,mongodb_cm,postgres_gui,redis,mimir",
     "-m",
     "aggregation_module",
     "-t",
@@ -71,7 +71,8 @@ BASE_CONTAINER_EXPECTATIONS = {
     "postgres_gui_robust6g": "healthy",
     "redis_robust6g": "healthy",
     "redis_worker_robust6g": "healthy",
-    "prometheus_server_robust6g" : "healthy",
+    "mimir_robust6g": "running",
+    "prometheus_server_robust6g": "healthy",
 }
 
 

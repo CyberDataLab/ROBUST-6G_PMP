@@ -6,6 +6,7 @@ import platform
 import sys
 import secrets
 import string
+import json
 from pathlib import Path
 import argparse
 import socket
@@ -64,7 +65,7 @@ class cmd_parser:
         "communication_module": ["kafka", "filebeat"],
         "collection_module":    ["fluentd", "telegraf", "tshark", "falco", "info"],
         "flow_module":          ["flow_module"],
-        "db_module":            ["mongodb", "mongodb_cm", "postgres_gui", "redis"],
+        "db_module":            ["mongodb", "mongodb_cm", "postgres_gui", "redis", "mimir"],
         "aggregation_module":   ["prometheus", "opensearch"],
         "thingsboard_module":   ["alarm_collector"],
     }
@@ -562,8 +563,6 @@ def main() -> None:
     """
     CLI entry point: parses arguments and calls launch().
     """
-    import json
-
     parser_obj = cmd_parser()
     args, selected = parser_obj.parse()
 
