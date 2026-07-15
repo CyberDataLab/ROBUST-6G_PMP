@@ -13,3 +13,6 @@ GUI/robust-6g-dashboard/.env.bak.*
 **/__pycache__/
 .runtime/
 *.tsbuildinfo
+Aggregation_Normalisation_Module/Configuration_Files/Prometheus/generated/
+AGENTS.md
+Tests/
