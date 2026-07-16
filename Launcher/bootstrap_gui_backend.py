@@ -63,7 +63,7 @@ DEFAULT_GUI_BASE_PROFILES = [
     "-m",
     "aggregation_module",
     "-t",
-    "prometheus", #FIXME Probar Opensearch
+    "prometheus,opensearch",
 ]
 BASE_CONTAINER_EXPECTATIONS = {
     "kafka_robust6g": "healthy",
@@ -75,6 +75,7 @@ BASE_CONTAINER_EXPECTATIONS = {
     "redis_worker_robust6g": "healthy",
     "mimir_robust6g": "running",
     "prometheus_server_robust6g": "healthy",
+    "opensearch_node_robust6g": "healthy",
 }
 
 

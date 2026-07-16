@@ -66,6 +66,7 @@ BASE_CONTAINERS = [
     "redis_worker_robust6g",
     "mimir_robust6g",
     "prometheus_server_robust6g",
+    "opensearch_node_robust6g",
 ]
 
 API_TOOL_CONTAINERS = [
@@ -77,15 +78,13 @@ API_TOOL_CONTAINERS = [
     "falco_robust6g",
     "falco_exporter_robust6g",
     "alert_module_robust6g",
-    "prometheus_robust6g",
-    "opensearch_robust6g",
-    "opensearch-dashboards_robust6g",
-    "logstash_robust6g",
     "thingsboard_collector_robust6g",
 ]
 
 ASSOCIATED_CONTAINERS = [
     "discovery_agent_robust6g", # This container is associated with Promtheus, but it is not an API tool itself
+    "opensearch_dashboards_robust6g", # This container is associated with OpenSearch, but it is not an API tool itself
+    "logstash_robust6g", # This container is associated with OpenSearch, but it is not an API tool itself
 ]
 
 

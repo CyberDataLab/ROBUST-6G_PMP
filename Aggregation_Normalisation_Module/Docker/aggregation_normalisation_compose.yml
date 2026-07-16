@@ -101,6 +101,11 @@ services:
       - "OPENSEARCH_JAVA_OPTS=-Xms512m -Xmx512m"
       - OPENSEARCH_INITIAL_ADMIN_PASSWORD=${OPENSEARCH_PASSWORD}
     network_mode: "${NETWORK_MODE}"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -k -u \"admin:${OPENSEARCH_PASSWORD}\" --silent --fail https://localhost:${OPENSEARCH_REST_API_PORT:-9200}/_cluster/health || exit 1"]
+      interval: 30s
+      timeout: 30s
+      retries: 3
     ulimits:
       memlock:
         soft: -1
@@ -127,7 +132,8 @@ services:
       - OPENSEARCH_PASSWORD=${OPENSEARCH_PASSWORD:-}
     network_mode: "${NETWORK_MODE}"
     depends_on:
-      - opensearch
+      opensearch:
+        condition: service_healthy
     restart: unless-stopped
 
   logstash:
@@ -153,7 +159,8 @@ services:
       # and hard-coding a default FQDN is not recommended.
       - "${KAFKA_LAN_HOSTNAME:-kafka-host}:host-gateway"
     depends_on:
-      - opensearch
+      opensearch:
+        condition: service_healthy
     restart: unless-stopped
 
 volumes:
