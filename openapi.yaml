@@ -964,262 +964,115 @@ paths:
                 type: string
                 example: "attachment; filename=report.yang"
   
-  /HistoricalDataRetrieval/RequestDataJSON:
+  /HistoricalDataRetrieval/tools:
     get:
       tags:
         - HistoricalDataRetrieval
-      summary: "Request historical data based on selected types and time range in JSON format."
-      description: "This endpoint retrieves specific types of historical data based on the provided query parameters. You can request logs, health metrics, and network traces separately. In addition, you can specify the userID to extract only the information from this user."
-      operationId: "requestHistoricalDataJSON"
-      parameters:
-        - name: userID
-          in: query
-          description: "The id of the user."
-          required: false
-          schema:
-            type: string
-        - name: logs
-          in: query
-          description: "Include logs in the response."
-          required: false
-          schema:
-            type: boolean
-            default: false
-        - name: healthMetrics
-          in: query
-          description: "Include health metrics in the response."
-          required: false
-          schema:
-            type: boolean
-            default: false
-        - name: networkTraces
-          in: query
-          description: "Include network traces in the response."
-          required: false
-          schema:
-            type: boolean
-            default: false
-        - name: startTime
-          in: query
-          description: "The start time of the data."
-          required: false
-          schema:
-            type: string
-            format: date-time
-        - name: endTime
-          in: query
-          description: "The end time of the data."
-          required: false
-          schema:
-            type: string
-            format: date-time
+      summary: "List available tools and their historical metrics."
+      description: "Returns the catalog of tools (data sources) and, for each one, the metric aliases that can be queried through /HistoricalDataRetrieval/historical/{tool}/{metric}, together with the real Mimir metric name backing each alias."
+      operationId: "listHistoricalDataTools"
       responses:
         "200":
-          description: "JSON file containing selected data"
+          description: "Tools/metrics catalog"
           content:
             application/json:
               schema:
-                type: string
-                format: binary
-              example: "historicalData.json"
-          headers:
-            Content-Disposition:
-              description: "The header indicates that the response is a downloadable JSON file."
-              schema:
-                type: string
-                example: "attachment; filename=historicalData.json"
-  /HistoricalDataRetrieval/RequestDataCSV:
+                $ref: "#/components/schemas/HDRToolsCatalogResponse"
+
+  /HistoricalDataRetrieval/machines:
     get:
       tags:
         - HistoricalDataRetrieval
-      summary: "Request historical data based on selected types and time range in CSV format."
-      description: "This endpoint retrieves specific types of historical data based on the provided query parameters. You can request logs, health metrics, and network traces separately. In addition, you can specify the userID to extract only the information from this user."
-      operationId: "requestHistoricalDataCSV"
+      summary: "List known machine_id values."
+      description: "Returns the machine_id label values seen by Mimir. Can optionally be scoped to a single tool/metric pair to only list machines that have reported that specific metric."
+      operationId: "listHistoricalDataMachines"
       parameters:
-        - name: userID
+        - name: tool
           in: query
-          description: "The id of the user."
+          description: "Restrict discovery to this tool's metric. Must be provided together with 'metric'."
           required: false
           schema:
             type: string
-        - name: logs
+        - name: metric
           in: query
-          description: "Include logs in the response."
-          required: false
-          schema:
-            type: boolean
-            default: false
-        - name: healthMetrics
-          in: query
-          description: "Include health metrics in the response."
-          required: false
-          schema:
-            type: boolean
-            default: false
-        - name: networkTraces
-          in: query
-          description: "Include network traces in the response."
-          required: false
-          schema:
-            type: boolean
-            default: false
-        - name: startTime
-          in: query
-          description: "The start time of the data."
+          description: "Restrict discovery to this metric alias. Must be provided together with 'tool'."
           required: false
           schema:
             type: string
-            format: date-time
-        - name: endTime
-          in: query
-          description: "The end time of the data."
-          required: false
-          schema:
-            type: string
-            format: date-time
       responses:
         "200":
-          description: "CSV file containing selected data"
+          description: "Known machine_id values"
           content:
-            application/csv:
+            application/json:
               schema:
-                type: string
-                format: binary
-              example: "historicalData.csv"
-          headers:
-            Content-Disposition:
-              description: "The header indicates that the response is a downloadable CSV file."
-              schema:
-                type: string
-                example: "attachment; filename=historicalData.csv"
-  /HistoricalDataRetrieval/RequestDataXML:
+                $ref: "#/components/schemas/HDRMachinesResponse"
+        "400":
+          description: "'tool' and 'metric' were not provided together."
+
+  /HistoricalDataRetrieval/historical/{tool}/{metric}:
     get:
       tags:
         - HistoricalDataRetrieval
-      summary: "Request historical data based on selected types and time range in XML format."
-      description: "This endpoint retrieves specific types of historical data based on the provided query parameters. You can request logs, health metrics, and network traces separately. In addition, you can specify the userID to extract only the information from this user."
-      operationId: "requestHistoricalDataXML"
+      summary: "Query historical time-series data for a tool metric over a time range."
+      description: "Queries Grafana Mimir for the requested tool/metric over the given time range, optionally filtered by machine_id, and returns one normalized series per matching Mimir time series."
+      operationId: "getHistoricalData"
       parameters:
-        - name: userID
-          in: query
-          description: "The id of the user."
-          required: false
+        - name: tool
+          in: path
+          required: true
+          description: "Tool/data-source name, see GET /HistoricalDataRetrieval/tools."
           schema:
             type: string
-        - name: logs
-          in: query
-          description: "Include logs in the response."
-          required: false
+        - name: metric
+          in: path
+          required: true
+          description: "Metric alias, see GET /HistoricalDataRetrieval/tools."
           schema:
-            type: boolean
-            default: false
-        - name: healthMetrics
+            type: string
+        - name: machine_id
           in: query
-          description: "Include health metrics in the response."
           required: false
+          description: "Filter by machine_id. Omitted or 'global' returns all machines for this metric."
           schema:
-            type: boolean
-            default: false
-        - name: networkTraces
+            type: string
+        - name: start
           in: query
-          description: "Include network traces in the response."
-          required: false
-          schema:
-            type: boolean
-            default: false
-        - name: startTime
-          in: query
-          description: "The start time of the data."
-          required: false
+          required: true
+          description: "Range start (ISO-8601/RFC3339)."
           schema:
             type: string
             format: date-time
-        - name: endTime
+        - name: end
           in: query
-          description: "The end time of the data."
-          required: false
+          required: true
+          description: "Range end (ISO-8601/RFC3339)."
           schema:
             type: string
             format: date-time
+        - name: step
+          in: query
+          required: false
+          description: "Resolution in seconds. Defaults to HDR_DEFAULT_STEP_SECONDS."
+          schema:
+            type: integer
+            minimum: 1
       responses:
         "200":
-          description: "XML file containing selected data"
+          description: "Historical series for the requested tool/metric"
           content:
-            application/xml:
+            application/json:
               schema:
-                type: string
-                format: binary
-              example: "historicalData.xml"
-          headers:
-            Content-Disposition:
-              description: "The header indicates that the response is a downloadable XML file."
-              schema:
-                type: string
-                example: "attachment; filename=historicalData.xml"
-  /HistoricalDataRetrieval/RequestDataYANG:
-    get:
-      tags:
-        - HistoricalDataRetrieval
-      summary: "Request historical data based on selected types and time range in YANG format."
-      description: "This endpoint retrieves specific types of historical data based on the provided query parameters. You can request logs, health metrics, and network traces separately. In addition, you can specify the userID to extract only the information from this user."
-      operationId: "requestHistoricalDataYANG"
-      parameters:
-        - name: userID
-          in: query
-          description: "The id of the user."
-          required: false
-          schema:
-            type: string
-        - name: logs
-          in: query
-          description: "Include logs in the response."
-          required: false
-          schema:
-            type: boolean
-            default: false
-        - name: healthMetrics
-          in: query
-          description: "Include health metrics in the response."
-          required: false
-          schema:
-            type: boolean
-            default: false
-        - name: networkTraces
-          in: query
-          description: "Include network traces in the response."
-          required: false
-          schema:
-            type: boolean
-            default: false
-        - name: startTime
-          in: query
-          description: "The start time of the data."
-          required: false
-          schema:
-            type: string
-            format: date-time
-        - name: endTime
-          in: query
-          description: "The end time of the data."
-          required: false
-          schema:
-            type: string
-            format: date-time
-      responses:
-        "200":
-          description: "YANG file containing selected data"
-          content:
-            application/yang:
-              schema:
-                type: string
-                format: binary
-              example: "historicalData.yang"
-          headers:
-            Content-Disposition:
-              description: "The header indicates that the response is a downloadable YANG file."
-              schema:
-                type: string
-                example: "attachment; filename=historicalData.yang"
+                $ref: "#/components/schemas/HDRHistoricalSeriesResponse"
+        "400":
+          description: "Invalid time range (end <= start, or too many points requested for the given step)."
+        "404":
+          description: "Unknown tool/metric combination."
+        "502":
+          description: "Mimir returned a non-success payload."
+        "503":
+          description: "Mimir is unreachable."
+        "504":
+          description: "Timed out querying Mimir."
 
 
 
@@ -2110,3 +1963,158 @@ components:
           example: Stream not found
         detail:
           type: string
+
+    HDRMachineId:
+      type: string
+      pattern: "^(global|[0-9a-z]{64})$"
+      minLength: 6
+      maxLength: 64
+      example: global
+
+    HDRToolName:
+      type: string
+      pattern: "^[a-z_]{1,64}$"
+      example: telegraf
+
+    HDRMetricName:
+      type: string
+      pattern: "^[a-z0-9_]{1,128}$"
+      example: cpu_usage_user
+
+    HDRMetricInfo:
+      type: object
+      required:
+        - metric
+        - mimir_metric_name
+        - aggregation
+        - description
+      properties:
+        metric:
+          $ref: "#/components/schemas/HDRMetricName"
+        mimir_metric_name:
+          type: string
+          description: Real metric name as stored in Mimir
+          example: "downsampled:telegraf_cpu_usage_user:avg1m"
+        unit:
+          type: string
+          nullable: true
+          description: Unit of the metric value, if applicable
+          example: percent
+        aggregation:
+          type: string
+          description: Aggregation semantics applied by the recording rule
+          example: avg
+        description:
+          type: string
+
+    HDRToolInfo:
+      type: object
+      required:
+        - tool
+        - metrics
+      properties:
+        tool:
+          $ref: "#/components/schemas/HDRToolName"
+        metrics:
+          type: array
+          items:
+            $ref: "#/components/schemas/HDRMetricInfo"
+
+    HDRToolsCatalogResponse:
+      type: object
+      required:
+        - total_tools
+        - tools
+      properties:
+        total_tools:
+          type: integer
+        tools:
+          type: array
+          items:
+            $ref: "#/components/schemas/HDRToolInfo"
+
+    HDRMachinesResponse:
+      type: object
+      required:
+        - total_machines
+        - machine_ids
+      properties:
+        total_machines:
+          type: integer
+        machine_ids:
+          type: array
+          items:
+            type: string
+
+    HDRDataPoint:
+      type: object
+      required:
+        - timestamp
+        - value
+      properties:
+        timestamp:
+          type: string
+          description: ISO-8601 UTC timestamp
+        value:
+          type: number
+
+    HDRSeriesLabels:
+      type: object
+      properties:
+        machine_id:
+          type: string
+          nullable: true
+          description: Machine identifier, when present on the series
+        extra:
+          type: object
+          additionalProperties:
+            type: string
+          description: Any other label reported by Mimir for this series
+
+    HDRHistoricalSeries:
+      type: object
+      required:
+        - labels
+        - points
+      properties:
+        labels:
+          $ref: "#/components/schemas/HDRSeriesLabels"
+        points:
+          type: array
+          items:
+            $ref: "#/components/schemas/HDRDataPoint"
+
+    HDRHistoricalSeriesResponse:
+      type: object
+      required:
+        - tool
+        - metric
+        - mimir_metric_name
+        - start
+        - end
+        - step_seconds
+        - total_series
+        - series
+      properties:
+        tool:
+          $ref: "#/components/schemas/HDRToolName"
+        metric:
+          $ref: "#/components/schemas/HDRMetricName"
+        mimir_metric_name:
+          type: string
+        machine_id_filter:
+          type: string
+          nullable: true
+          description: machine_id requested; null/'global' means unfiltered
+        start:
+          type: string
+        end:
+          type: string
+        step_seconds:
+          type: integer
+        total_series:
+          type: integer
+        series:
+          type: array
+          items:
+            $ref: "#/components/schemas/HDRHistoricalSeries"

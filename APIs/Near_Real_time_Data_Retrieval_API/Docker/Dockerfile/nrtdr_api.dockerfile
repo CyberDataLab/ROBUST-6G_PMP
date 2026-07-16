@@ -24,7 +24,7 @@ RUN pip install --no-cache-dir \
 
 
 COPY APIs/Near_Real_time_Data_Retrieval_API/Scripts/api_server.py /home/nrtdr_api/
-COPY APIs/Near_Real_time_Data_Retrieval_API/Docker/Entrypoints/entrypoint_api.py /home/nrtdr_api/
+COPY APIs/Near_Real_time_Data_Retrieval_API/Docker/Entrypoint/entrypoint_api.py /home/nrtdr_api/
 COPY APIs/Near_Real_time_Data_Retrieval_API/Scripts/nrtdr_api_logic.py /home/nrtdr_api/
 # Create non-root user for security
 RUN useradd -m -u 1000 redisapi && \

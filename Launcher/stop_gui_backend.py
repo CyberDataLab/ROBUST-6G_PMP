@@ -19,6 +19,7 @@ from gui_backend_common import (
     ASSOCIATED_CONTAINERS,
     BOOTSTRAP_LOG_FILE,
     GUI_PID_FILE,
+    HDR_API_CONTAINER_NAME,
     INTERNAL_LOGS_DIR,
     LAUNCHER_ENV_FILE,
     MODULE_COMPOSE_FILES,
@@ -52,9 +53,9 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description=(
             "Stop the GUI backend environment: dashboard, Configuration Manager "
-            "API, NRTDR API, API-launched tool containers, and optionally the "
-            "base stack. Without flags it stops the GUI, both APIs, and "
-            "API-launched tool containers."
+            "API, NRTDR API, HDR API, API-launched tool containers, and "
+            "optionally the base stack. Without flags it stops the GUI, all "
+            "three APIs, and API-launched tool containers."
         ),
         epilog=(
             "Examples:\n"
@@ -84,6 +85,11 @@ def parse_args() -> argparse.Namespace:
         "--stop-nrtdr-api",
         action="store_true",
         help="Stop the NRTDR API process.",
+    )
+    parser.add_argument(
+        "--stop-hdr-api",
+        action="store_true",
+        help="Stop the HDR API container.",
     )
     parser.add_argument(
         "--stop-api-tools",
@@ -285,24 +291,30 @@ def main() -> int:
 
     try:
         purge = args.purge
-        stop_gui = args.stop_all or args.stop_gui or not any(
-            [args.stop_gui, args.stop_api, args.stop_nrtdr_api, args.stop_api_tools, args.stop_base, args.purge]
+        no_flags_given = not any(
+            [
+                args.stop_gui,
+                args.stop_api,
+                args.stop_nrtdr_api,
+                args.stop_hdr_api,
+                args.stop_api_tools,
+                args.stop_base,
+                args.purge,
+            ]
         )
+        stop_gui = args.stop_all or args.stop_gui or no_flags_given
         if purge:
             stop_gui = True
-        stop_api = args.stop_all or args.stop_api or not any(
-            [args.stop_gui, args.stop_api, args.stop_nrtdr_api, args.stop_api_tools, args.stop_base, args.purge]
-        )
+        stop_api = args.stop_all or args.stop_api or no_flags_given
         if purge:
             stop_api = True
-        stop_nrtdr_api = args.stop_all or args.stop_nrtdr_api or not any(
-            [args.stop_gui, args.stop_api, args.stop_nrtdr_api, args.stop_api_tools, args.stop_base, args.purge]
-        )
+        stop_nrtdr_api = args.stop_all or args.stop_nrtdr_api or no_flags_given
         if purge:
             stop_nrtdr_api = True
-        stop_api_tools = args.stop_all or args.stop_api_tools or not any(
-            [args.stop_gui, args.stop_api, args.stop_nrtdr_api, args.stop_api_tools, args.stop_base, args.purge]
-        )
+        stop_hdr_api = args.stop_all or args.stop_hdr_api or no_flags_given
+        if purge:
+            stop_hdr_api = True
+        stop_api_tools = args.stop_all or args.stop_api_tools or no_flags_given
         if purge:
             stop_api_tools = True
         stop_base = args.stop_all or args.stop_base or purge
@@ -328,6 +340,13 @@ def main() -> int:
                 [NRTDR_API_CONTAINER_NAME],
                 logger,
                 "NRTDR API container",
+            )
+
+        if stop_hdr_api:
+            remove_docker_containers(
+                [HDR_API_CONTAINER_NAME],
+                logger,
+                "HDR API container",
             )
 
         if stop_api_tools:

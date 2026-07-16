@@ -220,6 +220,19 @@ class NrtdrApiConfig(BaseModel):
     NRTDR_ACTIVE_WINDOW_SECONDS:    str = "60"
 
 
+class HdrApiConfig(BaseModel):
+    """Pydantic model for HDR API configurable environment variables."""
+    model_config = {"extra": "forbid"}
+
+    HDR_API_PORT:                   str = "8002"
+    HDR_API_HOST:                   str = "0.0.0.0"
+    MIMIR_HOST:                     str = MimirConfig.model_fields["MIMIR_HOST"].default
+    MIMIR_PORT:                     str = MimirConfig.model_fields["MIMIR_PORT"].default
+    HDR_HTTP_TIMEOUT_SECONDS:       str = "10"
+    HDR_MAX_RANGE_POINTS:           str = "43200" # 30 days using step=60s (1 minute) intervals
+    HDR_DEFAULT_STEP_SECONDS:       str = "60"
+
+
 class FlowModuleConfig(BaseModel):
     """Pydantic model for Flow Module configurable environment variables."""
     model_config = {"extra": "forbid"}
@@ -304,6 +317,7 @@ INTERNAL_SUPPORT_MODELS = {
     "info":             InfoConfig,
     "postgres_gui":     PostgresGuiConfig,
     "nrtdr_api":        NrtdrApiConfig,
+    "hdr_api":          HdrApiConfig,
 }
 
 
@@ -323,6 +337,7 @@ DEFAULT_ENV_MODEL_CLASSES = (
     InfoConfig,
     PostgresGuiConfig,
     NrtdrApiConfig,
+    HdrApiConfig,
     AlarmCollectorConfig,
     FlowModuleConfig,
     Snort3Config,
@@ -513,6 +528,15 @@ TOOL_ENV_VARS = {
         "NRTDR_WS_DEFAULT_LAST_N",
         "NRTDR_WS_MAX_LAST_N",
         "NRTDR_ACTIVE_WINDOW_SECONDS",
+    ],
+    "hdr_api": [
+        "MIMIR_HOST",
+        "MIMIR_PORT",
+        "HDR_API_PORT",
+        "HDR_API_HOST",
+        "HDR_HTTP_TIMEOUT_SECONDS",
+        "HDR_MAX_RANGE_POINTS",
+        "HDR_DEFAULT_STEP_SECONDS",
     ],
     "alarm_collector": [
         "TB_USERNAME",

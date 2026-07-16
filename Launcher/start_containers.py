@@ -61,7 +61,7 @@ class cmd_parser:
 
     MODULE_REGISTRY: Dict[str, List[str]] = {
         "alert_module":         ["alert_module"],
-        "apis_module":          ["nrtdr_api"],
+        "apis_module":          ["nrtdr_api", "hdr_api"],
         "communication_module": ["kafka", "filebeat"],
         "collection_module":    ["fluentd", "telegraf", "tshark", "falco", "info"],
         "flow_module":          ["flow_module"],
