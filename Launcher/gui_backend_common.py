@@ -27,6 +27,8 @@ NRTDR_API_NAME = "nrtdr_api"
 NRTDR_API_CONTAINER_NAME = "nrtdr_api_robust6g"
 HDR_API_NAME = "hdr_api"
 HDR_API_CONTAINER_NAME = "hdr_api_robust6g"
+DT_API_NAME = "dt_api"
+DT_API_CONTAINER_NAME = "dt_api_robust6g"
 GUI_PROCESS_NAME = "gui_dashboard"
 
 MODULE_COMPOSE_FILES = {

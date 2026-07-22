@@ -19,7 +19,7 @@ tags:
     description: API for cataloging and consuming near real-time monitoring streams through HTTP discovery endpoints and a WebSocket stream endpoint. Common root and health routes exist in the deployed service, but only the non-conflicting paths are described here to keep this shared OpenAPI document unambiguous.
 
   - name: DataExporter
-    description: API to download reports in various formats (JSON, CSV, XML, YANG) as a file.
+    description: API for querying normalized logs and security events stored in OpenSearch (syslog/systemd, Falco, Telegraf), filterable by machine_id and event module, either as raw documents or as time-bucketed aggregate counts for correlation with HistoricalDataRetrieval metrics.
   
   - name: HistoricalDataRetrieval
     description: API for retrieving historical data, including logs, health metrics, and network traces.
@@ -763,207 +763,137 @@ paths:
         '404':
           description: "Stream not found."
 
-  /DataExporter/DownloadReportJSON:
+  /logs:
     get:
       tags:
         - DataExporter
-      summary: "Download report with logs, health metrics or network traces in JSON format"
-      description: "This endpoint allows downloading a JSON file. You can request logs, health metrics, and network traces separately. In addition, you can specify the userID to extract only the information from this user."
-      operationId: "downloadReportJSON"
+      summary: "Query raw log/event documents"
+      description: "Returns one page of raw Logstash/OpenSearch documents (syslog, systemd, Falco or Telegraf events) matching the given filters and time range, unmodified. 'module=system' already covers both syslog and systemd, which are unified at ingestion time. Paginate with the opaque next_cursor from the response, passed back as 'cursor'."
+      operationId: "getLogs"
+      servers:
+        - url: http://localhost:8003
+          description: Data Exporter API default HTTP endpoint
       parameters:
-        - name: userID
+        - name: machine_id
           in: query
-          description: "The id of the user."
+          description: "Filter by machine_id. Omitted returns all machines."
           required: false
+          schema:
+            $ref: "#/components/schemas/DTMachineId"
+        - name: module
+          in: query
+          description: "Filter by event module. 'system' covers both syslog and systemd."
+          required: false
+          schema:
+            $ref: "#/components/schemas/DTLogModule"
+        - name: start
+          in: query
+          required: true
+          description: "Range start (ISO-8601/RFC3339)."
           schema:
             type: string
-        - name: logs
+            format: date-time
+        - name: end
           in: query
-          description: "Include logs in the response."
-          required: false
+          required: true
+          description: "Range end (ISO-8601/RFC3339)."
           schema:
-            type: boolean
-            default: false
-        - name: healthMetrics
+            type: string
+            format: date-time
+        - name: size
           in: query
-          description: "Include health metrics in the response."
           required: false
+          description: "Page size."
           schema:
-            type: boolean
-            default: false
-        - name: networkTraces
+            type: integer
+            minimum: 1
+            default: 100
+        - name: cursor
           in: query
-          description: "Include network traces in the response."
           required: false
+          description: "Opaque cursor from a previous response's next_cursor, used to fetch the next page."
           schema:
-            type: boolean
-            default: false
+            type: string
       responses:
         "200":
-          description: "JSON file containing selected data"
+          description: "Page of raw log/event documents"
           content:
             application/json:
               schema:
-                type: string
-                format: binary
-              example: "report.json"
-          headers:
-            Content-Disposition:
-              description: "The header indicates that the response is a downloadable JSON file."
-              schema:
-                type: string
-                example: "attachment; filename=report.json"
-  /DataExporter/DownloadReportCSV:
+                $ref: "#/components/schemas/DTLogsResponse"
+        "400":
+          description: "Invalid time range (end <= start) or invalid cursor."
+        "503":
+          description: "OpenSearch is unreachable."
+        "504":
+          description: "Timed out querying OpenSearch."
+
+  /logs/aggregate:
     get:
       tags:
         - DataExporter
-      summary: "Download report with logs, health metrics or network traces in CSV format"
-      description: "This endpoint allows downloading a CSV file. You can request logs, health metrics, and network traces separately. In addition, you can specify the userID to extract only the information from this user."
-      operationId: "downloadReportCSV"
+      summary: "Query bucketed counts of log/event documents"
+      description: "Buckets matching documents over time (date_histogram), optionally sub-grouped by 'dataset', 'machine' or 'module'. Analogous to a Prometheus time series, useful to correlate log/event volume with HistoricalDataRetrieval metrics for the same machine_id and time range."
+      operationId: "getLogsAggregate"
+      servers:
+        - url: http://localhost:8003
+          description: Data Exporter API default HTTP endpoint
       parameters:
-        - name: userID
+        - name: machine_id
           in: query
-          description: "The id of the user."
+          description: "Filter by machine_id. Omitted returns all machines."
           required: false
+          schema:
+            $ref: "#/components/schemas/DTMachineId"
+        - name: module
+          in: query
+          description: "Filter by event module. 'system' covers both syslog and systemd."
+          required: false
+          schema:
+            $ref: "#/components/schemas/DTLogModule"
+        - name: start
+          in: query
+          required: true
+          description: "Range start (ISO-8601/RFC3339)."
           schema:
             type: string
-        - name: logs
+            format: date-time
+        - name: end
           in: query
-          description: "Include logs in the response."
-          required: false
-          schema:
-            type: boolean
-            default: false
-        - name: healthMetrics
-          in: query
-          description: "Include health metrics in the response."
-          required: false
-          schema:
-            type: boolean
-            default: false
-        - name: networkTraces
-          in: query
-          description: "Include network traces in the response."
-          required: false
-          schema:
-            type: boolean
-            default: false
-      responses:
-        "200":
-          description: "CSV file containing selected data"
-          content:
-            application/csv:
-              schema:
-                type: string
-                format: binary
-              example: "report.csv"
-          headers:
-            Content-Disposition:
-              description: "The header indicates that the response is a downloadable CSV file."
-              schema:
-                type: string
-                example: "attachment; filename=report.csv"
-  /DataExporter/DownloadReportXML:
-    get:
-      tags:
-        - DataExporter
-      summary: "Download report with logs, health metrics or network traces in XML format"
-      description: "This endpoint allows downloading a XML file. You can request logs, health metrics, and network traces separately. In addition, you can specify the userID to extract only the information from this user."
-      operationId: "downloadReportXML"
-      parameters:
-        - name: userID
-          in: query
-          description: "The id of the user."
-          required: false
+          required: true
+          description: "Range end (ISO-8601/RFC3339)."
           schema:
             type: string
-        - name: logs
+            format: date-time
+        - name: interval
           in: query
-          description: "Include logs in the response."
           required: false
+          description: "Bucket width in seconds. Defaults to DT_DEFAULT_STEP_SECONDS (60, same as Prometheus/HDR)."
           schema:
-            type: boolean
-            default: false
-        - name: healthMetrics
+            type: integer
+            minimum: 1
+        - name: group_by
           in: query
-          description: "Include health metrics in the response."
           required: false
-          schema:
-            type: boolean
-            default: false
-        - name: networkTraces
-          in: query
-          description: "Include network traces in the response."
-          required: false
-          schema:
-            type: boolean
-            default: false
-      responses:
-        "200":
-          description: "XML file containing selected data"
-          content:
-            application/xml:
-              schema:
-                type: string
-                format: binary
-              example: "report.xml"
-          headers:
-            Content-Disposition:
-              description: "The header indicates that the response is a downloadable XML file."
-              schema:
-                type: string
-                example: "attachment; filename=report.xml"
-  /DataExporter/DownloadReportYANG:
-    get:
-      tags:
-        - DataExporter
-      summary: "Download report with logs, health metrics or network traces in YANG format"
-      description: "This endpoint allows downloading a YANG file. You can request logs, health metrics, and network traces separately. In addition, you can specify the userID to extract only the information from this user."
-      operationId: "downloadReportYANG"
-      parameters:
-        - name: userID
-          in: query
-          description: "The id of the user."
-          required: false
+          description: "Sub-group each bucket by dataset, machine or module."
           schema:
             type: string
-        - name: logs
-          in: query
-          description: "Include logs in the response."
-          required: false
-          schema:
-            type: boolean
-            default: false
-        - name: healthMetrics
-          in: query
-          description: "Include health metrics in the response."
-          required: false
-          schema:
-            type: boolean
-            default: false
-        - name: networkTraces
-          in: query
-          description: "Include network traces in the response."
-          required: false
-          schema:
-            type: boolean
-            default: false
+            enum: [dataset, machine, module]
       responses:
         "200":
-          description: "YANG file containing selected data"
+          description: "Bucketed counts for the requested filters and time range"
           content:
-            application/yang:
+            application/json:
               schema:
-                type: string
-                format: binary
-              example: "report.yang"
-          headers:
-            Content-Disposition:
-              description: "The header indicates that the response is a downloadable YANG file."
-              schema:
-                type: string
-                example: "attachment; filename=report.yang"
-  
+                $ref: "#/components/schemas/DTLogsAggregateResponse"
+        "400":
+          description: "Invalid time range, unknown group_by, or range would exceed DT_MAX_RANGE_POINTS buckets."
+        "503":
+          description: "OpenSearch is unreachable."
+        "504":
+          description: "Timed out querying OpenSearch."
+
+
   /HistoricalDataRetrieval/tools:
     get:
       tags:
@@ -2118,3 +2048,97 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/HDRHistoricalSeries"
+
+    DTMachineId:
+      type: string
+      minLength: 1
+      maxLength: 128
+      example: global
+
+    DTLogModule:
+      type: string
+      description: "event.module value written by Logstash; 'system' already unifies syslog and systemd."
+      enum: [system, falco, telegraf]
+
+    DTLogsResponse:
+      type: object
+      required:
+        - total_hits
+        - returned
+        - documents
+      properties:
+        total_hits:
+          type: integer
+          description: Total number of documents matching the query
+        returned:
+          type: integer
+          description: Number of documents included in this page
+        next_cursor:
+          type: string
+          nullable: true
+          description: Opaque search_after cursor; pass it back as 'cursor' to fetch the next page, null when there are no more results
+        documents:
+          type: array
+          description: Raw Logstash/OpenSearch documents, unmodified
+          items:
+            type: object
+            additionalProperties: true
+
+    DTAggregateBucketGroup:
+      type: object
+      required:
+        - key
+        - doc_count
+      properties:
+        key:
+          type: string
+          description: Value of the group_by field for this slice of the bucket
+        doc_count:
+          type: integer
+
+    DTAggregateBucket:
+      type: object
+      required:
+        - timestamp
+        - doc_count
+      properties:
+        timestamp:
+          type: string
+          description: ISO-8601 UTC start of this time bucket
+        doc_count:
+          type: integer
+        groups:
+          type: array
+          description: Present only when group_by is requested
+          items:
+            $ref: "#/components/schemas/DTAggregateBucketGroup"
+
+    DTLogsAggregateResponse:
+      type: object
+      required:
+        - start
+        - end
+        - interval_seconds
+        - total_buckets
+        - buckets
+      properties:
+        machine_id_filter:
+          type: string
+          nullable: true
+        module_filter:
+          $ref: "#/components/schemas/DTLogModule"
+        group_by:
+          type: string
+          nullable: true
+        start:
+          type: string
+        end:
+          type: string
+        interval_seconds:
+          type: integer
+        total_buckets:
+          type: integer
+        buckets:
+          type: array
+          items:
+            $ref: "#/components/schemas/DTAggregateBucket"

@@ -120,6 +120,39 @@ services:
       - "${OPENSEARCH_ANALYSER_PORT:-9600}:9600"
     restart: unless-stopped
 
+  init-opensearch-ism-policy:
+    image: curlimages/curl:8.11.0
+    container_name: init_opensearch_ism_policy
+    profiles: ["aggregation_module.opensearch"]
+    network_mode: "${NETWORK_MODE}"
+    depends_on:
+      opensearch:
+        condition: service_healthy
+    environment:
+      - OPENSEARCH_HOST=${OPENSEARCH_HOST:-opensearch-host}
+      - OPENSEARCH_REST_API_PORT=${OPENSEARCH_REST_API_PORT:-9200}
+      - OPENSEARCH_PASSWORD=${OPENSEARCH_PASSWORD}
+    volumes:
+      - ${PFD}/Aggregation_Normalisation_Module/Configuration_Files/OpenSearch/ism_logs_retention_policy.json:/tmp/ism_logs_retention_policy.json:ro
+    entrypoint: ["sh", "-c"]
+    # Creating the policy is a one-time step (HTTP 201). On later restarts the
+    # policy already exists and OpenSearch replies 409, which is the desired
+    # end state too, so it's treated as success rather than retried/updated here.
+    # "$$" escapes are required here.
+    command:
+      - >
+        for attempt in $$(seq 1 10); do
+        status=$$(curl -k -u "admin:${OPENSEARCH_PASSWORD}" --silent --output /dev/null --write-out "%{http_code}" --max-time 10
+        -X PUT "https://${OPENSEARCH_HOST:-opensearch-host}:${OPENSEARCH_REST_API_PORT:-9200}/_plugins/_ism/policies/logs_retention_policy"
+        -H "Content-Type: application/json"
+        --data-binary @/tmp/ism_logs_retention_policy.json);
+        echo "ISM policy PUT attempt $$attempt returned HTTP $$status";
+        [ "$$status" = "201" ] || [ "$$status" = "409" ] && exit 0;
+        sleep 3;
+        done;
+        exit 1
+    restart: "no"
+
   opensearch-dashboards:
     image: opensearchproject/opensearch-dashboards:3.4.0
     container_name: opensearch_dashboards_robust6g
@@ -161,6 +194,8 @@ services:
     depends_on:
       opensearch:
         condition: service_healthy
+      init-opensearch-ism-policy:
+        condition: service_completed_successfully
     restart: unless-stopped
 
 volumes:

@@ -233,6 +233,21 @@ class HdrApiConfig(BaseModel):
     HDR_DEFAULT_STEP_SECONDS:       str = "60"
 
 
+class DtApiConfig(BaseModel):
+    """Pydantic model for Data Exporter API configurable environment variables."""
+    model_config = {"extra": "forbid"}
+
+    DT_API_PORT:                    str = "8003"
+    DT_API_HOST:                    str = "0.0.0.0"
+    OPENSEARCH_HOST:                str = OpenSearchConfig.model_fields["OPENSEARCH_HOST"].default
+    OPENSEARCH_REST_API_PORT:       str = OpenSearchConfig.model_fields["OPENSEARCH_REST_API_PORT"].default
+    OPENSEARCH_PASSWORD:            str = OpenSearchConfig.model_fields["OPENSEARCH_PASSWORD"].default
+    DT_HTTP_TIMEOUT_SECONDS:        str = "10"
+    DT_MAX_RANGE_POINTS:            str = "43200" # 30 days using interval=60s (1 minute) buckets, same window as Prometheus/HDR
+    DT_DEFAULT_STEP_SECONDS:        str = "60"
+    DT_MAX_PAGE_SIZE:               str = "1000"
+
+
 class FlowModuleConfig(BaseModel):
     """Pydantic model for Flow Module configurable environment variables."""
     model_config = {"extra": "forbid"}
@@ -318,6 +333,7 @@ INTERNAL_SUPPORT_MODELS = {
     "postgres_gui":     PostgresGuiConfig,
     "nrtdr_api":        NrtdrApiConfig,
     "hdr_api":          HdrApiConfig,
+    "dt_api":           DtApiConfig,
 }
 
 
@@ -338,6 +354,7 @@ DEFAULT_ENV_MODEL_CLASSES = (
     PostgresGuiConfig,
     NrtdrApiConfig,
     HdrApiConfig,
+    DtApiConfig,
     AlarmCollectorConfig,
     FlowModuleConfig,
     Snort3Config,
@@ -542,6 +559,17 @@ TOOL_ENV_VARS = {
         "TB_USERNAME",
         "TB_PASSWORD",
         "TB_USE_HTTPS",
+    ],
+    "dt_api": [
+        "OPENSEARCH_HOST",
+        "OPENSEARCH_REST_API_PORT",
+        "OPENSEARCH_PASSWORD",
+        "DT_API_PORT",
+        "DT_API_HOST",
+        "DT_HTTP_TIMEOUT_SECONDS",
+        "DT_MAX_RANGE_POINTS",
+        "DT_DEFAULT_STEP_SECONDS",
+        "DT_MAX_PAGE_SIZE",
     ],
 }
 

@@ -20,6 +20,7 @@ from gui_backend_common import (
     BOOTSTRAP_LOG_FILE,
     GUI_PID_FILE,
     HDR_API_CONTAINER_NAME,
+    DT_API_CONTAINER_NAME,
     INTERNAL_LOGS_DIR,
     LAUNCHER_ENV_FILE,
     MODULE_COMPOSE_FILES,
@@ -53,9 +54,9 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description=(
             "Stop the GUI backend environment: dashboard, Configuration Manager "
-            "API, NRTDR API, HDR API, API-launched tool containers, and "
-            "optionally the base stack. Without flags it stops the GUI, all "
-            "three APIs, and API-launched tool containers."
+            "API, NRTDR API, HDR API, Data Exporter API, API-launched tool "
+            "containers, and optionally the base stack. Without flags it stops "
+            "the GUI, all four APIs, and API-launched tool containers."
         ),
         epilog=(
             "Examples:\n"
@@ -90,6 +91,11 @@ def parse_args() -> argparse.Namespace:
         "--stop-hdr-api",
         action="store_true",
         help="Stop the HDR API container.",
+    )
+    parser.add_argument(
+        "--stop-dt-api",
+        action="store_true",
+        help="Stop the Data Exporter API container.",
     )
     parser.add_argument(
         "--stop-api-tools",
@@ -297,6 +303,7 @@ def main() -> int:
                 args.stop_api,
                 args.stop_nrtdr_api,
                 args.stop_hdr_api,
+                args.stop_dt_api,
                 args.stop_api_tools,
                 args.stop_base,
                 args.purge,
@@ -314,6 +321,9 @@ def main() -> int:
         stop_hdr_api = args.stop_all or args.stop_hdr_api or no_flags_given
         if purge:
             stop_hdr_api = True
+        stop_dt_api = args.stop_all or args.stop_dt_api or no_flags_given
+        if purge:
+            stop_dt_api = True
         stop_api_tools = args.stop_all or args.stop_api_tools or no_flags_given
         if purge:
             stop_api_tools = True
@@ -347,6 +357,13 @@ def main() -> int:
                 [HDR_API_CONTAINER_NAME],
                 logger,
                 "HDR API container",
+            )
+
+        if stop_dt_api:
+            remove_docker_containers(
+                [DT_API_CONTAINER_NAME],
+                logger,
+                "Data Exporter API container",
             )
 
         if stop_api_tools:
