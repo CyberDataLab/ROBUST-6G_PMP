@@ -158,7 +158,7 @@ Table of current modules and launcher profiles implemented.
 | `db_module` | `mongodb`, `mongodb_cm`, `postgres_gui`, `redis` , `mimir` |
 | `aggregation_module` | `prometheus`, `opensearch` |
 | `thingsboard_module` | `alarm_collector` |
-| `apis_module` | `nrtdr_api`, `hdr_api` |
+| `apis_module` | `nrtdr_api`, `hdr_api`, `dt_api` |
 
 Additional implementation notes:
 
